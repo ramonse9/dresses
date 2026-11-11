@@ -95,6 +95,16 @@ npm run migration:generate --workspace=api -- src/database/migrations/NombreMigr
 
 En esta etapa no se incluye ninguna entidad ni migration de negocio.
 
+## Arquitectura multi-tenant
+
+- El schema `public` contiene información global, comenzando por la tabla `empresas`.
+- Cada boutique tendrá un schema PostgreSQL independiente.
+- Los schemas de tenant siguen exclusivamente el formato `tenant_<uuid_sin_guiones>`, por ejemplo `tenant_019a6f3382b77a22971b6a8d7c5e4f30`.
+- El nombre se deriva internamente del UUID de `Empresa`; nunca se toma un nombre de schema, slug o identificador SQL enviado por el cliente.
+- PostgreSQL aplica además una restricción `CHECK` al campo `schema_name` y un índice único.
+
+La creación automática de schemas y la autenticación todavía no están implementadas. El módulo `EmpresasModule` expone únicamente consultas mediante el repositorio parametrizado de TypeORM.
+
 ## Desarrollo
 
 Para iniciar el API y la aplicación web al mismo tiempo:

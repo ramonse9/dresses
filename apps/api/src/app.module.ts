@@ -4,6 +4,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { validateDatabaseEnvironment } from './database/database.config.js';
 import { DatabaseModule } from './database/database.module.js';
+import { EmpresasModule } from './empresas/empresas.module.js';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { DatabaseModule } from './database/database.module.js';
       validate: validateDatabaseEnvironment,
     }),
     DatabaseModule,
+    EmpresasModule,
   ],
   controllers: [AppController],
   providers: [AppService],
