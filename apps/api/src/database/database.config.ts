@@ -69,6 +69,7 @@ export function createTypeOrmOptions(
 ): TypeOrmModuleOptions {
   return {
     ...createDataSourceOptions((key) => configService.get<string>(key)),
+    autoLoadEntities: true,
     retryAttempts: 3,
     retryDelay: 1_000,
   };

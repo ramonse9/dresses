@@ -7,13 +7,15 @@ import { AppService } from './../src/app.service.js';
 import { DatabaseHealthService } from './../src/database/database-health.service.js';
 import { EmpresasController } from './../src/empresas/empresas.controller.js';
 import { EmpresasService } from './../src/empresas/empresas.service.js';
+import { SucursalesController } from './../src/sucursales/sucursales.controller.js';
+import { SucursalesService } from './../src/sucursales/sucursales.service.js';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      controllers: [AppController, EmpresasController],
+      controllers: [AppController, EmpresasController, SucursalesController],
       providers: [
         AppService,
         {
@@ -31,6 +33,25 @@ describe('AppController (e2e)', () => {
               slug: 'atelier-norte',
               schemaName: 'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
               activo: true,
+            }),
+          },
+        },
+        {
+          provide: SucursalesService,
+          useValue: {
+            create: vi.fn().mockResolvedValue({
+              id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+              nombre: 'Centro',
+              direccion: null,
+              telefono: null,
+              activo: true,
+            }),
+            deactivate: vi.fn().mockResolvedValue({
+              id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+              nombre: 'Centro',
+              direccion: null,
+              telefono: null,
+              activo: false,
             }),
           },
         },
@@ -64,6 +85,35 @@ describe('AppController (e2e)', () => {
         slug: 'atelier-norte',
         schemaName: 'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
         activo: true,
+      });
+  });
+
+  it('/api/empresas/:slug/sucursales (POST)', () => {
+    return request(app.getHttpServer())
+      .post('/api/empresas/atelier-norte/sucursales')
+      .send({ nombre: 'Centro' })
+      .expect(201)
+      .expect({
+        id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+        nombre: 'Centro',
+        direccion: null,
+        telefono: null,
+        activo: true,
+      });
+  });
+
+  it('/api/empresas/:slug/sucursales/:id (DELETE)', () => {
+    return request(app.getHttpServer())
+      .delete(
+        '/api/empresas/atelier-norte/sucursales/d18c2a56-d33f-4d88-a8e7-42931121e295',
+      )
+      .expect(200)
+      .expect({
+        id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+        nombre: 'Centro',
+        direccion: null,
+        telefono: null,
+        activo: false,
       });
   });
 

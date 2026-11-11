@@ -9,6 +9,6 @@ import { TenantMigrationService } from './tenant-migrations/tenant-migration.ser
   imports: [TypeOrmModule.forFeature([Empresa])],
   controllers: [EmpresasController],
   providers: [EmpresasService, TenantMigrationService],
-  exports: [EmpresasService],
+  exports: [EmpresasService, TenantMigrationService],
 })
 export class EmpresasModule {}

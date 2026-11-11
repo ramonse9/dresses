@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { createTypeOrmOptions } from './database.config.js';
 import { DatabaseHealthService } from './database-health.service.js';
+import { TenantContextService } from './tenant-context.service.js';
 
 @Module({
   imports: [
@@ -11,7 +12,7 @@ import { DatabaseHealthService } from './database-health.service.js';
       useFactory: createTypeOrmOptions,
     }),
   ],
-  providers: [DatabaseHealthService],
-  exports: [DatabaseHealthService],
+  providers: [DatabaseHealthService, TenantContextService],
+  exports: [DatabaseHealthService, TenantContextService],
 })
 export class DatabaseModule {}

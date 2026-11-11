@@ -70,9 +70,9 @@ describe('EmpresasService', () => {
     const dataSource = {
       createQueryRunner: vi.fn(() => queryRunner),
     } as unknown as DataSource;
-    const runInitialMigrations = vi.fn().mockResolvedValue(undefined);
+    const runMigrations = vi.fn().mockResolvedValue(undefined);
     const migrations = {
-      runInitialMigrations,
+      runMigrations,
     } as unknown as TenantMigrationService;
     const service = new EmpresasService(
       {} as Repository<Empresa>,
@@ -94,10 +94,7 @@ describe('EmpresasService', () => {
       }),
     );
     expect(query).toHaveBeenCalledWith(`CREATE SCHEMA "${empresa.schemaName}"`);
-    expect(runInitialMigrations).toHaveBeenCalledWith(
-      queryRunner,
-      empresa.schemaName,
-    );
+    expect(runMigrations).toHaveBeenCalledWith(queryRunner, empresa.schemaName);
     expect(commitTransaction).toHaveBeenCalledOnce();
     expect(rollbackTransaction).not.toHaveBeenCalled();
     expect(release).toHaveBeenCalledOnce();
@@ -157,9 +154,7 @@ describe('EmpresasService', () => {
       createQueryRunner: vi.fn(() => queryRunner),
     } as unknown as DataSource;
     const migrations = {
-      runInitialMigrations: vi
-        .fn()
-        .mockRejectedValue(new Error('migration failed')),
+      runMigrations: vi.fn().mockRejectedValue(new Error('migration failed')),
     } as unknown as TenantMigrationService;
     const service = new EmpresasService(
       {} as Repository<Empresa>,

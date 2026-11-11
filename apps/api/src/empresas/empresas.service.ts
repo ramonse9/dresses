@@ -54,10 +54,7 @@ export class EmpresasService {
       await queryRunner.query(
         `CREATE SCHEMA ${quoteTenantSchemaName(schemaName)}`,
       );
-      await this.tenantMigrationService.runInitialMigrations(
-        queryRunner,
-        schemaName,
-      );
+      await this.tenantMigrationService.runMigrations(queryRunner, schemaName);
       await queryRunner.commitTransaction();
 
       return empresa;

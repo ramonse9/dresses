@@ -5,6 +5,7 @@ import { AppService } from './app.service.js';
 import { validateDatabaseEnvironment } from './database/database.config.js';
 import { DatabaseModule } from './database/database.module.js';
 import { EmpresasModule } from './empresas/empresas.module.js';
+import { SucursalesModule } from './sucursales/sucursales.module.js';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { EmpresasModule } from './empresas/empresas.module.js';
     }),
     DatabaseModule,
     EmpresasModule,
+    SucursalesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

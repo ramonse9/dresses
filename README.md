@@ -93,7 +93,7 @@ Cuando existan entidades, generar una migration a partir de los cambios de esque
 npm run migration:generate --workspace=api -- src/database/migrations/NombreMigration
 ```
 
-En esta etapa no se incluye ninguna entidad ni migration de negocio.
+Las migrations de `public` se mantienen separadas de las migrations que se ejecutan dentro de cada tenant.
 
 ## Arquitectura multi-tenant
 
@@ -128,7 +128,7 @@ El backend genera el UUID y `schemaName`; el cliente no puede proporcionar el no
 }
 ```
 
-La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. La migration inicial crea la tabla de control `tenant_migrations`; todavía no crea tablas de sucursales ni otros módulos de negocio.
+La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. Las migrations del tenant crean su tabla de control y la tabla `sucursales`.
 
 Verifica el registro y el schema desde `psql`:
 
@@ -137,6 +137,36 @@ SELECT id, nombre, slug, schema_name, activo FROM public.empresas;
 SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%';
 SELECT * FROM tenant_019a6f3382b77a22971b6a8d7c5e4f30.tenant_migrations;
 ```
+
+## Sucursales
+
+Las sucursales viven exclusivamente dentro del schema de su empresa. El slug de la ruta se utiliza para buscar la empresa en `public`; el nombre real del schema siempre se obtiene del registro interno.
+
+```text
+POST   /api/empresas/:empresaSlug/sucursales
+GET    /api/empresas/:empresaSlug/sucursales
+GET    /api/empresas/:empresaSlug/sucursales/:id
+PATCH  /api/empresas/:empresaSlug/sucursales/:id
+DELETE /api/empresas/:empresaSlug/sucursales/:id
+```
+
+Crear una sucursal:
+
+```bash
+curl --request POST http://localhost:3000/api/empresas/atelier-norte/sucursales \
+  --header 'Content-Type: application/json' \
+  --data '{"nombre":"Centro","direccion":"Av. Principal 123","telefono":"555-0100"}'
+```
+
+Actualizar o reactivar:
+
+```bash
+curl --request PATCH http://localhost:3000/api/empresas/atelier-norte/sucursales/ID \
+  --header 'Content-Type: application/json' \
+  --data '{"nombre":"Centro Histórico","activo":true}'
+```
+
+`DELETE` realiza una baja lógica estableciendo `activo=false`; nunca elimina físicamente la sucursal. Los nombres son obligatorios y únicos, sin distinguir mayúsculas, dentro de cada empresa. La llave UUID de `sucursales` queda preparada para futuras relaciones desde vestidos y reservaciones dentro del mismo schema.
 
 ## Desarrollo
 
