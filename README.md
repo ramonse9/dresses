@@ -103,7 +103,40 @@ En esta etapa no se incluye ninguna entidad ni migration de negocio.
 - El nombre se deriva internamente del UUID de `Empresa`; nunca se toma un nombre de schema, slug o identificador SQL enviado por el cliente.
 - PostgreSQL aplica además una restricción `CHECK` al campo `schema_name` y un índice único.
 
-La creación automática de schemas y la autenticación todavía no están implementadas. El módulo `EmpresasModule` expone únicamente consultas mediante el repositorio parametrizado de TypeORM.
+La autenticación todavía no está implementada. El módulo `EmpresasModule` usa repositorios parametrizados de TypeORM y nunca acepta identificadores SQL desde el cliente.
+
+## Crear un tenant
+
+Con el API y PostgreSQL en ejecución, crea una empresa enviando únicamente `nombre` y `slug`:
+
+```bash
+curl --request POST http://localhost:3000/api/empresas \
+  --header 'Content-Type: application/json' \
+  --data '{"nombre":"Atelier Norte","slug":"atelier-norte"}'
+```
+
+El backend genera el UUID y `schemaName`; el cliente no puede proporcionar el nombre del schema. La respuesta tiene esta forma:
+
+```json
+{
+  "id": "019a6f33-82b7-7a22-971b-6a8d7c5e4f30",
+  "nombre": "Atelier Norte",
+  "slug": "atelier-norte",
+  "schemaName": "tenant_019a6f3382b77a22971b6a8d7c5e4f30",
+  "activo": true,
+  "createdAt": "2026-11-11T00:00:00.000Z"
+}
+```
+
+La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. La migration inicial crea la tabla de control `tenant_migrations`; todavía no crea tablas de sucursales ni otros módulos de negocio.
+
+Verifica el registro y el schema desde `psql`:
+
+```sql
+SELECT id, nombre, slug, schema_name, activo FROM public.empresas;
+SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%';
+SELECT * FROM tenant_019a6f3382b77a22971b6a8d7c5e4f30.tenant_migrations;
+```
 
 ## Desarrollo
 

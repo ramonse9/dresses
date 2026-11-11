@@ -18,3 +18,11 @@ export function tenantSchemaNameFromEmpresaId(empresaId: string): string {
 export function isTenantSchemaName(value: string): boolean {
   return TENANT_SCHEMA_NAME_PATTERN.test(value);
 }
+
+export function quoteTenantSchemaName(value: string): string {
+  if (!isTenantSchemaName(value)) {
+    throw new Error('Invalid tenant schema name');
+  }
+
+  return `"${value}"`;
+}
