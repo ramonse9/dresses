@@ -12,7 +12,10 @@
     "dev:web": "npm run start --workspace=web",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspace=api"
+    "lint": "npm run lint --workspace=api",
+    "migration:run": "npm run migration:run --workspace=api",
+    "migration:revert": "npm run migration:revert --workspace=api",
+    "migration:show": "npm run migration:show --workspace=api"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
