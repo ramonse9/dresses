@@ -1,20 +1,20 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EntityManager, Repository } from 'typeorm';
 import { TenantContextService } from '../database/tenant-context.service.js';
-import { Empresa } from '../empresas/entities/empresa.entity.js';
-import { EmpresasService } from '../empresas/empresas.service.js';
 import { TenantMigrationService } from '../empresas/tenant-migrations/tenant-migration.service.js';
+import { TenantResolverService } from '../tenancy/tenant-resolver.service.js';
+import { TenantScope } from '../tenancy/tenant-scope.js';
 import { Sucursal } from './entities/sucursal.tenant-entity.js';
 import { SucursalesService } from './sucursales.service.js';
 
 function buildService(repository: Partial<Repository<Sucursal>>) {
-  const empresa = {
-    slug: 'atelier-norte',
+  const tenant = {
+    empresaId: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
+    empresaSlug: 'atelier-norte',
     schemaName: 'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
-    activo: true,
-  } as Empresa;
-  const findActiveBySlug = vi.fn().mockResolvedValue(empresa);
-  const empresasService = { findActiveBySlug } as unknown as EmpresasService;
+  } as TenantScope;
+  const resolveBySlug = vi.fn().mockResolvedValue(tenant);
+  const tenantResolver = { resolveBySlug } as unknown as TenantResolverService;
   const ensureMigrations = vi.fn().mockResolvedValue(undefined);
   const tenantMigrationService = {
     ensureMigrations,
@@ -23,17 +23,19 @@ function buildService(repository: Partial<Repository<Sucursal>>) {
     getRepository: vi.fn(() => repository),
   } as unknown as EntityManager;
   const run = vi.fn(
-    async (_schema: string, operation: (value: EntityManager) => unknown) =>
-      operation(manager),
+    async (
+      _tenant: TenantScope,
+      operation: (value: EntityManager) => unknown,
+    ) => operation(manager),
   );
   const tenantContext = { run } as unknown as TenantContextService;
   const service = new SucursalesService(
-    empresasService,
+    tenantResolver,
     tenantContext,
     tenantMigrationService,
   );
 
-  return { service, findActiveBySlug, ensureMigrations, run };
+  return { service, resolveBySlug, ensureMigrations, run, tenant };
 }
 
 describe('SucursalesService', () => {
@@ -46,7 +48,7 @@ describe('SucursalesService', () => {
     const findOne = vi.fn().mockResolvedValue(null);
     const create = vi.fn().mockReturnValue(sucursal);
     const save = vi.fn().mockResolvedValue(sucursal);
-    const { service, ensureMigrations, run } = buildService({
+    const { service, ensureMigrations, run, tenant } = buildService({
       findOne,
       create,
       save,
@@ -58,10 +60,7 @@ describe('SucursalesService', () => {
     expect(ensureMigrations).toHaveBeenCalledWith(
       'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
     );
-    expect(run).toHaveBeenCalledWith(
-      'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
-      expect.any(Function),
-    );
+    expect(run).toHaveBeenCalledWith(tenant, expect.any(Function));
     expect(create).toHaveBeenCalledWith({
       nombre: 'Centro',
       direccion: null,
@@ -98,8 +97,10 @@ describe('SucursalesService', () => {
   });
 
   it('returns 404 when the empresa does not exist', async () => {
-    const { service, findActiveBySlug } = buildService({});
-    findActiveBySlug.mockResolvedValue(null);
+    const { service, resolveBySlug } = buildService({});
+    resolveBySlug.mockRejectedValue(
+      new NotFoundException('Empresa no encontrada'),
+    );
 
     await expect(service.findAll('missing')).rejects.toBeInstanceOf(
       NotFoundException,

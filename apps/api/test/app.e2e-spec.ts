@@ -5,6 +5,7 @@ import { App } from 'supertest/types.js';
 import { AppController } from './../src/app.controller.js';
 import { AppService } from './../src/app.service.js';
 import { DatabaseHealthService } from './../src/database/database-health.service.js';
+import { DevTenantAdminGuard } from './../src/empresas/dev-tenant-admin.guard.js';
 import { EmpresasController } from './../src/empresas/empresas.controller.js';
 import { EmpresasService } from './../src/empresas/empresas.service.js';
 import { SucursalesController } from './../src/sucursales/sucursales.controller.js';
@@ -56,7 +57,10 @@ describe('AppController (e2e)', () => {
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(DevTenantAdminGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');

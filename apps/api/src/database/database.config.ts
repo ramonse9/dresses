@@ -39,6 +39,16 @@ function parseBoolean(value: string | undefined): boolean {
   return value?.toLowerCase() === 'true';
 }
 
+function parsePoolMaximum(value: string | undefined): number {
+  const maximum = Number(value ?? '10');
+
+  if (!Number.isInteger(maximum) || maximum < 1 || maximum > 100) {
+    throw new Error('DB_POOL_MAX must be an integer between 1 and 100');
+  }
+
+  return maximum;
+}
+
 export function createDataSourceOptions(
   readEnvironment: EnvironmentReader = (key) => process.env[key],
 ): DataSourceOptions {
@@ -56,6 +66,7 @@ export function createDataSourceOptions(
     password: requiredValue(readEnvironment, 'DB_PASSWORD'),
     database,
     ssl: parseBoolean(readEnvironment('DB_SSL')),
+    extra: { max: parsePoolMaximum(readEnvironment('DB_POOL_MAX')) },
     entities: [`${import.meta.dirname}/../**/*.entity.{ts,js}`],
     migrations: [`${import.meta.dirname}/migrations/*.{ts,js}`],
     migrationsTableName: 'typeorm_migrations',
@@ -69,6 +80,8 @@ export function createTypeOrmOptions(
 ): TypeOrmModuleOptions {
   return {
     ...createDataSourceOptions((key) => configService.get<string>(key)),
+    entities: [],
+    migrations: [],
     autoLoadEntities: true,
     retryAttempts: 3,
     retryDelay: 1_000,

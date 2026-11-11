@@ -62,6 +62,8 @@ DB_USERNAME=postgres
 DB_PASSWORD=tu_password_local
 DB_DATABASE=vestidos_saas
 DB_SSL=false
+DB_POOL_MAX=10
+ENABLE_DEV_TENANT_ADMIN=false
 ```
 
 El archivo `.env` está ignorado por Git. TypeORM tiene `synchronize: false`; los cambios de esquema se gestionan exclusivamente mediante migrations.
@@ -106,6 +108,8 @@ Las migrations de `public` se mantienen separadas de las migrations que se ejecu
 La autenticación todavía no está implementada. El módulo `EmpresasModule` usa repositorios parametrizados de TypeORM y nunca acepta identificadores SQL desde el cliente.
 
 ## Crear un tenant
+
+La creación de empresas es una operación administrativa temporal de desarrollo. Para habilitarla localmente establece `ENABLE_DEV_TENANT_ADMIN=true`; en `NODE_ENV=production` permanece bloqueada aunque la bandera esté activa.
 
 Con el API y PostgreSQL en ejecución, crea una empresa enviando únicamente `nombre` y `slug`:
 
@@ -168,6 +172,39 @@ curl --request PATCH http://localhost:3000/api/empresas/atelier-norte/sucursales
 
 `DELETE` realiza una baja lógica estableciendo `activo=false`; nunca elimina físicamente la sucursal. Los nombres son obligatorios y únicos, sin distinguir mayúsculas, dentro de cada empresa. La llave UUID de `sucursales` queda preparada para futuras relaciones desde vestidos y reservaciones dentro del mismo schema.
 
+## Aislamiento de tenants
+
+Las consultas de datos de tenant siguen una única ruta reutilizable:
+
+1. El controlador recibe un slug de empresa, nunca un schema.
+2. `TenantResolverService` consulta `public.empresas` y construye un `TenantScope` inmutable.
+3. El scope comprueba que `schemaName` coincide exactamente con el UUID de la empresa; no basta con que tenga un formato válido.
+4. `TenantContextService` reserva una conexión del pool, inicia una transacción y ejecuta `SET LOCAL search_path TO <tenant>, pg_catalog`.
+5. La operación recibe solamente un `EntityManager` ligado a esa transacción.
+6. `COMMIT` o `ROLLBACK` elimina automáticamente el cambio local de `search_path` antes de devolver la conexión al pool.
+
+No se utiliza `SET search_path` de sesión ni se aceptan nombres de schema en headers, parámetros HTTP o DTOs. `public` tampoco se incluye como fallback dentro de una operación tenant: las consultas globales se resuelven antes, fuera del contexto tenant. `DB_POOL_MAX` permite ajustar el tamaño del pool sin cambiar este comportamiento.
+
+Para la futura autenticación, un guard JWT podrá tomar un `empresaId` verificado y llamar `TenantResolverService.resolveByEmpresaId()`. La resolución, validación UUID↔schema y ejecución transaccional no tendrán que cambiar. Actualmente no se confía en claims ni headers porque la autenticación todavía no está implementada.
+
+### Prueba PostgreSQL de aislamiento
+
+La suite crea dos empresas temporales y varias sucursales, permite el mismo nombre en tenants distintos, rechaza acceder desde una empresa a la sucursal de otra y fuerza `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión.
+
+```bash
+NODE_ENV=test \
+DB_HOST=127.0.0.1 \
+DB_PORT=5432 \
+DB_USERNAME=tu_usuario \
+DB_PASSWORD=tu_password \
+DB_DATABASE=vestidos_saas \
+DB_SSL=false \
+DB_POOL_MAX=1 \
+npm run test:tenancy
+```
+
+La suite elimina en `afterAll` únicamente las empresas y schemas temporales que ella misma creó.
+
 ## Desarrollo
 
 Para iniciar el API y la aplicación web al mismo tiempo:
@@ -208,6 +245,7 @@ npm run build
 npm test
 npm run lint
 npm run test:e2e --workspace=api
+npm run test:tenancy
 ```
 
 Los scripts se ejecutan desde la raíz y delegan a cada workspace cuando corresponde.

@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { DevTenantAdminGuard } from './dev-tenant-admin.guard.js';
 import {
   CreateEmpresaDto,
   parseCreateEmpresaBody,
@@ -7,6 +8,7 @@ import { Empresa } from './entities/empresa.entity.js';
 import { EmpresasService } from './empresas.service.js';
 
 @Controller('empresas')
+@UseGuards(DevTenantAdminGuard)
 export class EmpresasController {
   constructor(private readonly empresasService: EmpresasService) {}
 

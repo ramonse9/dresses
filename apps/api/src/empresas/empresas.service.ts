@@ -91,6 +91,12 @@ export class EmpresasService {
     });
   }
 
+  findActiveById(id: string): Promise<Empresa | null> {
+    return this.empresasRepository.findOne({
+      where: { id, activo: true },
+    });
+  }
+
   private isSlugUniqueViolation(error: unknown): boolean {
     if (!(error instanceof QueryFailedError)) {
       return false;

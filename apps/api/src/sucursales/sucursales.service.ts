@@ -11,15 +11,15 @@ import {
   Repository,
 } from 'typeorm';
 import { TenantContextService } from '../database/tenant-context.service.js';
-import { EmpresasService } from '../empresas/empresas.service.js';
 import { TenantMigrationService } from '../empresas/tenant-migrations/tenant-migration.service.js';
+import { TenantResolverService } from '../tenancy/tenant-resolver.service.js';
 import { CreateSucursalDto, UpdateSucursalDto } from './dto/sucursal.dto.js';
 import { Sucursal } from './entities/sucursal.tenant-entity.js';
 
 @Injectable()
 export class SucursalesService {
   constructor(
-    private readonly empresasService: EmpresasService,
+    private readonly tenantResolver: TenantResolverService,
     private readonly tenantContext: TenantContextService,
     private readonly tenantMigrationService: TenantMigrationService,
   ) {}
@@ -107,17 +107,11 @@ export class SucursalesService {
     empresaSlug: string,
     operation: (repository: Repository<Sucursal>) => Promise<T>,
   ): Promise<T> {
-    const empresa = await this.empresasService.findActiveBySlug(empresaSlug);
+    const tenant = await this.tenantResolver.resolveBySlug(empresaSlug);
+    await this.tenantMigrationService.ensureMigrations(tenant.schemaName);
 
-    if (!empresa) {
-      throw new NotFoundException('Empresa no encontrada');
-    }
-
-    await this.tenantMigrationService.ensureMigrations(empresa.schemaName);
-
-    return this.tenantContext.run(
-      empresa.schemaName,
-      (manager: EntityManager) => operation(manager.getRepository(Sucursal)),
+    return this.tenantContext.run(tenant, (manager: EntityManager) =>
+      operation(manager.getRepository(Sucursal)),
     );
   }
 
