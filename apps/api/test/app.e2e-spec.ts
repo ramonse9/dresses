@@ -18,6 +18,7 @@ describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
   const refreshToken = 'A'.repeat(43);
   const rotatedRefreshToken = 'B'.repeat(43);
+  const selectedEmpresaId = 'a18c2a56-d33f-4d88-a8e7-42931121e295';
 
   const authenticatedUser = {
     sub: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
@@ -51,6 +52,19 @@ describe('AppController (e2e)', () => {
               expiresIn: 900,
             }),
             logout: vi.fn().mockResolvedValue(undefined),
+            listEmpresas: vi.fn().mockResolvedValue([
+              {
+                id: selectedEmpresaId,
+                nombre: 'Atelier Norte',
+                slug: 'atelier-norte',
+                rol: 'OWNER',
+              },
+            ]),
+            selectEmpresa: vi.fn().mockResolvedValue({
+              accessToken: 'selected.jwt.token',
+              tokenType: 'Bearer',
+              expiresIn: 900,
+            }),
             getProfile: vi.fn().mockReturnValue(authenticatedUser),
           },
         },
@@ -151,6 +165,34 @@ describe('AppController (e2e)', () => {
       .post('/api/auth/logout')
       .set('Authorization', 'Bearer signed.jwt.token')
       .expect(204);
+  });
+
+  it('/api/auth/empresas (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/api/auth/empresas')
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .expect(200)
+      .expect([
+        {
+          id: selectedEmpresaId,
+          nombre: 'Atelier Norte',
+          slug: 'atelier-norte',
+          rol: 'OWNER',
+        },
+      ]);
+  });
+
+  it('/api/auth/select-empresa (POST)', () => {
+    return request(app.getHttpServer())
+      .post('/api/auth/select-empresa')
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .send({ empresaId: selectedEmpresaId })
+      .expect(200)
+      .expect({
+        accessToken: 'selected.jwt.token',
+        tokenType: 'Bearer',
+        expiresIn: 900,
+      });
   });
 
   it('/api/auth/me (GET)', () => {

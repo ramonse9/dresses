@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { normalizeEmail } from '../usuarios/email.js';
 import { AuthSessionsService } from './auth-sessions.service.js';
 import type { AccessTokenPayload } from './types/access-token-payload.js';
@@ -23,7 +24,7 @@ function parsePayload(payload: unknown): AccessTokenPayload {
   }
 
   const claims = payload as Record<string, unknown>;
-  const { sub, email, sessionId } = claims;
+  const { sub, email, sessionId, empresaId, rol } = claims;
 
   if (
     typeof sub !== 'string' ||
@@ -36,7 +37,25 @@ function parsePayload(payload: unknown): AccessTokenPayload {
     throw new UnauthorizedException('Token inválido');
   }
 
-  return { sub, email, sessionId };
+  if ('schemaName' in claims) {
+    throw new UnauthorizedException('Token inválido');
+  }
+
+  const hasTenantContext = empresaId !== undefined || rol !== undefined;
+
+  if (!hasTenantContext) {
+    return { sub, email, sessionId };
+  }
+
+  if (
+    typeof empresaId !== 'string' ||
+    !uuidPattern.test(empresaId) ||
+    (rol !== EmpresaUsuarioRol.OWNER && rol !== EmpresaUsuarioRol.EMPLOYEE)
+  ) {
+    throw new UnauthorizedException('Token inválido');
+  }
+
+  return { sub, email, sessionId, empresaId, rol };
 }
 
 @Injectable()

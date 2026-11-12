@@ -11,20 +11,31 @@ export class EmpresaUsuariosService {
   ) {}
 
   findActiveByUsuarioId(usuarioId: string): Promise<EmpresaUsuario[]> {
-    return this.membresiasRepository.find({
-      where: { usuarioId, activo: true },
-      relations: { empresa: true },
-      order: { createdAt: 'ASC' },
-    });
+    return this.membresiasRepository
+      .createQueryBuilder('membresia')
+      .innerJoinAndSelect('membresia.empresa', 'empresa')
+      .innerJoin('membresia.usuario', 'usuario')
+      .where('membresia.usuarioId = :usuarioId', { usuarioId })
+      .andWhere('membresia.activo = true')
+      .andWhere('empresa.activo = true')
+      .andWhere('usuario.activo = true')
+      .orderBy('empresa.nombre', 'ASC')
+      .getMany();
   }
 
   findActiveMembership(
     usuarioId: string,
     empresaId: string,
   ): Promise<EmpresaUsuario | null> {
-    return this.membresiasRepository.findOne({
-      where: { usuarioId, empresaId, activo: true },
-      relations: { empresa: true },
-    });
+    return this.membresiasRepository
+      .createQueryBuilder('membresia')
+      .innerJoinAndSelect('membresia.empresa', 'empresa')
+      .innerJoin('membresia.usuario', 'usuario')
+      .where('membresia.usuarioId = :usuarioId', { usuarioId })
+      .andWhere('membresia.empresaId = :empresaId', { empresaId })
+      .andWhere('membresia.activo = true')
+      .andWhere('empresa.activo = true')
+      .andWhere('usuario.activo = true')
+      .getOne();
   }
 }

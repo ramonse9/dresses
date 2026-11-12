@@ -1,5 +1,12 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Empresa } from '../empresas/entities/empresa.entity.js';
+import { TenantResolverService } from '../tenancy/tenant-resolver.service.js';
+import { EmpresaUsuariosService } from '../usuarios/empresa-usuarios.service.js';
+import {
+  EmpresaUsuario,
+  EmpresaUsuarioRol,
+} from '../usuarios/entities/empresa-usuario.entity.js';
 import { Usuario } from '../usuarios/entities/usuario.entity.js';
 import { UsuariosService } from '../usuarios/usuarios.service.js';
 import { AuthSessionsService } from './auth-sessions.service.js';
@@ -9,6 +16,7 @@ import { PasswordHashService } from './password-hash.service.js';
 
 describe('AuthService', () => {
   const sessionId = '47ecf96a-8f2c-4e07-bd1f-93936f2cdb90';
+  const empresaId = 'a18c2a56-d33f-4d88-a8e7-42931121e295';
   const activeUser = Object.assign(new Usuario(), {
     id: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
     email: 'owner@example.com',
@@ -19,6 +27,8 @@ describe('AuthService', () => {
   function createService(options?: {
     user?: Usuario | null;
     passwordMatches?: boolean;
+    membership?: EmpresaUsuario | null;
+    memberships?: EmpresaUsuario[];
   }) {
     const findByEmailForAuthentication = vi
       .fn()
@@ -44,6 +54,34 @@ describe('AuthService', () => {
       refreshToken: 'rotated-refresh-token',
     });
     const revoke = vi.fn().mockResolvedValue(undefined);
+    const empresa = Object.assign(new Empresa(), {
+      id: empresaId,
+      nombre: 'Atelier Norte',
+      slug: 'atelier-norte',
+      schemaName: 'tenant_a18c2a56d33f4d88a8e742931121e295',
+      activo: true,
+    });
+    const membership = Object.assign(new EmpresaUsuario(), {
+      id: 'b28c2a56-d33f-4d88-a8e7-42931121e295',
+      usuarioId: activeUser.id,
+      empresaId,
+      rol: EmpresaUsuarioRol.OWNER,
+      activo: true,
+      empresa,
+    });
+    const findActiveByUsuarioId = vi
+      .fn()
+      .mockResolvedValue(options?.memberships ?? [membership]);
+    const findActiveMembership = vi
+      .fn()
+      .mockResolvedValue(
+        options?.membership === undefined ? membership : options.membership,
+      );
+    const resolveByEmpresaId = vi.fn().mockResolvedValue({
+      empresaId,
+      empresaSlug: empresa.slug,
+      schemaName: empresa.schemaName,
+    });
     const usuariosService = {
       findByEmailForAuthentication,
     } as unknown as UsuariosService;
@@ -61,6 +99,13 @@ describe('AuthService', () => {
       rotate,
       revoke,
     } as unknown as AuthSessionsService;
+    const empresaUsuariosService = {
+      findActiveByUsuarioId,
+      findActiveMembership,
+    } as unknown as EmpresaUsuariosService;
+    const tenantResolverService = {
+      resolveByEmpresaId,
+    } as unknown as TenantResolverService;
 
     return {
       service: new AuthService(
@@ -69,6 +114,8 @@ describe('AuthService', () => {
         jwtService,
         configService,
         authSessionsService,
+        empresaUsuariosService,
+        tenantResolverService,
       ),
       findByEmailForAuthentication,
       verifyPassword,
@@ -76,6 +123,10 @@ describe('AuthService', () => {
       createSession,
       rotate,
       revoke,
+      findActiveByUsuarioId,
+      findActiveMembership,
+      resolveByEmpresaId,
+      membership,
     };
   }
 
@@ -132,6 +183,95 @@ describe('AuthService', () => {
     });
 
     expect(revoke).toHaveBeenCalledWith(sessionId, activeUser.id);
+  });
+
+  it('lists multiple active empresas without exposing schemaName', async () => {
+    const secondEmpresa = Object.assign(new Empresa(), {
+      id: 'c38c2a56-d33f-4d88-a8e7-42931121e295',
+      nombre: 'Atelier Sur',
+      slug: 'atelier-sur',
+      schemaName: 'tenant_c38c2a56d33f4d88a8e742931121e295',
+      activo: true,
+    });
+    const secondMembership = Object.assign(new EmpresaUsuario(), {
+      usuarioId: activeUser.id,
+      empresaId: secondEmpresa.id,
+      rol: EmpresaUsuarioRol.EMPLOYEE,
+      activo: true,
+      empresa: secondEmpresa,
+    });
+    const defaults = createService();
+    const { service } = createService({
+      memberships: [defaults.membership, secondMembership],
+    });
+
+    const empresas = await service.listEmpresas({
+      sub: activeUser.id,
+      email: activeUser.email,
+      sessionId,
+    });
+
+    expect(empresas).toEqual([
+      {
+        id: empresaId,
+        nombre: 'Atelier Norte',
+        slug: 'atelier-norte',
+        rol: EmpresaUsuarioRol.OWNER,
+      },
+      {
+        id: secondEmpresa.id,
+        nombre: 'Atelier Sur',
+        slug: 'atelier-sur',
+        rol: EmpresaUsuarioRol.EMPLOYEE,
+      },
+    ]);
+    expect(JSON.stringify(empresas)).not.toContain('schemaName');
+    expect(JSON.stringify(empresas)).not.toContain('tenant_');
+  });
+
+  it('selects an authorized empresa and signs only its public context', async () => {
+    const { service, signAsync, findActiveMembership, resolveByEmpresaId } =
+      createService();
+    const user = {
+      sub: activeUser.id,
+      email: activeUser.email,
+      sessionId,
+    };
+
+    await expect(service.selectEmpresa(user, { empresaId })).resolves.toEqual({
+      accessToken: 'signed.jwt.token',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+    });
+    expect(findActiveMembership).toHaveBeenCalledWith(activeUser.id, empresaId);
+    expect(resolveByEmpresaId).toHaveBeenCalledWith(empresaId);
+    expect(signAsync).toHaveBeenCalledWith({
+      sub: activeUser.id,
+      email: activeUser.email,
+      sessionId,
+      empresaId,
+      rol: EmpresaUsuarioRol.OWNER,
+    });
+    expect(signAsync.mock.calls[0][0]).not.toHaveProperty('schemaName');
+  });
+
+  it('rejects selecting an empresa without membership', async () => {
+    const { service, signAsync, resolveByEmpresaId } = createService({
+      membership: null,
+    });
+
+    await expect(
+      service.selectEmpresa(
+        {
+          sub: activeUser.id,
+          email: activeUser.email,
+          sessionId,
+        },
+        { empresaId },
+      ),
+    ).rejects.toThrow('No tienes acceso a esta empresa');
+    expect(resolveByEmpresaId).not.toHaveBeenCalled();
+    expect(signAsync).not.toHaveBeenCalled();
   });
 
   it('returns a generic error for an incorrect password', async () => {

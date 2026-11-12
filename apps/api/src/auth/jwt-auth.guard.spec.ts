@@ -1,5 +1,6 @@
 import { ExecutionContext } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { AuthSessionsService } from './auth-sessions.service.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 
@@ -72,6 +73,44 @@ describe('JwtAuthGuard', () => {
     } as unknown as AuthSessionsService;
     const guard = new JwtAuthGuard(jwtService, authSessionsService);
     const { context } = contextWithAuthorization('Bearer valid-token');
+
+    await expect(guard.canActivate(context)).rejects.toThrow('Token inválido');
+  });
+
+  it('accepts and preserves a validated empresa context', async () => {
+    const selectedPayload = {
+      ...validPayload,
+      empresaId: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+      rol: EmpresaUsuarioRol.OWNER,
+    };
+    const jwtService = {
+      verifyAsync: vi.fn().mockResolvedValue(selectedPayload),
+    } as unknown as JwtService;
+    const guard = new JwtAuthGuard(jwtService, activeSessionsService().service);
+    const { context, request } = contextWithAuthorization('Bearer valid-token');
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request).toHaveProperty('user', selectedPayload);
+  });
+
+  it.each([
+    {
+      ...validPayload,
+      empresaId: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+    },
+    { ...validPayload, rol: EmpresaUsuarioRol.OWNER },
+    {
+      ...validPayload,
+      empresaId: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+      rol: 'ADMIN',
+    },
+    { ...validPayload, schemaName: 'tenant_internal' },
+  ])('rejects malformed or schema-bearing empresa claims', async (payload) => {
+    const jwtService = {
+      verifyAsync: vi.fn().mockResolvedValue(payload),
+    } as unknown as JwtService;
+    const guard = new JwtAuthGuard(jwtService, activeSessionsService().service);
+    const { context } = contextWithAuthorization('Bearer invalid-token');
 
     await expect(guard.canActivate(context)).rejects.toThrow('Token inválido');
   });

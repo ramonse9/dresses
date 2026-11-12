@@ -144,6 +144,8 @@ POST /api/auth/login
 POST /api/auth/refresh
 POST /api/auth/logout
 GET  /api/auth/me
+GET  /api/auth/empresas
+POST /api/auth/select-empresa
 ```
 
 Las contraseñas se almacenan exclusivamente como hashes Argon2id. `PasswordHashService` centraliza tanto la creación del hash como su verificación, y el login hace una comparación segura incluso cuando el email no existe para reducir diferencias observables. La aplicación no registra contraseñas ni las incluye en respuestas.
@@ -167,7 +169,7 @@ La respuesta contiene un access token de corta duración y un refresh token opac
 }
 ```
 
-El JWT contiene `sub`, `email` y un `sessionId` aleatorio, además de los timestamps estándar del token. No contiene `schemaName`, empresa ni membresía. El refresh token contiene 256 bits aleatorios y no es un JWT. La base de datos guarda solamente su hash SHA-256; ni el token completo ni las contraseñas se registran.
+El JWT inicial contiene `sub`, `email` y un `sessionId` aleatorio, además de los timestamps estándar del token. No contiene `schemaName`, empresa ni membresía. El refresh token contiene 256 bits aleatorios y no es un JWT. La base de datos guarda solamente su hash SHA-256; ni el token completo ni las contraseñas se registran.
 
 Usa el refresh token para obtener un nuevo par de tokens:
 
@@ -196,6 +198,41 @@ La respuesta expone únicamente la identidad incluida en el token:
 }
 ```
 
+### Selección de empresa
+
+Después de autenticarte, consulta las empresas activas para las que el usuario conserva una membresía activa:
+
+```bash
+curl http://localhost:3000/api/auth/empresas \
+  --header 'Authorization: Bearer eyJ...'
+```
+
+La respuesta permite presentar varias empresas sin revelar información interna del tenant:
+
+```json
+[
+  {
+    "id": "a18c2a56-d33f-4d88-a8e7-42931121e295",
+    "nombre": "Atelier Norte",
+    "slug": "atelier-norte",
+    "rol": "OWNER"
+  }
+]
+```
+
+Selecciona una empresa enviando exclusivamente su UUID:
+
+```bash
+curl --request POST http://localhost:3000/api/auth/select-empresa \
+  --header 'Authorization: Bearer eyJ...' \
+  --header 'Content-Type: application/json' \
+  --data '{"empresaId":"a18c2a56-d33f-4d88-a8e7-42931121e295"}'
+```
+
+El backend comprueba que la sesión, el usuario, la empresa y la membresía estén activos. Después resuelve internamente el `TenantScope` desde `empresaId` y emite un access token nuevo con `sub`, `sessionId`, `empresaId` y `rol`, además del email ya autenticado. `schemaName` nunca se recibe, devuelve ni incluye en el JWT.
+
+La selección no modifica la sesión ni impide que un usuario elija posteriormente otra empresa para la que tenga membresía. Un refresh token emite nuevamente un access token sin empresa seleccionada; el cliente debe repetir la selección para evitar conservar un contexto tenant que pudiera haber cambiado.
+
 Revoca la sesión actual usando su access token:
 
 ```bash
@@ -212,13 +249,13 @@ SELECT id, usuario_id, expires_at, revoked_at, created_at, updated_at
 FROM public.auth_sessions;
 ```
 
-La prueba PostgreSQL de autenticación crea un usuario temporal, comprueba que sólo se persiste el hash, intenta dos rotaciones simultáneas —de las cuales sólo una puede completarse—, revoca la sesión y elimina todos sus datos al finalizar:
+La prueba PostgreSQL de autenticación comprueba el hash de refresh tokens, la rotación concurrente y la revocación. También crea dos usuarios y dos empresas temporales para validar acceso a múltiples empresas, roles, membresías inactivas y rechazo de selección cruzada. Todos los datos y schemas de prueba se eliminan al finalizar:
 
 ```bash
 npm run test:auth-database
 ```
 
-Como no existe registro público, el usuario debe haber sido aprovisionado previamente en `public.usuarios` por un proceso administrativo y su `password_hash` debe ser generado con Argon2id. No se incluyen todavía recuperación de contraseña, selección de empresa ni administración de sesiones desde la interfaz.
+Como no existe registro público, el usuario debe haber sido aprovisionado previamente en `public.usuarios` por un proceso administrativo y su `password_hash` debe ser generado con Argon2id. No se incluyen todavía recuperación de contraseña, invitaciones de usuarios ni administración de sesiones desde la interfaz.
 
 ## Crear un tenant
 
