@@ -324,18 +324,29 @@ curl --request PATCH http://localhost:3000/api/empresas/atelier-norte/sucursales
 
 ## Aislamiento de tenants
 
-Las consultas de datos de tenant siguen una única ruta reutilizable:
+Las rutas actuales de sucursales continúan resolviendo la empresa por slug para mantener su API sin cambios. Los futuros módulos autenticados de vestidos y reservaciones disponen ahora del flujo reutilizable JWT → `TenantScope` → transacción:
 
-1. El controlador recibe un slug de empresa, nunca un schema.
-2. `TenantResolverService` consulta `public.empresas` y construye un `TenantScope` inmutable.
-3. El scope comprueba que `schemaName` coincide exactamente con el UUID de la empresa; no basta con que tenga un formato válido.
-4. `TenantContextService` reserva una conexión del pool, inicia una transacción y ejecuta `SET LOCAL search_path TO <tenant>, pg_catalog`.
-5. La operación recibe solamente un `EntityManager` ligado a esa transacción.
-6. `COMMIT` o `ROLLBACK` elimina automáticamente el cambio local de `search_path` antes de devolver la conexión al pool.
+1. `JwtAuthGuard` verifica firma, expiración, sesión y usuario, y deja los claims validados en la solicitud.
+2. `TenantAuthGuard` lee `empresaId` exclusivamente de esos claims. Ignora headers personalizados, parámetros, query strings y cuerpos HTTP.
+3. `TenantResolverService.resolveByEmpresaId()` consulta `public.empresas` y construye un `TenantScope` inmutable. El scope comprueba internamente que `schemaName` corresponde exactamente al UUID de la empresa.
+4. `@CurrentTenant()` entrega el scope verificado al controlador o servicio; el cliente nunca conoce el schema.
+5. `TenantContextService.run()` reserva una conexión del pool, inicia una transacción y ejecuta `SET LOCAL search_path TO <tenant>, pg_catalog`.
+6. La operación recibe solamente un `EntityManager` ligado a esa transacción. `COMMIT` o `ROLLBACK` elimina el `search_path` local antes de devolver la conexión.
+7. `TenantScopeCleanupInterceptor` elimina el scope request-local al completar o fallar la respuesta.
 
-No se utiliza `SET search_path` de sesión ni se aceptan nombres de schema en headers, parámetros HTTP o DTOs. `public` tampoco se incluye como fallback dentro de una operación tenant: las consultas globales se resuelven antes, fuera del contexto tenant. `DB_POOL_MAX` permite ajustar el tamaño del pool sin cambiar este comportamiento.
+El decorador compuesto `@TenantAuthenticated()` aplica siempre los guards en el orden correcto y registra la limpieza:
 
-El guard JWT actual autentica solamente al usuario. En una etapa posterior, la selección de empresa deberá validar la membresía en `public.empresa_usuarios` y llamar `TenantResolverService.resolveByEmpresaId()`. El cliente y el JWT nunca seleccionarán directamente un schema; la resolución, validación UUID↔schema y ejecución transaccional no tendrán que cambiar.
+```ts
+@TenantAuthenticated()
+@Get()
+findAll(@CurrentTenant() tenant: TenantScope) {
+  return this.tenantContext.run(tenant, async (manager) => {
+    return manager.getRepository(TenantEntity).find();
+  });
+}
+```
+
+No se utiliza `SET search_path` de sesión ni se aceptan nombres de schema en headers, parámetros HTTP, query strings o DTOs. `public` tampoco se incluye como fallback dentro de una operación tenant: las consultas globales se resuelven antes, fuera del contexto tenant. `DB_POOL_MAX` permite ajustar el tamaño del pool sin cambiar este comportamiento.
 
 ### Prueba PostgreSQL de aislamiento
 

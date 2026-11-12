@@ -1,18 +1,39 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ExecutionContext, INestApplication } from '@nestjs/common';
+import {
+  Controller,
+  ExecutionContext,
+  Get,
+  INestApplication,
+} from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppController } from './../src/app.controller.js';
 import { AppService } from './../src/app.service.js';
 import { AuthController } from './../src/auth/auth.controller.js';
 import { AuthService } from './../src/auth/auth.service.js';
+import { CurrentTenant } from './../src/auth/current-tenant.decorator.js';
 import { JwtAuthGuard } from './../src/auth/jwt-auth.guard.js';
+import { TenantAuthGuard } from './../src/auth/tenant-auth.guard.js';
+import { TenantAuthenticated } from './../src/auth/tenant-authenticated.decorator.js';
 import { DatabaseHealthService } from './../src/database/database-health.service.js';
 import { DevTenantAdminGuard } from './../src/empresas/dev-tenant-admin.guard.js';
 import { EmpresasController } from './../src/empresas/empresas.controller.js';
 import { EmpresasService } from './../src/empresas/empresas.service.js';
 import { SucursalesController } from './../src/sucursales/sucursales.controller.js';
 import { SucursalesService } from './../src/sucursales/sucursales.service.js';
+import type { TenantScope } from './../src/tenancy/tenant-scope.js';
+
+@Controller('_test/tenant')
+class TenantProbeController {
+  @Get()
+  @TenantAuthenticated()
+  probe(@CurrentTenant() tenant: TenantScope) {
+    return {
+      empresaId: tenant.empresaId,
+      empresaSlug: tenant.empresaSlug,
+    };
+  }
+}
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -33,6 +54,7 @@ describe('AppController (e2e)', () => {
         AuthController,
         EmpresasController,
         SucursalesController,
+        TenantProbeController,
       ],
       providers: [
         AppService,
@@ -113,6 +135,23 @@ describe('AppController (e2e)', () => {
       .useValue({
         canActivate: (context: ExecutionContext) => {
           context.switchToHttp().getRequest().user = authenticatedUser;
+          return true;
+        },
+      })
+      .overrideGuard(TenantAuthGuard)
+      .useValue({
+        canActivate: (context: ExecutionContext) => {
+          const tenantRequest = context.switchToHttp().getRequest();
+
+          if (tenantRequest.user !== authenticatedUser) {
+            throw new Error('JwtAuthGuard did not run first');
+          }
+
+          tenantRequest.tenantScope = {
+            empresaId: selectedEmpresaId,
+            empresaSlug: 'atelier-norte',
+            schemaName: 'tenant_a18c2a56d33f4d88a8e742931121e295',
+          };
           return true;
         },
       })
@@ -201,6 +240,19 @@ describe('AppController (e2e)', () => {
       .set('Authorization', 'Bearer signed.jwt.token')
       .expect(200)
       .expect(authenticatedUser);
+  });
+
+  it('runs JwtAuthGuard before TenantAuthGuard and exposes TenantScope', () => {
+    return request(app.getHttpServer())
+      .get('/api/_test/tenant')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .set('x-empresa-id', 'b28c2a56-d33f-4d88-a8e7-42931121e295')
+      .set('x-schema-name', 'tenant_untrusted')
+      .expect(200)
+      .expect({
+        empresaId: selectedEmpresaId,
+        empresaSlug: 'atelier-norte',
+      });
   });
 
   it('/api/empresas (POST)', () => {

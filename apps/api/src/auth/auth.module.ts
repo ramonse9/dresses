@@ -12,6 +12,8 @@ import { AuthSession } from './entities/auth-session.entity.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { PasswordHashService } from './password-hash.service.js';
 import { RefreshTokenService } from './refresh-token.service.js';
+import { TenantAuthGuard } from './tenant-auth.guard.js';
+import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.interceptor.js';
 
 @Module({
   imports: [
@@ -41,12 +43,16 @@ import { RefreshTokenService } from './refresh-token.service.js';
     PasswordHashService,
     RefreshTokenService,
     JwtAuthGuard,
+    TenantAuthGuard,
+    TenantScopeCleanupInterceptor,
   ],
   exports: [
     AuthService,
     AuthSessionsService,
     PasswordHashService,
     JwtAuthGuard,
+    TenantAuthGuard,
+    TenantScopeCleanupInterceptor,
     JwtModule,
   ],
 })

@@ -6,10 +6,13 @@ import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { JwtAuthGuard } from '../src/auth/jwt-auth.guard.js';
 import { PasswordHashService } from '../src/auth/password-hash.service.js';
+import { TenantAuthGuard } from '../src/auth/tenant-auth.guard.js';
 import type { AccessTokenPayload } from '../src/auth/types/access-token-payload.js';
+import { TenantContextService } from '../src/database/tenant-context.service.js';
 import { Empresa } from '../src/empresas/entities/empresa.entity.js';
 import { EmpresasService } from '../src/empresas/empresas.service.js';
 import { quoteTenantSchemaName } from '../src/empresas/tenant-schema-name.js';
+import type { TenantScope } from '../src/tenancy/tenant-scope.js';
 import { EmpresaUsuario } from '../src/usuarios/entities/empresa-usuario.entity.js';
 import { EmpresaUsuarioRol } from '../src/usuarios/entities/empresa-usuario.entity.js';
 import { Usuario } from '../src/usuarios/entities/usuario.entity.js';
@@ -23,12 +26,13 @@ describe('PostgreSQL authenticated empresa selection', () => {
   let authService: AuthService;
   let jwtService: JwtService;
   let jwtAuthGuard: JwtAuthGuard;
+  let tenantAuthGuard: TenantAuthGuard;
+  let tenantContextService: TenantContextService;
   let empresaA: Empresa;
   let empresaB: Empresa;
   let usuarioA: Usuario;
   let usuarioB: Usuario;
   let membresiaA: EmpresaUsuario;
-  let membresiaAB: EmpresaUsuario;
 
   const suffix = `${process.pid}-${Date.now()}`;
   const password = 'integration-password';
@@ -46,6 +50,8 @@ describe('PostgreSQL authenticated empresa selection', () => {
     authService = moduleRef.get(AuthService);
     jwtService = moduleRef.get(JwtService);
     jwtAuthGuard = moduleRef.get(JwtAuthGuard);
+    tenantAuthGuard = moduleRef.get(TenantAuthGuard);
+    tenantContextService = moduleRef.get(TenantContextService);
 
     const empresasService = moduleRef.get(EmpresasService);
     const passwordHashService = moduleRef.get(PasswordHashService);
@@ -74,7 +80,7 @@ describe('PostgreSQL authenticated empresa selection', () => {
       }),
     ]);
 
-    [membresiaA, membresiaAB] = await membresiasRepository.save([
+    const membresias = await membresiasRepository.save([
       membresiasRepository.create({
         usuarioId: usuarioA.id,
         empresaId: empresaA.id,
@@ -94,6 +100,7 @@ describe('PostgreSQL authenticated empresa selection', () => {
         activo: true,
       }),
     ]);
+    membresiaA = membresias[0];
   });
 
   afterAll(async () => {
@@ -176,6 +183,83 @@ describe('PostgreSQL authenticated empresa selection', () => {
     });
     expect(selectedPayloadA).not.toHaveProperty('schemaName');
 
+    const selectedB = await authService.selectEmpresa(payloadB, {
+      empresaId: empresaB.id,
+    });
+
+    async function resolveScopeFromToken(
+      accessToken: string,
+      spoofedEmpresaId: string,
+    ): Promise<TenantScope> {
+      const request: {
+        headers: Record<string, string>;
+        query: Record<string, string>;
+        params: Record<string, string>;
+        body: Record<string, string>;
+        user?: AccessTokenPayload;
+        tenantScope?: TenantScope;
+      } = {
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'x-empresa-id': spoofedEmpresaId,
+          'x-schema-name': 'tenant_untrusted',
+        },
+        query: { empresaId: spoofedEmpresaId, schemaName: 'tenant_untrusted' },
+        params: { empresaId: spoofedEmpresaId, schemaName: 'tenant_untrusted' },
+        body: { empresaId: spoofedEmpresaId, schemaName: 'tenant_untrusted' },
+      };
+      const context = {
+        switchToHttp: () => ({ getRequest: () => request }),
+      } as unknown as ExecutionContext;
+
+      await jwtAuthGuard.canActivate(context);
+      await tenantAuthGuard.canActivate(context);
+
+      if (!request.tenantScope) {
+        throw new Error('TenantAuthGuard did not attach a TenantScope');
+      }
+
+      return request.tenantScope;
+    }
+
+    const scopeA = await resolveScopeFromToken(
+      selectedA.accessToken,
+      empresaB.id,
+    );
+    const scopeB = await resolveScopeFromToken(
+      selectedB.accessToken,
+      empresaA.id,
+    );
+    expect(scopeA.empresaId).toBe(empresaA.id);
+    expect(scopeB.empresaId).toBe(empresaB.id);
+
+    const currentSchemaA = await tenantContextService.run(
+      scopeA,
+      async (manager) => {
+        const rows = (await manager.query(
+          'SELECT current_schema() AS schema',
+        )) as Array<{ schema: string }>;
+        return rows[0]?.schema;
+      },
+    );
+    const currentSchemaB = await tenantContextService.run(
+      scopeB,
+      async (manager) => {
+        const rows = (await manager.query(
+          'SELECT current_schema() AS schema',
+        )) as Array<{ schema: string }>;
+        return rows[0]?.schema;
+      },
+    );
+    expect(currentSchemaA).toBe(empresaA.schemaName);
+    expect(currentSchemaB).toBe(empresaB.schemaName);
+
+    const poolState = (await dataSource.query(
+      "SELECT current_schema() AS schema, current_setting('search_path') AS search_path",
+    )) as Array<{ schema: string; search_path: string }>;
+    expect(poolState[0]?.schema).toBe('public');
+    expect(poolState[0]?.search_path).not.toContain('tenant_');
+
     await expect(
       authService.selectEmpresa(payloadB, { empresaId: empresaA.id }),
     ).rejects.toThrow('No tienes acceso a esta empresa');
@@ -203,7 +287,5 @@ describe('PostgreSQL authenticated empresa selection', () => {
     await expect(jwtAuthGuard.canActivate(context)).rejects.toThrow(
       'Token inválido',
     );
-
-    expect(membresiaAB.empresaId).toBe(empresaB.id);
   });
 });
