@@ -107,6 +107,21 @@ Las migrations de `public` se mantienen separadas de las migrations que se ejecu
 
 La autenticación todavía no está implementada. El módulo `EmpresasModule` usa repositorios parametrizados de TypeORM y nunca acepta identificadores SQL desde el cliente.
 
+## Usuarios y membresías
+
+Los usuarios y sus accesos a empresas son información global y viven exclusivamente en `public`:
+
+- `public.usuarios`: UUID, email, `password_hash`, nombre, estado y timestamps.
+- `public.empresa_usuarios`: relación entre usuario y empresa, rol, estado y fecha de creación.
+- Roles iniciales: `OWNER` y `EMPLOYEE`.
+- Un usuario solo puede tener una membresía por empresa.
+
+El email se normaliza con `trim().toLowerCase()` antes de persistir. PostgreSQL exige además que el valor almacenado esté en minúsculas y mantiene un índice único. `passwordHash` tiene `select: false` en TypeORM y `Usuario.toJSON()` utiliza una lista explícita de campos públicos, por lo que el hash no aparece en consultas normales ni serializaciones.
+
+`UsuariosModule` exporta servicios de consulta para buscar usuarios activos y membresías activas. No existen endpoints de usuarios, registro público, hashing de contraseñas, login ni JWT en esta etapa. Las credenciales tampoco se almacenan dentro de schemas tenant.
+
+La migration global correspondiente es `CreateUsuariosMemberships1794442297164` y crea las llaves foráneas hacia `public.usuarios` y `public.empresas` con eliminación restringida.
+
 ## Crear un tenant
 
 La creación de empresas es una operación administrativa temporal de desarrollo. Para habilitarla localmente establece `ENABLE_DEV_TENANT_ADMIN=true`; en `NODE_ENV=production` permanece bloqueada aunque la bandera esté activa.

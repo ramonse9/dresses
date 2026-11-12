@@ -6,6 +6,7 @@ import { validateDatabaseEnvironment } from './database/database.config.js';
 import { DatabaseModule } from './database/database.module.js';
 import { EmpresasModule } from './empresas/empresas.module.js';
 import { SucursalesModule } from './sucursales/sucursales.module.js';
+import { UsuariosModule } from './usuarios/usuarios.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { SucursalesModule } from './sucursales/sucursales.module.js';
     DatabaseModule,
     EmpresasModule,
     SucursalesModule,
+    UsuariosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

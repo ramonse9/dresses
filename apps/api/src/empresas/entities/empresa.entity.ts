@@ -4,8 +4,10 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { EmpresaUsuario } from '../../usuarios/entities/empresa-usuario.entity.js';
 
 @Entity({ name: 'empresas', schema: 'public' })
 @Index('UQ_empresas_slug', ['slug'], { unique: true })
@@ -29,4 +31,7 @@ export class Empresa {
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
+
+  @OneToMany(() => EmpresaUsuario, (membresia) => membresia.empresa)
+  membresias!: EmpresaUsuario[];
 }
