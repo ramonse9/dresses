@@ -20,4 +20,12 @@ export class UsuariosService {
       where: { email: normalizeEmail(email), activo: true },
     });
   }
+
+  findByEmailForAuthentication(email: string): Promise<Usuario | null> {
+    return this.usuariosRepository
+      .createQueryBuilder('usuario')
+      .addSelect('usuario.passwordHash')
+      .where('usuario.email = :email', { email: normalizeEmail(email) })
+      .getOne();
+  }
 }

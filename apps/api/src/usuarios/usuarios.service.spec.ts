@@ -29,4 +29,24 @@ describe('UsuariosService', () => {
     await expect(service.findById('user-id')).resolves.toBeNull();
     expect(findOne).toHaveBeenCalledWith({ where: { id: 'user-id' } });
   });
+
+  it('selects passwordHash explicitly only for authentication', async () => {
+    const getOne = vi.fn().mockResolvedValue(null);
+    const where = vi.fn().mockReturnValue({ getOne });
+    const addSelect = vi.fn().mockReturnValue({ where });
+    const createQueryBuilder = vi.fn().mockReturnValue({ addSelect });
+    const repository = {
+      createQueryBuilder,
+    } as unknown as Repository<Usuario>;
+    const service = new UsuariosService(repository);
+
+    await expect(
+      service.findByEmailForAuthentication(' Owner@Example.COM '),
+    ).resolves.toBeNull();
+    expect(createQueryBuilder).toHaveBeenCalledWith('usuario');
+    expect(addSelect).toHaveBeenCalledWith('usuario.passwordHash');
+    expect(where).toHaveBeenCalledWith('usuario.email = :email', {
+      email: 'owner@example.com',
+    });
+  });
 });

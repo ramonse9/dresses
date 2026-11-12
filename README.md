@@ -1,6 +1,6 @@
 # Dresses SaaS
 
-Base de un SaaS multi-tenant para negocios de renta de vestidos. El proyecto contiene una aplicación web, un API con health check y la infraestructura local de PostgreSQL con TypeORM. Todavía no incluye módulos de negocio ni autenticación.
+Base de un SaaS multi-tenant para negocios de renta de vestidos. El proyecto contiene una aplicación web, un API con autenticación JWT y la infraestructura local de PostgreSQL con TypeORM. Los módulos de negocio de vestidos y reservaciones todavía no están implementados.
 
 ## Tecnologías
 
@@ -64,9 +64,19 @@ DB_DATABASE=vestidos_saas
 DB_SSL=false
 DB_POOL_MAX=10
 ENABLE_DEV_TENANT_ADMIN=false
+JWT_ACCESS_SECRET=un_secreto_local_aleatorio_de_al_menos_32_bytes
+JWT_ACCESS_TTL_SECONDS=900
 ```
 
 El archivo `.env` está ignorado por Git. TypeORM tiene `synchronize: false`; los cambios de esquema se gestionan exclusivamente mediante migrations.
+
+Genera un secreto local distinto para cada entorno, por ejemplo:
+
+```bash
+openssl rand -base64 32
+```
+
+Guarda el resultado únicamente en `apps/api/.env`. `JWT_ACCESS_TTL_SECONDS` acepta entre 60 y 3600 segundos; el valor sugerido de desarrollo es 900 segundos (15 minutos).
 
 ## Migrations
 
@@ -105,7 +115,7 @@ Las migrations de `public` se mantienen separadas de las migrations que se ejecu
 - El nombre se deriva internamente del UUID de `Empresa`; nunca se toma un nombre de schema, slug o identificador SQL enviado por el cliente.
 - PostgreSQL aplica además una restricción `CHECK` al campo `schema_name` y un índice único.
 
-La autenticación todavía no está implementada. El módulo `EmpresasModule` usa repositorios parametrizados de TypeORM y nunca acepta identificadores SQL desde el cliente.
+La autenticación identifica al usuario, pero todavía no selecciona una empresa. El módulo `EmpresasModule` usa repositorios parametrizados de TypeORM y nunca acepta identificadores SQL desde el cliente.
 
 ## Usuarios y membresías
 
@@ -118,9 +128,59 @@ Los usuarios y sus accesos a empresas son información global y viven exclusivam
 
 El email se normaliza con `trim().toLowerCase()` antes de persistir. PostgreSQL exige además que el valor almacenado esté en minúsculas y mantiene un índice único. `passwordHash` tiene `select: false` en TypeORM y `Usuario.toJSON()` utiliza una lista explícita de campos públicos, por lo que el hash no aparece en consultas normales ni serializaciones.
 
-`UsuariosModule` exporta servicios de consulta para buscar usuarios activos y membresías activas. No existen endpoints de usuarios, registro público, hashing de contraseñas, login ni JWT en esta etapa. Las credenciales tampoco se almacenan dentro de schemas tenant.
+`UsuariosModule` exporta servicios de consulta para buscar usuarios activos y membresías activas. No existen endpoints de usuarios ni registro público. Las credenciales tampoco se almacenan dentro de schemas tenant.
 
 La migration global correspondiente es `CreateUsuariosMemberships1794442297164` y crea las llaves foráneas hacia `public.usuarios` y `public.empresas` con eliminación restringida.
+
+## Autenticación JWT
+
+`AuthModule` implementa autenticación básica sin abrir registro público:
+
+```text
+POST /api/auth/login
+GET  /api/auth/me
+```
+
+Las contraseñas se almacenan exclusivamente como hashes Argon2id. `PasswordHashService` centraliza tanto la creación del hash como su verificación, y el login hace una comparación segura incluso cuando el email no existe para reducir diferencias observables. La aplicación no registra contraseñas ni las incluye en respuestas.
+
+El login recibe únicamente `email` y `password`. El email se normaliza a minúsculas antes de consultar `public.usuarios`; un usuario inexistente, inactivo o con contraseña incorrecta recibe el mismo error genérico `401`.
+
+```bash
+curl --request POST http://localhost:3000/api/auth/login \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"owner@example.com","password":"tu-password"}'
+```
+
+La respuesta contiene un access token de corta duración:
+
+```json
+{
+  "accessToken": "eyJ...",
+  "tokenType": "Bearer",
+  "expiresIn": 900
+}
+```
+
+El JWT contiene `sub`, `email` y un `sessionId` aleatorio, además de los timestamps estándar del token. No contiene `schemaName`, empresa ni membresía. La selección de empresa queda pendiente para una etapa posterior.
+
+Verifica el token mediante el guard reutilizable en el endpoint protegido:
+
+```bash
+curl http://localhost:3000/api/auth/me \
+  --header 'Authorization: Bearer eyJ...'
+```
+
+La respuesta expone únicamente la identidad incluida en el token:
+
+```json
+{
+  "sub": "019a6f33-82b7-7a22-971b-6a8d7c5e4f30",
+  "email": "owner@example.com",
+  "sessionId": "47ecf96a-8f2c-4e07-bd1f-93936f2cdb90"
+}
+```
+
+Como no existe registro público, el usuario debe haber sido aprovisionado previamente en `public.usuarios` por un proceso administrativo y su `password_hash` debe ser generado con Argon2id. No se incluyen todavía refresh tokens, recuperación de contraseña ni selección de empresa.
 
 ## Crear un tenant
 
@@ -200,7 +260,7 @@ Las consultas de datos de tenant siguen una única ruta reutilizable:
 
 No se utiliza `SET search_path` de sesión ni se aceptan nombres de schema en headers, parámetros HTTP o DTOs. `public` tampoco se incluye como fallback dentro de una operación tenant: las consultas globales se resuelven antes, fuera del contexto tenant. `DB_POOL_MAX` permite ajustar el tamaño del pool sin cambiar este comportamiento.
 
-Para la futura autenticación, un guard JWT podrá tomar un `empresaId` verificado y llamar `TenantResolverService.resolveByEmpresaId()`. La resolución, validación UUID↔schema y ejecución transaccional no tendrán que cambiar. Actualmente no se confía en claims ni headers porque la autenticación todavía no está implementada.
+El guard JWT actual autentica solamente al usuario. En una etapa posterior, la selección de empresa deberá validar la membresía en `public.empresa_usuarios` y llamar `TenantResolverService.resolveByEmpresaId()`. El cliente y el JWT nunca seleccionarán directamente un schema; la resolución, validación UUID↔schema y ejecución transaccional no tendrán que cambiar.
 
 ### Prueba PostgreSQL de aislamiento
 
@@ -215,6 +275,8 @@ DB_PASSWORD=tu_password \
 DB_DATABASE=vestidos_saas \
 DB_SSL=false \
 DB_POOL_MAX=1 \
+JWT_ACCESS_SECRET=un-secreto-de-pruebas-con-al-menos-32-bytes \
+JWT_ACCESS_TTL_SECONDS=900 \
 npm run test:tenancy
 ```
 
