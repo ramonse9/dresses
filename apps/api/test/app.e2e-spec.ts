@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   Get,
   INestApplication,
+  UnauthorizedException,
 } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
@@ -40,6 +41,7 @@ describe('AppController (e2e)', () => {
   const refreshToken = 'A'.repeat(43);
   const rotatedRefreshToken = 'B'.repeat(43);
   const selectedEmpresaId = 'a18c2a56-d33f-4d88-a8e7-42931121e295';
+  const sucursalId = 'd18c2a56-d33f-4d88-a8e7-42931121e295';
 
   const authenticatedUser = {
     sub: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
@@ -112,14 +114,37 @@ describe('AppController (e2e)', () => {
           provide: SucursalesService,
           useValue: {
             create: vi.fn().mockResolvedValue({
-              id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+              id: sucursalId,
               nombre: 'Centro',
               direccion: null,
               telefono: null,
               activo: true,
             }),
+            findAll: vi.fn().mockResolvedValue([
+              {
+                id: sucursalId,
+                nombre: 'Centro',
+                direccion: null,
+                telefono: null,
+                activo: true,
+              },
+            ]),
+            findOne: vi.fn().mockResolvedValue({
+              id: sucursalId,
+              nombre: 'Centro',
+              direccion: null,
+              telefono: null,
+              activo: true,
+            }),
+            update: vi.fn().mockResolvedValue({
+              id: sucursalId,
+              nombre: 'Centro Histórico',
+              direccion: null,
+              telefono: null,
+              activo: true,
+            }),
             deactivate: vi.fn().mockResolvedValue({
-              id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+              id: sucursalId,
               nombre: 'Centro',
               direccion: null,
               telefono: null,
@@ -134,7 +159,13 @@ describe('AppController (e2e)', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({
         canActivate: (context: ExecutionContext) => {
-          context.switchToHttp().getRequest().user = authenticatedUser;
+          const authenticatedRequest = context.switchToHttp().getRequest();
+
+          if (!authenticatedRequest.headers.authorization) {
+            throw new UnauthorizedException('Token inválido');
+          }
+
+          authenticatedRequest.user = authenticatedUser;
           return true;
         },
       })
@@ -269,13 +300,14 @@ describe('AppController (e2e)', () => {
       });
   });
 
-  it('/api/empresas/:slug/sucursales (POST)', () => {
+  it('/api/sucursales (POST)', () => {
     return request(app.getHttpServer())
-      .post('/api/empresas/atelier-norte/sucursales')
+      .post('/api/sucursales')
+      .set('Authorization', 'Bearer selected.jwt.token')
       .send({ nombre: 'Centro' })
       .expect(201)
       .expect({
-        id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+        id: sucursalId,
         nombre: 'Centro',
         direccion: null,
         telefono: null,
@@ -283,19 +315,75 @@ describe('AppController (e2e)', () => {
       });
   });
 
-  it('/api/empresas/:slug/sucursales/:id (DELETE)', () => {
+  it('/api/sucursales (GET)', () => {
     return request(app.getHttpServer())
-      .delete(
-        '/api/empresas/atelier-norte/sucursales/d18c2a56-d33f-4d88-a8e7-42931121e295',
-      )
+      .get('/api/sucursales')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(200)
+      .expect([
+        {
+          id: sucursalId,
+          nombre: 'Centro',
+          direccion: null,
+          telefono: null,
+          activo: true,
+        },
+      ]);
+  });
+
+  it('/api/sucursales/:id (GET)', () => {
+    return request(app.getHttpServer())
+      .get(`/api/sucursales/${sucursalId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
       .expect(200)
       .expect({
-        id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+        id: sucursalId,
+        nombre: 'Centro',
+        direccion: null,
+        telefono: null,
+        activo: true,
+      });
+  });
+
+  it('/api/sucursales/:id (PATCH)', () => {
+    return request(app.getHttpServer())
+      .patch(`/api/sucursales/${sucursalId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ nombre: 'Centro Histórico' })
+      .expect(200)
+      .expect({
+        id: sucursalId,
+        nombre: 'Centro Histórico',
+        direccion: null,
+        telefono: null,
+        activo: true,
+      });
+  });
+
+  it('/api/sucursales/:id (DELETE)', () => {
+    return request(app.getHttpServer())
+      .delete(`/api/sucursales/${sucursalId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(200)
+      .expect({
+        id: sucursalId,
         nombre: 'Centro',
         direccion: null,
         telefono: null,
         activo: false,
       });
+  });
+
+  it('/api/sucursales rejects requests without JWT', () => {
+    return request(app.getHttpServer()).get('/api/sucursales').expect(401);
+  });
+
+  it('does not expose the previous empresaSlug route', () => {
+    return request(app.getHttpServer())
+      .post('/api/empresas/atelier-norte/sucursales')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ nombre: 'Centro' })
+      .expect(404);
   });
 
   afterEach(async () => {

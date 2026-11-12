@@ -54,16 +54,26 @@ describe('PostgreSQL tenant isolation', () => {
   });
 
   it('keeps two empresas and their sucursales isolated on a reused connection', async () => {
-    await empresasService.create({ nombre: 'Isolation A', slug: slugA });
-    await empresasService.create({ nombre: 'Isolation B', slug: slugB });
+    const empresaA = await empresasService.create({
+      nombre: 'Isolation A',
+      slug: slugA,
+    });
+    const empresaB = await empresasService.create({
+      nombre: 'Isolation B',
+      slug: slugB,
+    });
+    const tenantA = await tenantResolver.resolveByEmpresaId(empresaA.id);
+    const tenantB = await tenantResolver.resolveByEmpresaId(empresaB.id);
 
-    const aCentro = await sucursalesService.create(slugA, { nombre: 'Centro' });
-    await sucursalesService.create(slugA, { nombre: 'Norte' });
-    await sucursalesService.create(slugB, { nombre: 'Centro' });
-    await sucursalesService.create(slugB, { nombre: 'Sur' });
+    const aCentro = await sucursalesService.create(tenantA, {
+      nombre: 'Centro',
+    });
+    await sucursalesService.create(tenantA, { nombre: 'Norte' });
+    await sucursalesService.create(tenantB, { nombre: 'Centro' });
+    await sucursalesService.create(tenantB, { nombre: 'Sur' });
 
-    const branchesA = await sucursalesService.findAll(slugA);
-    const branchesB = await sucursalesService.findAll(slugB);
+    const branchesA = await sucursalesService.findAll(tenantA);
+    const branchesB = await sucursalesService.findAll(tenantB);
 
     expect(branchesA.map(({ nombre }) => nombre).sort()).toEqual([
       'Centro',
@@ -75,10 +85,9 @@ describe('PostgreSQL tenant isolation', () => {
     ]);
 
     await expect(
-      sucursalesService.findOne(slugB, aCentro.id),
+      sucursalesService.findOne(tenantB, aCentro.id),
     ).rejects.toBeInstanceOf(NotFoundException);
 
-    const tenantA = await tenantResolver.resolveBySlug(slugA);
     const currentSchema = await tenantContext.run(tenantA, async (manager) => {
       const rows = (await manager.query(
         'SELECT current_schema() AS schema',

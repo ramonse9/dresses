@@ -11,92 +11,81 @@ import {
   Repository,
 } from 'typeorm';
 import { TenantContextService } from '../database/tenant-context.service.js';
-import { TenantMigrationService } from '../empresas/tenant-migrations/tenant-migration.service.js';
-import { TenantResolverService } from '../tenancy/tenant-resolver.service.js';
+import type { TenantScope } from '../tenancy/tenant-scope.js';
 import { CreateSucursalDto, UpdateSucursalDto } from './dto/sucursal.dto.js';
 import { Sucursal } from './entities/sucursal.tenant-entity.js';
 
 @Injectable()
 export class SucursalesService {
-  constructor(
-    private readonly tenantResolver: TenantResolverService,
-    private readonly tenantContext: TenantContextService,
-    private readonly tenantMigrationService: TenantMigrationService,
-  ) {}
+  constructor(private readonly tenantContext: TenantContextService) {}
 
   async create(
-    empresaSlug: string,
+    tenant: TenantScope,
     input: CreateSucursalDto,
   ): Promise<Sucursal> {
     try {
-      return await this.withTenantRepository(
-        empresaSlug,
-        async (repository) => {
-          await this.ensureUniqueName(repository, input.nombre);
-          const sucursal = repository.create({
-            nombre: input.nombre,
-            direccion: input.direccion ?? null,
-            telefono: input.telefono ?? null,
-            activo: true,
-          });
-          return repository.save(sucursal);
-        },
-      );
+      return await this.withTenantRepository(tenant, async (repository) => {
+        await this.ensureUniqueName(repository, input.nombre);
+        const sucursal = repository.create({
+          nombre: input.nombre,
+          direccion: input.direccion ?? null,
+          telefono: input.telefono ?? null,
+          activo: true,
+        });
+        return repository.save(sucursal);
+      });
     } catch (error) {
       this.rethrowNameConflict(error);
     }
   }
 
-  findAll(empresaSlug: string): Promise<Sucursal[]> {
-    return this.withTenantRepository(empresaSlug, (repository) =>
+  findAll(tenant: TenantScope): Promise<Sucursal[]> {
+    return this.withTenantRepository(tenant, (repository) =>
       repository.find({ order: { createdAt: 'DESC' } }),
     );
   }
 
-  findOne(empresaSlug: string, id: string): Promise<Sucursal> {
-    return this.withTenantRepository(empresaSlug, (repository) =>
+  findOne(tenant: TenantScope, id: string): Promise<Sucursal> {
+    return this.withTenantRepository(tenant, (repository) =>
       this.requireSucursal(repository, id),
     );
   }
 
   async update(
-    empresaSlug: string,
+    tenant: TenantScope,
     id: string,
     input: UpdateSucursalDto,
   ): Promise<Sucursal> {
     try {
-      return await this.withTenantRepository(
-        empresaSlug,
-        async (repository) => {
-          const sucursal = await this.requireSucursal(repository, id);
+      return await this.withTenantRepository(tenant, async (repository) => {
+        const sucursal = await this.requireSucursal(repository, id);
 
-          if (input.nombre !== undefined && input.nombre !== sucursal.nombre) {
-            await this.ensureUniqueName(repository, input.nombre, id);
-            sucursal.nombre = input.nombre;
-          }
+        if (input.nombre !== undefined && input.nombre !== sucursal.nombre) {
+          await this.ensureUniqueName(repository, input.nombre, id);
+          sucursal.nombre = input.nombre;
+        }
 
-          if (input.direccion !== undefined) {
-            sucursal.direccion = input.direccion;
-          }
+        if (input.direccion !== undefined) {
+          sucursal.direccion = input.direccion;
+        }
 
-          if (input.telefono !== undefined) {
-            sucursal.telefono = input.telefono;
-          }
+        if (input.telefono !== undefined) {
+          sucursal.telefono = input.telefono;
+        }
 
-          if (input.activo !== undefined) {
-            sucursal.activo = input.activo;
-          }
+        if (input.activo !== undefined) {
+          sucursal.activo = input.activo;
+        }
 
-          return repository.save(sucursal);
-        },
-      );
+        return repository.save(sucursal);
+      });
     } catch (error) {
       this.rethrowNameConflict(error);
     }
   }
 
-  deactivate(empresaSlug: string, id: string): Promise<Sucursal> {
-    return this.withTenantRepository(empresaSlug, async (repository) => {
+  deactivate(tenant: TenantScope, id: string): Promise<Sucursal> {
+    return this.withTenantRepository(tenant, async (repository) => {
       const sucursal = await this.requireSucursal(repository, id);
       sucursal.activo = false;
       return repository.save(sucursal);
@@ -104,12 +93,9 @@ export class SucursalesService {
   }
 
   private async withTenantRepository<T>(
-    empresaSlug: string,
+    tenant: TenantScope,
     operation: (repository: Repository<Sucursal>) => Promise<T>,
   ): Promise<T> {
-    const tenant = await this.tenantResolver.resolveBySlug(empresaSlug);
-    await this.tenantMigrationService.ensureMigrations(tenant.schemaName);
-
     return this.tenantContext.run(tenant, (manager: EntityManager) =>
       operation(manager.getRepository(Sucursal)),
     );

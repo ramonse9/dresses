@@ -1,7 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import {
   parseCreateSucursalBody,
-  parseEmpresaSlug,
   parseUpdateSucursalBody,
 } from './sucursal.dto.js';
 
@@ -40,7 +39,11 @@ describe('Sucursal DTO validation', () => {
     expect(() => parseUpdateSucursalBody({})).toThrow(BadRequestException);
   });
 
-  it('normalizes a valid empresa slug', () => {
-    expect(parseEmpresaSlug('Atelier-Norte')).toBe('atelier-norte');
+  it.each([
+    { nombre: 'Centro', empresaId: 'a18c2a56-d33f-4d88-a8e7-42931121e295' },
+    { nombre: 'Centro', empresaSlug: 'atelier-norte' },
+    { nombre: 'Centro', schemaName: 'tenant_untrusted' },
+  ])('rejects tenant selectors in the body', (input) => {
+    expect(() => parseCreateSucursalBody(input)).toThrow(BadRequestException);
   });
 });

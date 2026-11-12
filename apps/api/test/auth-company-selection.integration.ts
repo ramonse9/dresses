@@ -1,6 +1,8 @@
-import { ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
+import request from 'supertest';
+import type { App } from 'supertest/types.js';
 import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
@@ -19,6 +21,7 @@ import { Usuario } from '../src/usuarios/entities/usuario.entity.js';
 
 describe('PostgreSQL authenticated empresa selection', () => {
   let moduleRef: TestingModule;
+  let app: INestApplication<App>;
   let dataSource: DataSource;
   let usuariosRepository: Repository<Usuario>;
   let membresiasRepository: Repository<EmpresaUsuario>;
@@ -41,7 +44,9 @@ describe('PostgreSQL authenticated empresa selection', () => {
     moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
-    await moduleRef.init();
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api');
+    await app.init();
 
     dataSource = moduleRef.get(DataSource);
     usuariosRepository = dataSource.getRepository(Usuario);
@@ -123,7 +128,7 @@ describe('PostgreSQL authenticated empresa selection', () => {
       }
     }
 
-    await moduleRef?.close();
+    await app?.close();
   });
 
   it('supports multiple empresas and prevents cross-company selection', async () => {
@@ -233,6 +238,45 @@ describe('PostgreSQL authenticated empresa selection', () => {
     expect(scopeA.empresaId).toBe(empresaA.id);
     expect(scopeB.empresaId).toBe(empresaB.id);
 
+    const sucursalAResponse = await request(app.getHttpServer())
+      .post('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({ nombre: 'Token Centro' })
+      .expect(201);
+    const sucursalBResponse = await request(app.getHttpServer())
+      .post('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({ nombre: 'Token Centro' })
+      .expect(201);
+    expect(sucursalAResponse.body).toMatchObject({
+      nombre: 'Token Centro',
+      activo: true,
+    });
+    expect(sucursalBResponse.body).toMatchObject({
+      nombre: 'Token Centro',
+      activo: true,
+    });
+    expect(
+      JSON.stringify([sucursalAResponse.body, sucursalBResponse.body]),
+    ).not.toContain('tenant_');
+
+    await request(app.getHttpServer())
+      .get(`/api/sucursales/${String(sucursalAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(404);
+    await request(app.getHttpServer())
+      .delete(`/api/sucursales/${String(sucursalAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({ activo: false });
+      });
+    await request(app.getHttpServer())
+      .post(`/api/empresas/${empresaA.slug}/sucursales`)
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({ nombre: 'Ruta anterior' })
+      .expect(404);
+
     const currentSchemaA = await tenantContextService.run(
       scopeA,
       async (manager) => {
@@ -278,11 +322,11 @@ describe('PostgreSQL authenticated empresa selection', () => {
     ).rejects.toThrow('No tienes acceso a esta empresa');
 
     await authService.logout(payloadA);
-    const request = {
+    const guardRequest = {
       headers: { authorization: `Bearer ${selectedA.accessToken}` },
     };
     const context = {
-      switchToHttp: () => ({ getRequest: () => request }),
+      switchToHttp: () => ({ getRequest: () => guardRequest }),
     } as unknown as ExecutionContext;
     await expect(jwtAuthGuard.canActivate(context)).rejects.toThrow(
       'Token inválido',

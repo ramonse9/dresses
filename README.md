@@ -294,20 +294,21 @@ SELECT * FROM tenant_019a6f3382b77a22971b6a8d7c5e4f30.tenant_migrations;
 
 ## Sucursales
 
-Las sucursales viven exclusivamente dentro del schema de su empresa. El slug de la ruta se utiliza para buscar la empresa en `public`; el nombre real del schema siempre se obtiene del registro interno.
+Las sucursales viven exclusivamente dentro del schema de su empresa. Todas sus rutas requieren un access token emitido después de seleccionar empresa; el tenant se obtiene únicamente del `TenantScope` autenticado.
 
 ```text
-POST   /api/empresas/:empresaSlug/sucursales
-GET    /api/empresas/:empresaSlug/sucursales
-GET    /api/empresas/:empresaSlug/sucursales/:id
-PATCH  /api/empresas/:empresaSlug/sucursales/:id
-DELETE /api/empresas/:empresaSlug/sucursales/:id
+POST   /api/sucursales
+GET    /api/sucursales
+GET    /api/sucursales/:id
+PATCH  /api/sucursales/:id
+DELETE /api/sucursales/:id
 ```
 
 Crear una sucursal:
 
 ```bash
-curl --request POST http://localhost:3000/api/empresas/atelier-norte/sucursales \
+curl --request POST http://localhost:3000/api/sucursales \
+  --header 'Authorization: Bearer TOKEN_CON_EMPRESA' \
   --header 'Content-Type: application/json' \
   --data '{"nombre":"Centro","direccion":"Av. Principal 123","telefono":"555-0100"}'
 ```
@@ -315,16 +316,19 @@ curl --request POST http://localhost:3000/api/empresas/atelier-norte/sucursales 
 Actualizar o reactivar:
 
 ```bash
-curl --request PATCH http://localhost:3000/api/empresas/atelier-norte/sucursales/ID \
+curl --request PATCH http://localhost:3000/api/sucursales/ID \
+  --header 'Authorization: Bearer TOKEN_CON_EMPRESA' \
   --header 'Content-Type: application/json' \
   --data '{"nombre":"Centro Histórico","activo":true}'
 ```
 
-`DELETE` realiza una baja lógica estableciendo `activo=false`; nunca elimina físicamente la sucursal. Los nombres son obligatorios y únicos, sin distinguir mayúsculas, dentro de cada empresa. La llave UUID de `sucursales` queda preparada para futuras relaciones desde vestidos y reservaciones dentro del mismo schema.
+No se aceptan `empresaSlug`, `empresaId` ni `schemaName` en rutas o DTOs de sucursales. Las rutas antiguas `/api/empresas/:empresaSlug/sucursales` ya no existen y responden `404`.
+
+`DELETE` realiza una baja lógica estableciendo `activo=false`; nunca elimina físicamente la sucursal. Los nombres son obligatorios y únicos, sin distinguir mayúsculas, dentro de cada empresa. Consultar desde un tenant el UUID de una sucursal de otro tenant responde `404`. La llave UUID de `sucursales` queda preparada para futuras relaciones desde vestidos y reservaciones dentro del mismo schema.
 
 ## Aislamiento de tenants
 
-Las rutas actuales de sucursales continúan resolviendo la empresa por slug para mantener su API sin cambios. Los futuros módulos autenticados de vestidos y reservaciones disponen ahora del flujo reutilizable JWT → `TenantScope` → transacción:
+Sucursales es el primer módulo que utiliza el flujo reutilizable JWT → `TenantScope` → transacción. Los futuros módulos autenticados de vestidos y reservaciones pueden aplicar la misma abstracción:
 
 1. `JwtAuthGuard` verifica firma, expiración, sesión y usuario, y deja los claims validados en la solicitud.
 2. `TenantAuthGuard` lee `empresaId` exclusivamente de esos claims. Ignora headers personalizados, parámetros, query strings y cuerpos HTTP.
@@ -348,9 +352,9 @@ findAll(@CurrentTenant() tenant: TenantScope) {
 
 No se utiliza `SET search_path` de sesión ni se aceptan nombres de schema en headers, parámetros HTTP, query strings o DTOs. `public` tampoco se incluye como fallback dentro de una operación tenant: las consultas globales se resuelven antes, fuera del contexto tenant. `DB_POOL_MAX` permite ajustar el tamaño del pool sin cambiar este comportamiento.
 
-### Prueba PostgreSQL de aislamiento
+### Pruebas PostgreSQL de aislamiento
 
-La suite crea dos empresas temporales y varias sucursales, permite el mismo nombre en tenants distintos, rechaza acceder desde una empresa a la sucursal de otra y fuerza `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión.
+Las suites crean empresas y sucursales temporales, permiten el mismo nombre en tenants distintos y fuerzan `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión. `test:auth-database` recorre las rutas HTTP con access tokens de dos empresas, comprueba el `404` cruzado, la baja lógica y que la ruta anterior por slug permanezca deshabilitada; `test:tenancy` verifica el aislamiento directamente en la capa de persistencia.
 
 ```bash
 NODE_ENV=test \
@@ -364,8 +368,10 @@ DB_POOL_MAX=1 \
 JWT_ACCESS_SECRET=un-secreto-de-pruebas-con-al-menos-32-bytes \
 JWT_ACCESS_TTL_SECONDS=900 \
 AUTH_REFRESH_TTL_SECONDS=2592000 \
-npm run test:tenancy
+npm run test:auth-database
 ```
+
+Para la segunda suite, repite el mismo bloque sustituyendo la última línea por `npm run test:tenancy`.
 
 La suite elimina en `afterAll` únicamente las empresas y schemas temporales que ella misma creó.
 

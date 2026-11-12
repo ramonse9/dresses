@@ -10,50 +10,50 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { CurrentTenant } from '../auth/current-tenant.decorator.js';
+import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
+import type { TenantScope } from '../tenancy/tenant-scope.js';
 import {
   parseCreateSucursalBody,
-  parseEmpresaSlug,
   parseUpdateSucursalBody,
 } from './dto/sucursal.dto.js';
 import { Sucursal } from './entities/sucursal.tenant-entity.js';
 import { SucursalesService } from './sucursales.service.js';
 
-@Controller('empresas/:empresaSlug/sucursales')
+@Controller('sucursales')
+@TenantAuthenticated()
 export class SucursalesController {
   constructor(private readonly sucursalesService: SucursalesService) {}
 
   @Post()
   create(
-    @Param('empresaSlug') empresaSlug: string,
+    @CurrentTenant() tenant: TenantScope,
     @Body() body: unknown,
   ): Promise<Sucursal> {
-    return this.sucursalesService.create(
-      parseEmpresaSlug(empresaSlug),
-      parseCreateSucursalBody(body),
-    );
+    return this.sucursalesService.create(tenant, parseCreateSucursalBody(body));
   }
 
   @Get()
-  findAll(@Param('empresaSlug') empresaSlug: string): Promise<Sucursal[]> {
-    return this.sucursalesService.findAll(parseEmpresaSlug(empresaSlug));
+  findAll(@CurrentTenant() tenant: TenantScope): Promise<Sucursal[]> {
+    return this.sucursalesService.findAll(tenant);
   }
 
   @Get(':id')
   findOne(
-    @Param('empresaSlug') empresaSlug: string,
+    @CurrentTenant() tenant: TenantScope,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<Sucursal> {
-    return this.sucursalesService.findOne(parseEmpresaSlug(empresaSlug), id);
+    return this.sucursalesService.findOne(tenant, id);
   }
 
   @Patch(':id')
   update(
-    @Param('empresaSlug') empresaSlug: string,
+    @CurrentTenant() tenant: TenantScope,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() body: unknown,
   ): Promise<Sucursal> {
     return this.sucursalesService.update(
-      parseEmpresaSlug(empresaSlug),
+      tenant,
       id,
       parseUpdateSucursalBody(body),
     );
@@ -62,9 +62,9 @@ export class SucursalesController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   deactivate(
-    @Param('empresaSlug') empresaSlug: string,
+    @CurrentTenant() tenant: TenantScope,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<Sucursal> {
-    return this.sucursalesService.deactivate(parseEmpresaSlug(empresaSlug), id);
+    return this.sucursalesService.deactivate(tenant, id);
   }
 }

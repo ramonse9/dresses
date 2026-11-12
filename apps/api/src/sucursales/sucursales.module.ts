@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from '../auth/auth.module.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { TenancyModule } from '../tenancy/tenancy.module.js';
 import { Sucursal } from './entities/sucursal.tenant-entity.js';
@@ -8,6 +9,7 @@ import { SucursalesService } from './sucursales.service.js';
 
 @Module({
   imports: [
+    AuthModule,
     DatabaseModule,
     TenancyModule,
     TypeOrmModule.forFeature([Sucursal]),

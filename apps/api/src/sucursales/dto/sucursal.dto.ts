@@ -15,7 +15,6 @@ export type UpdateSucursalDto = {
 
 const createFields = new Set(['nombre', 'direccion', 'telefono']);
 const updateFields = new Set(['nombre', 'direccion', 'telefono', 'activo']);
-const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function requireObject(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
@@ -130,14 +129,4 @@ export function parseUpdateSucursalBody(body: unknown): UpdateSucursalDto {
   }
 
   return result;
-}
-
-export function parseEmpresaSlug(value: string): string {
-  const slug = value.trim().toLowerCase();
-
-  if (slug.length > 80 || !slugPattern.test(slug)) {
-    throw new BadRequestException('Slug de empresa inválido');
-  }
-
-  return slug;
 }
