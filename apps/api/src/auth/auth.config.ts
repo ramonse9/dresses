@@ -3,9 +3,17 @@ import { ConfigService } from '@nestjs/config';
 const minimumSecretBytes = 32;
 const minimumTtlSeconds = 60;
 const maximumTtlSeconds = 3_600;
+const minimumRefreshTtlSeconds = 3_600;
+const maximumRefreshTtlSeconds = 90 * 24 * 3_600;
 
 export function getJwtAccessTtlSeconds(configService: ConfigService): number {
   return Number(configService.getOrThrow<string>('JWT_ACCESS_TTL_SECONDS'));
+}
+
+export function getRefreshTokenTtlSeconds(
+  configService: ConfigService,
+): number {
+  return Number(configService.getOrThrow<string>('AUTH_REFRESH_TTL_SECONDS'));
 }
 
 export function validateAuthEnvironment(
@@ -31,6 +39,18 @@ export function validateAuthEnvironment(
   ) {
     throw new Error(
       `JWT_ACCESS_TTL_SECONDS must be an integer between ${minimumTtlSeconds} and ${maximumTtlSeconds}`,
+    );
+  }
+
+  const refreshTtl = Number(environment.AUTH_REFRESH_TTL_SECONDS);
+
+  if (
+    !Number.isInteger(refreshTtl) ||
+    refreshTtl < minimumRefreshTtlSeconds ||
+    refreshTtl > maximumRefreshTtlSeconds
+  ) {
+    throw new Error(
+      `AUTH_REFRESH_TTL_SECONDS must be an integer between ${minimumRefreshTtlSeconds} and ${maximumRefreshTtlSeconds}`,
     );
   }
 

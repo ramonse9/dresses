@@ -10,6 +10,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { AuthSession } from '../../auth/entities/auth-session.entity.js';
 import { normalizeEmail } from '../email.js';
 import { EmpresaUsuario } from './empresa-usuario.entity.js';
 
@@ -40,6 +41,9 @@ export class Usuario {
 
   @OneToMany(() => EmpresaUsuario, (membresia) => membresia.usuario)
   membresias!: EmpresaUsuario[];
+
+  @OneToMany(() => AuthSession, (session) => session.usuario)
+  authSessions!: AuthSession[];
 
   @BeforeInsert()
   @BeforeUpdate()

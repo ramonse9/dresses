@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { normalizeEmail } from '../usuarios/email.js';
+import { AuthSessionsService } from './auth-sessions.service.js';
 import type { AccessTokenPayload } from './types/access-token-payload.js';
 
 export interface AuthenticatedRequest extends Request {
@@ -40,7 +41,10 @@ function parsePayload(payload: unknown): AccessTokenPayload {
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly authSessionsService: AuthSessionsService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -52,7 +56,12 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      request.user = parsePayload(await this.jwtService.verifyAsync(match[1]));
+      const payload = parsePayload(await this.jwtService.verifyAsync(match[1]));
+      await this.authSessionsService.assertActive(
+        payload.sessionId,
+        payload.sub,
+      );
+      request.user = payload;
       return true;
     } catch {
       throw new UnauthorizedException('Token inválido');

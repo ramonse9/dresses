@@ -12,6 +12,7 @@
     "dev:web": "npm run start --workspace=web",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:auth-database": "npm run test:auth-database --workspace=api",
     "test:tenancy": "npm run test:tenancy --workspace=api",
     "lint": "npm run lint --workspace=api",
     "migration:run": "npm run migration:run --workspace=api",

@@ -20,6 +20,7 @@
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "test:auth-database": "vitest run --config ./vitest.config.auth-database.ts",
     "test:tenancy": "vitest run --config ./vitest.config.tenancy.ts",
     "typeorm": "typeorm-ts-node-esm -d src/database/data-source.ts",
     "migration:create": "typeorm-ts-node-esm migration:create",

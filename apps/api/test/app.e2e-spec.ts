@@ -16,6 +16,8 @@ import { SucursalesService } from './../src/sucursales/sucursales.service.js';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
+  const refreshToken = 'A'.repeat(43);
+  const rotatedRefreshToken = 'B'.repeat(43);
 
   const authenticatedUser = {
     sub: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
@@ -38,9 +40,17 @@ describe('AppController (e2e)', () => {
           useValue: {
             login: vi.fn().mockResolvedValue({
               accessToken: 'signed.jwt.token',
+              refreshToken,
               tokenType: 'Bearer',
               expiresIn: 900,
             }),
+            refresh: vi.fn().mockResolvedValue({
+              accessToken: 'rotated.jwt.token',
+              refreshToken: rotatedRefreshToken,
+              tokenType: 'Bearer',
+              expiresIn: 900,
+            }),
+            logout: vi.fn().mockResolvedValue(undefined),
             getProfile: vi.fn().mockReturnValue(authenticatedUser),
           },
         },
@@ -117,9 +127,30 @@ describe('AppController (e2e)', () => {
       .expect(201)
       .expect({
         accessToken: 'signed.jwt.token',
+        refreshToken,
         tokenType: 'Bearer',
         expiresIn: 900,
       });
+  });
+
+  it('/api/auth/refresh (POST)', () => {
+    return request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .send({ refreshToken })
+      .expect(200)
+      .expect({
+        accessToken: 'rotated.jwt.token',
+        refreshToken: rotatedRefreshToken,
+        tokenType: 'Bearer',
+        expiresIn: 900,
+      });
+  });
+
+  it('/api/auth/logout (POST)', () => {
+    return request(app.getHttpServer())
+      .post('/api/auth/logout')
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .expect(204);
   });
 
   it('/api/auth/me (GET)', () => {

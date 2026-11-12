@@ -66,6 +66,7 @@ DB_POOL_MAX=10
 ENABLE_DEV_TENANT_ADMIN=false
 JWT_ACCESS_SECRET=un_secreto_local_aleatorio_de_al_menos_32_bytes
 JWT_ACCESS_TTL_SECONDS=900
+AUTH_REFRESH_TTL_SECONDS=2592000
 ```
 
 El archivo `.env` está ignorado por Git. TypeORM tiene `synchronize: false`; los cambios de esquema se gestionan exclusivamente mediante migrations.
@@ -76,7 +77,7 @@ Genera un secreto local distinto para cada entorno, por ejemplo:
 openssl rand -base64 32
 ```
 
-Guarda el resultado únicamente en `apps/api/.env`. `JWT_ACCESS_TTL_SECONDS` acepta entre 60 y 3600 segundos; el valor sugerido de desarrollo es 900 segundos (15 minutos).
+Guarda el resultado únicamente en `apps/api/.env`. `JWT_ACCESS_TTL_SECONDS` acepta entre 60 y 3600 segundos; el valor sugerido de desarrollo es 900 segundos (15 minutos). `AUTH_REFRESH_TTL_SECONDS` define la duración absoluta de una sesión entre 1 hora y 90 días; el valor sugerido es 2592000 segundos (30 días).
 
 ## Migrations
 
@@ -132,12 +133,16 @@ El email se normaliza con `trim().toLowerCase()` antes de persistir. PostgreSQL 
 
 La migration global correspondiente es `CreateUsuariosMemberships1794442297164` y crea las llaves foráneas hacia `public.usuarios` y `public.empresas` con eliminación restringida.
 
+Las sesiones también son globales y viven en `public.auth_sessions`. Cada registro pertenece a un usuario y contiene únicamente el hash del refresh token, su expiración y el momento opcional de revocación. La migration `CreateAuthSessions1794528000000` crea esta tabla y sus índices.
+
 ## Autenticación JWT
 
 `AuthModule` implementa autenticación básica sin abrir registro público:
 
 ```text
 POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
 GET  /api/auth/me
 ```
 
@@ -151,17 +156,28 @@ curl --request POST http://localhost:3000/api/auth/login \
   --data '{"email":"owner@example.com","password":"tu-password"}'
 ```
 
-La respuesta contiene un access token de corta duración:
+La respuesta contiene un access token de corta duración y un refresh token opaco:
 
 ```json
 {
   "accessToken": "eyJ...",
+  "refreshToken": "C0g...token_opaco...",
   "tokenType": "Bearer",
   "expiresIn": 900
 }
 ```
 
-El JWT contiene `sub`, `email` y un `sessionId` aleatorio, además de los timestamps estándar del token. No contiene `schemaName`, empresa ni membresía. La selección de empresa queda pendiente para una etapa posterior.
+El JWT contiene `sub`, `email` y un `sessionId` aleatorio, además de los timestamps estándar del token. No contiene `schemaName`, empresa ni membresía. El refresh token contiene 256 bits aleatorios y no es un JWT. La base de datos guarda solamente su hash SHA-256; ni el token completo ni las contraseñas se registran.
+
+Usa el refresh token para obtener un nuevo par de tokens:
+
+```bash
+curl --request POST http://localhost:3000/api/auth/refresh \
+  --header 'Content-Type: application/json' \
+  --data '{"refreshToken":"TOKEN_ACTUAL"}'
+```
+
+Cada refresh rota el token dentro de una transacción con bloqueo de fila. El hash anterior se reemplaza antes de confirmar la transacción, por lo que el token anterior deja de funcionar inmediatamente. La fecha de expiración absoluta de la sesión no se extiende al rotar.
 
 Verifica el token mediante el guard reutilizable en el endpoint protegido:
 
@@ -180,7 +196,29 @@ La respuesta expone únicamente la identidad incluida en el token:
 }
 ```
 
-Como no existe registro público, el usuario debe haber sido aprovisionado previamente en `public.usuarios` por un proceso administrativo y su `password_hash` debe ser generado con Argon2id. No se incluyen todavía refresh tokens, recuperación de contraseña ni selección de empresa.
+Revoca la sesión actual usando su access token:
+
+```bash
+curl --request POST http://localhost:3000/api/auth/logout \
+  --header 'Authorization: Bearer eyJ...'
+```
+
+`logout` responde con HTTP `204`. El guard JWT consulta la sesión en `public` en cada petición protegida, por lo que una sesión revocada o expirada, o perteneciente a un usuario inactivo, deja de aceptar incluso access tokens que aún no hayan vencido. El endpoint de refresh aplica las mismas verificaciones.
+
+Puedes inspeccionar las sesiones sin exponer tokens completos:
+
+```sql
+SELECT id, usuario_id, expires_at, revoked_at, created_at, updated_at
+FROM public.auth_sessions;
+```
+
+La prueba PostgreSQL de autenticación crea un usuario temporal, comprueba que sólo se persiste el hash, intenta dos rotaciones simultáneas —de las cuales sólo una puede completarse—, revoca la sesión y elimina todos sus datos al finalizar:
+
+```bash
+npm run test:auth-database
+```
+
+Como no existe registro público, el usuario debe haber sido aprovisionado previamente en `public.usuarios` por un proceso administrativo y su `password_hash` debe ser generado con Argon2id. No se incluyen todavía recuperación de contraseña, selección de empresa ni administración de sesiones desde la interfaz.
 
 ## Crear un tenant
 
@@ -277,6 +315,7 @@ DB_SSL=false \
 DB_POOL_MAX=1 \
 JWT_ACCESS_SECRET=un-secreto-de-pruebas-con-al-menos-32-bytes \
 JWT_ACCESS_TTL_SECONDS=900 \
+AUTH_REFRESH_TTL_SECONDS=2592000 \
 npm run test:tenancy
 ```
 
@@ -322,6 +361,7 @@ npm run build
 npm test
 npm run lint
 npm run test:e2e --workspace=api
+npm run test:auth-database
 npm run test:tenancy
 ```
 
