@@ -12,6 +12,7 @@ import { AuthSession } from './entities/auth-session.entity.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { PasswordHashService } from './password-hash.service.js';
 import { RefreshTokenService } from './refresh-token.service.js';
+import { RolesGuard } from './roles.guard.js';
 import { TenantAuthGuard } from './tenant-auth.guard.js';
 import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.interceptor.js';
 
@@ -44,6 +45,7 @@ import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.intercepto
     RefreshTokenService,
     JwtAuthGuard,
     TenantAuthGuard,
+    RolesGuard,
     TenantScopeCleanupInterceptor,
   ],
   exports: [
@@ -52,6 +54,7 @@ import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.intercepto
     PasswordHashService,
     JwtAuthGuard,
     TenantAuthGuard,
+    RolesGuard,
     TenantScopeCleanupInterceptor,
     JwtModule,
   ],

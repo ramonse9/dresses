@@ -11,8 +11,10 @@ import {
   Post,
 } from '@nestjs/common';
 import { CurrentTenant } from '../auth/current-tenant.decorator.js';
+import { Roles } from '../auth/roles.decorator.js';
 import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
+import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import {
   parseCreateSucursalBody,
   parseUpdateSucursalBody,
@@ -26,6 +28,7 @@ export class SucursalesController {
   constructor(private readonly sucursalesService: SucursalesService) {}
 
   @Post()
+  @Roles(EmpresaUsuarioRol.OWNER)
   create(
     @CurrentTenant() tenant: TenantScope,
     @Body() body: unknown,
@@ -34,11 +37,13 @@ export class SucursalesController {
   }
 
   @Get()
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   findAll(@CurrentTenant() tenant: TenantScope): Promise<Sucursal[]> {
     return this.sucursalesService.findAll(tenant);
   }
 
   @Get(':id')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   findOne(
     @CurrentTenant() tenant: TenantScope,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -47,6 +52,7 @@ export class SucursalesController {
   }
 
   @Patch(':id')
+  @Roles(EmpresaUsuarioRol.OWNER)
   update(
     @CurrentTenant() tenant: TenantScope,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -60,6 +66,7 @@ export class SucursalesController {
   }
 
   @Delete(':id')
+  @Roles(EmpresaUsuarioRol.OWNER)
   @HttpCode(HttpStatus.OK)
   deactivate(
     @CurrentTenant() tenant: TenantScope,

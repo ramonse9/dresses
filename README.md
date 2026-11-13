@@ -326,23 +326,38 @@ No se aceptan `empresaSlug`, `empresaId` ni `schemaName` en rutas o DTOs de sucu
 
 `DELETE` realiza una baja lógica estableciendo `activo=false`; nunca elimina físicamente la sucursal. Los nombres son obligatorios y únicos, sin distinguir mayúsculas, dentro de cada empresa. Consultar desde un tenant el UUID de una sucursal de otro tenant responde `404`. La llave UUID de `sucursales` queda preparada para futuras relaciones desde vestidos y reservaciones dentro del mismo schema.
 
+### Matriz de permisos
+
+| Operación                         | OWNER     | EMPLOYEE  |
+| --------------------------------- | --------- | --------- |
+| Listar sucursales                 | Permitido | Permitido |
+| Consultar una sucursal            | Permitido | Permitido |
+| Crear una sucursal                | Permitido | 403       |
+| Actualizar o activar una sucursal | Permitido | 403       |
+| Desactivar una sucursal           | Permitido | 403       |
+
+`@Roles()` declara los roles permitidos en cada endpoint y `RolesGuard` aplica la autorización. El guard utiliza exclusivamente la membresía activa obtenida desde `public.empresa_usuarios` durante la solicitud; no autoriza con el rol incluido en el JWT. Por ello, un cambio de rol o la desactivación de la membresía o empresa se aplica inmediatamente y responde `403` aun cuando el access token todavía no haya expirado. Un usuario inactivo invalida su token y recibe `401`. Un recurso inexistente o perteneciente a otro tenant conserva la respuesta `404`.
+
 ## Aislamiento de tenants
 
 Sucursales es el primer módulo que utiliza el flujo reutilizable JWT → `TenantScope` → transacción. Los futuros módulos autenticados de vestidos y reservaciones pueden aplicar la misma abstracción:
 
 1. `JwtAuthGuard` verifica firma, expiración, sesión y usuario, y deja los claims validados en la solicitud.
 2. `TenantAuthGuard` lee `empresaId` exclusivamente de esos claims. Ignora headers personalizados, parámetros, query strings y cuerpos HTTP.
-3. `TenantResolverService.resolveByEmpresaId()` consulta `public.empresas` y construye un `TenantScope` inmutable. El scope comprueba internamente que `schemaName` corresponde exactamente al UUID de la empresa.
-4. `@CurrentTenant()` entrega el scope verificado al controlador o servicio; el cliente nunca conoce el schema.
-5. `TenantContextService.run()` reserva una conexión del pool, inicia una transacción y ejecuta `SET LOCAL search_path TO <tenant>, pg_catalog`.
-6. La operación recibe solamente un `EntityManager` ligado a esa transacción. `COMMIT` o `ROLLBACK` elimina el `search_path` local antes de devolver la conexión.
-7. `TenantScopeCleanupInterceptor` elimina el scope request-local al completar o fallar la respuesta.
+3. El mismo guard consulta la membresía por `sub` y `empresaId`, exigiendo usuario, membresía y empresa activos; el rol vigente de esa membresía queda disponible únicamente dentro de la solicitud.
+4. `TenantResolverService.resolveByEmpresaId()` consulta `public.empresas` y construye un `TenantScope` inmutable. El scope comprueba internamente que `schemaName` corresponde exactamente al UUID de la empresa.
+5. `RolesGuard` compara el rol de la membresía verificada con los declarados mediante `@Roles()`; nunca toma la decisión usando solamente el rol del JWT.
+6. `@CurrentTenant()` entrega el scope verificado al controlador o servicio; el cliente nunca conoce el schema.
+7. `TenantContextService.run()` reserva una conexión del pool, inicia una transacción y ejecuta `SET LOCAL search_path TO <tenant>, pg_catalog`.
+8. La operación recibe solamente un `EntityManager` ligado a esa transacción. `COMMIT` o `ROLLBACK` elimina el `search_path` local antes de devolver la conexión.
+9. `TenantScopeCleanupInterceptor` elimina el scope y la membresía request-local al completar o fallar la respuesta.
 
 El decorador compuesto `@TenantAuthenticated()` aplica siempre los guards en el orden correcto y registra la limpieza:
 
 ```ts
 @TenantAuthenticated()
 @Get()
+@Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
 findAll(@CurrentTenant() tenant: TenantScope) {
   return this.tenantContext.run(tenant, async (manager) => {
     return manager.getRepository(TenantEntity).find();
@@ -354,7 +369,7 @@ No se utiliza `SET search_path` de sesión ni se aceptan nombres de schema en he
 
 ### Pruebas PostgreSQL de aislamiento
 
-Las suites crean empresas y sucursales temporales, permiten el mismo nombre en tenants distintos y fuerzan `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión. `test:auth-database` recorre las rutas HTTP con access tokens de dos empresas, comprueba el `404` cruzado, la baja lógica y que la ruta anterior por slug permanezca deshabilitada; `test:tenancy` verifica el aislamiento directamente en la capa de persistencia.
+Las suites crean empresas y sucursales temporales, permiten el mismo nombre en tenants distintos y fuerzan `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión. `test:auth-database` recorre las rutas HTTP con access tokens OWNER y EMPLOYEE, comprueba los `403` por rol o membresía/empresa inactiva, el `404` cruzado, la baja lógica y que la ruta anterior por slug permanezca deshabilitada; `test:tenancy` verifica el aislamiento directamente en la capa de persistencia.
 
 ```bash
 NODE_ENV=test \

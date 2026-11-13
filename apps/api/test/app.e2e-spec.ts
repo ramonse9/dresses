@@ -23,6 +23,7 @@ import { EmpresasService } from './../src/empresas/empresas.service.js';
 import { SucursalesController } from './../src/sucursales/sucursales.controller.js';
 import { SucursalesService } from './../src/sucursales/sucursales.service.js';
 import type { TenantScope } from './../src/tenancy/tenant-scope.js';
+import { EmpresaUsuarioRol } from './../src/usuarios/entities/empresa-usuario.entity.js';
 
 @Controller('_test/tenant')
 class TenantProbeController {
@@ -182,6 +183,15 @@ describe('AppController (e2e)', () => {
             empresaId: selectedEmpresaId,
             empresaSlug: 'atelier-norte',
             schemaName: 'tenant_a18c2a56d33f4d88a8e742931121e295',
+          };
+          tenantRequest.tenantMembership = {
+            usuarioId: authenticatedUser.sub,
+            empresaId: selectedEmpresaId,
+            rol:
+              tenantRequest.headers.authorization ===
+              'Bearer employee.jwt.token'
+                ? EmpresaUsuarioRol.EMPLOYEE
+                : EmpresaUsuarioRol.OWNER,
           };
           return true;
         },
@@ -372,6 +382,31 @@ describe('AppController (e2e)', () => {
         telefono: null,
         activo: false,
       });
+  });
+
+  it('allows EMPLOYEE to consult sucursales', () => {
+    return request(app.getHttpServer())
+      .get('/api/sucursales')
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .expect(200);
+  });
+
+  it.each([
+    ['post', '/api/sucursales'],
+    ['patch', `/api/sucursales/${sucursalId}`],
+    ['delete', `/api/sucursales/${sucursalId}`],
+  ] as const)('returns 403 when EMPLOYEE uses %s %s', (method, path) => {
+    const operation = request(app.getHttpServer())
+      [method](path)
+      .set('Authorization', 'Bearer employee.jwt.token');
+
+    if (method === 'post') {
+      operation.send({ nombre: 'Centro' });
+    } else if (method === 'patch') {
+      operation.send({ nombre: 'Centro Histórico' });
+    }
+
+    return operation.expect(403);
   });
 
   it('/api/sucursales rejects requests without JWT', () => {

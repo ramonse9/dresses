@@ -18,6 +18,7 @@ export class TenantScopeCleanupInterceptor implements NestInterceptor {
     return next.handle().pipe(
       finalize(() => {
         delete request.tenantScope;
+        delete request.tenantMembership;
       }),
     );
   }

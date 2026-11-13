@@ -191,6 +191,9 @@ describe('PostgreSQL authenticated empresa selection', () => {
     const selectedB = await authService.selectEmpresa(payloadB, {
       empresaId: empresaB.id,
     });
+    const selectedEmployeeB = await authService.selectEmpresa(payloadA, {
+      empresaId: empresaB.id,
+    });
 
     async function resolveScopeFromToken(
       accessToken: string,
@@ -261,6 +264,30 @@ describe('PostgreSQL authenticated empresa selection', () => {
     ).not.toContain('tenant_');
 
     await request(app.getHttpServer())
+      .get('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual([
+          expect.objectContaining({ id: sucursalBResponse.body.id }),
+        ]);
+      });
+    await request(app.getHttpServer())
+      .post('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({ nombre: 'No autorizada' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/sucursales/${String(sucursalBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({ nombre: 'No autorizada' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .delete(`/api/sucursales/${String(sucursalBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
       .get(`/api/sucursales/${String(sucursalAResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .expect(404);
@@ -308,14 +335,34 @@ describe('PostgreSQL authenticated empresa selection', () => {
       authService.selectEmpresa(payloadB, { empresaId: empresaA.id }),
     ).rejects.toThrow('No tienes acceso a esta empresa');
 
+    membresiaA.rol = EmpresaUsuarioRol.EMPLOYEE;
+    await membresiasRepository.save(membresiaA);
+    await request(app.getHttpServer())
+      .get('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({ nombre: 'Rol JWT obsoleto' })
+      .expect(403);
+
     membresiaA.activo = false;
     await membresiasRepository.save(membresiaA);
+    await request(app.getHttpServer())
+      .get('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(403);
     await expect(
       authService.selectEmpresa(payloadA, { empresaId: empresaA.id }),
     ).rejects.toThrow('No tienes acceso a esta empresa');
 
     empresaB.activo = false;
     await empresasRepository.save(empresaB);
+    await request(app.getHttpServer())
+      .get('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(403);
     await expect(authService.listEmpresas(payloadA)).resolves.toEqual([]);
     await expect(
       authService.selectEmpresa(payloadA, { empresaId: empresaB.id }),
