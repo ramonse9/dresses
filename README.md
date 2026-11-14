@@ -282,7 +282,7 @@ El backend genera el UUID y `schemaName`; el cliente no puede proporcionar el no
 }
 ```
 
-La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. Las migrations del tenant crean su tabla de control y la tabla `sucursales`.
+La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. Las migrations del tenant crean su tabla de control y las tablas `sucursales` y `vestidos`.
 
 Verifica el registro y el schema desde `psql`:
 
@@ -291,6 +291,40 @@ SELECT id, nombre, slug, schema_name, activo FROM public.empresas;
 SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%';
 SELECT * FROM tenant_019a6f3382b77a22971b6a8d7c5e4f30.tenant_migrations;
 ```
+
+### Aplicar migrations a tenants existentes
+
+Los tenants nuevos reciben todas las migrations durante su creación. Para recorrer las empresas ya registradas y aplicar únicamente las migrations tenant pendientes, ejecuta desde la raíz:
+
+```bash
+npm run tenant:migration:run
+```
+
+El comando obtiene internamente los nombres de schema desde `public.empresas`, valida cada nombre con la convención segura del backend y usa un bloqueo transaccional por tenant. No recibe schemas desde argumentos del cliente y puede ejecutarse nuevamente sin duplicar migrations.
+
+## Modelo tenant de vestidos
+
+Cada fila de `vestidos` representa una pieza física individual y pertenece a una sucursal del mismo tenant. No existe una entidad de vestidos en `public` ni un inventario acumulado por modelo.
+
+| Campo                      | Tipo PostgreSQL | Regla principal                              |
+| -------------------------- | --------------- | -------------------------------------------- |
+| `id`                       | `uuid`          | Llave primaria                               |
+| `sucursal_id`              | `uuid`          | FK a `sucursales`, `ON DELETE RESTRICT`      |
+| `codigo`                   | `varchar(50)`   | Único por empresa, sin distinguir mayúsculas |
+| `nombre`                   | `varchar(160)`  | Obligatorio                                  |
+| `descripcion`              | `varchar(1000)` | Opcional                                     |
+| `talla`                    | `varchar(30)`   | Obligatorio                                  |
+| `color`                    | `varchar(80)`   | Obligatorio                                  |
+| `marca`                    | `varchar(100)`  | Opcional                                     |
+| `precio_renta`             | `numeric(12,2)` | No negativo                                  |
+| `deposito`                 | `numeric(12,2)` | Opcional y no negativo                       |
+| `estado_operativo`         | `varchar(20)`   | `DISPONIBLE` o `MANTENIMIENTO`               |
+| `activo`                   | `boolean`       | `true` por defecto                           |
+| `created_at`, `updated_at` | `timestamptz`   | Fechas administradas por TypeORM             |
+
+`estado_operativo=DISPONIBLE` indica que la pieza puede operar normalmente; no garantiza que esté libre para un rango de fechas. Esa disponibilidad se calculará posteriormente a partir de reservaciones.
+
+La migration `CreateVestidos1794697200000` crea la tabla, la relación con sucursales, las restricciones monetarias y de estado, el índice único normalizado de código y los índices de sucursal y activo. En este paso todavía no existen endpoints, imágenes ni reservaciones para vestidos.
 
 ## Sucursales
 

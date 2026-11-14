@@ -8,6 +8,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { EmpresasModule } from './empresas/empresas.module.js';
 import { SucursalesModule } from './sucursales/sucursales.module.js';
 import { UsuariosModule } from './usuarios/usuarios.module.js';
+import { VestidosModule } from './vestidos/vestidos.module.js';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { UsuariosModule } from './usuarios/usuarios.module.js';
     SucursalesModule,
     UsuariosModule,
     AuthModule,
+    VestidosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

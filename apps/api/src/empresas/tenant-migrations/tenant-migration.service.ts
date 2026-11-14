@@ -3,11 +3,13 @@ import { DataSource, QueryRunner } from 'typeorm';
 import { quoteTenantSchemaName } from '../tenant-schema-name.js';
 import { InitializeTenant1794377000000 } from './1794377000000-initialize-tenant.js';
 import { CreateSucursales1794378000000 } from './1794378000000-create-sucursales.js';
+import { CreateVestidos1794697200000 } from './1794697200000-create-vestidos.js';
 import { TenantMigration } from './tenant-migration.js';
 
 const tenantMigrations: readonly TenantMigration[] = [
   new InitializeTenant1794377000000(),
   new CreateSucursales1794378000000(),
+  new CreateVestidos1794697200000(),
 ];
 
 @Injectable()
@@ -34,6 +36,18 @@ export class TenantMigrationService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async migrateAllTenants(): Promise<number> {
+    const tenants = (await this.dataSource.query(
+      `SELECT "schema_name" AS "schemaName" FROM "public"."empresas" ORDER BY "schema_name" ASC`,
+    )) as Array<{ schemaName: string }>;
+
+    for (const tenant of tenants) {
+      await this.ensureMigrations(tenant.schemaName);
+    }
+
+    return tenants.length;
   }
 
   async runMigrations(

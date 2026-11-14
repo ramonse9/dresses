@@ -2,9 +2,12 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  OneToMany,
   PrimaryGeneratedColumn,
+  type Relation,
   UpdateDateColumn,
 } from 'typeorm';
+import { Vestido } from '../../vestidos/entities/vestido.tenant-entity.js';
 
 @Entity({ name: 'sucursales' })
 export class Sucursal {
@@ -28,4 +31,7 @@ export class Sucursal {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
+
+  @OneToMany(() => Vestido, (vestido) => vestido.sucursal)
+  vestidos!: Relation<Vestido[]>;
 }

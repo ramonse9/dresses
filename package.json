@@ -17,7 +17,8 @@
     "lint": "npm run lint --workspace=api",
     "migration:run": "npm run migration:run --workspace=api",
     "migration:revert": "npm run migration:revert --workspace=api",
-    "migration:show": "npm run migration:show --workspace=api"
+    "migration:show": "npm run migration:show --workspace=api",
+    "tenant:migration:run": "npm run tenant:migration:run --workspace=api"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

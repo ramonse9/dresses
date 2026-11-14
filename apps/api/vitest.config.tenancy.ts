@@ -5,7 +5,10 @@ export default defineConfig({
   test: {
     globals: true,
     root: './',
-    include: ['test/tenant-isolation.integration.ts'],
+    include: [
+      'test/tenant-isolation.integration.ts',
+      'test/vestidos-migration.integration.ts',
+    ],
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 30_000,
