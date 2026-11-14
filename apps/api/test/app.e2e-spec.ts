@@ -24,6 +24,9 @@ import { SucursalesController } from './../src/sucursales/sucursales.controller.
 import { SucursalesService } from './../src/sucursales/sucursales.service.js';
 import type { TenantScope } from './../src/tenancy/tenant-scope.js';
 import { EmpresaUsuarioRol } from './../src/usuarios/entities/empresa-usuario.entity.js';
+import { VestidoEstadoOperativo } from './../src/vestidos/entities/vestido.tenant-entity.js';
+import { VestidosController } from './../src/vestidos/vestidos.controller.js';
+import { VestidosService } from './../src/vestidos/vestidos.service.js';
 
 @Controller('_test/tenant')
 class TenantProbeController {
@@ -57,6 +60,7 @@ describe('AppController (e2e)', () => {
         AuthController,
         EmpresasController,
         SucursalesController,
+        VestidosController,
         TenantProbeController,
       ],
       providers: [
@@ -150,6 +154,25 @@ describe('AppController (e2e)', () => {
               direccion: null,
               telefono: null,
               activo: false,
+            }),
+          },
+        },
+        {
+          provide: VestidosService,
+          useValue: {
+            create: vi.fn().mockResolvedValue({
+              id: 'e18c2a56-d33f-4d88-a8e7-42931121e295',
+              sucursalId,
+              codigo: 'V-001',
+              nombre: 'Vestido Azul',
+              descripcion: null,
+              talla: 'M',
+              color: 'Azul',
+              marca: null,
+              precioRenta: '1250.50',
+              deposito: null,
+              estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
+              activo: true,
             }),
           },
         },
@@ -411,6 +434,70 @@ describe('AppController (e2e)', () => {
 
   it('/api/sucursales rejects requests without JWT', () => {
     return request(app.getHttpServer()).get('/api/sucursales').expect(401);
+  });
+
+  it('/api/vestidos (POST) creates a dress for OWNER', () => {
+    return request(app.getHttpServer())
+      .post('/api/vestidos')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({
+        sucursalId,
+        codigo: ' v-001 ',
+        nombre: 'Vestido Azul',
+        talla: 'M',
+        color: 'Azul',
+        precioRenta: '1250.50',
+      })
+      .expect(201)
+      .expect({
+        id: 'e18c2a56-d33f-4d88-a8e7-42931121e295',
+        sucursalId,
+        codigo: 'V-001',
+        nombre: 'Vestido Azul',
+        descripcion: null,
+        talla: 'M',
+        color: 'Azul',
+        marca: null,
+        precioRenta: '1250.50',
+        deposito: null,
+        estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
+        activo: true,
+      });
+  });
+
+  it('/api/vestidos (POST) returns 403 for EMPLOYEE', () => {
+    return request(app.getHttpServer())
+      .post('/api/vestidos')
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .send({
+        sucursalId,
+        codigo: 'V-001',
+        nombre: 'Vestido Azul',
+        talla: 'M',
+        color: 'Azul',
+        precioRenta: '1250.50',
+      })
+      .expect(403);
+  });
+
+  it('/api/vestidos (POST) rejects tenant selectors', () => {
+    return request(app.getHttpServer())
+      .post('/api/vestidos')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({
+        sucursalId,
+        codigo: 'V-001',
+        nombre: 'Vestido Azul',
+        talla: 'M',
+        color: 'Azul',
+        precioRenta: '1250.50',
+        schemaName: 'tenant_untrusted',
+      })
+      .expect(400);
+  });
+
+  it('/api/vestidos rejects requests without JWT', () => {
+    return request(app.getHttpServer()).post('/api/vestidos').expect(401);
   });
 
   it('does not expose the previous empresaSlug route', () => {

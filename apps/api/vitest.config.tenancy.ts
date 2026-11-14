@@ -7,6 +7,7 @@ export default defineConfig({
     root: './',
     include: [
       'test/tenant-isolation.integration.ts',
+      'test/vestidos-create.integration.ts',
       'test/vestidos-migration.integration.ts',
     ],
     fileParallelism: false,

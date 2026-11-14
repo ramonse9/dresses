@@ -324,7 +324,41 @@ Cada fila de `vestidos` representa una pieza física individual y pertenece a un
 
 `estado_operativo=DISPONIBLE` indica que la pieza puede operar normalmente; no garantiza que esté libre para un rango de fechas. Esa disponibilidad se calculará posteriormente a partir de reservaciones.
 
-La migration `CreateVestidos1794697200000` crea la tabla, la relación con sucursales, las restricciones monetarias y de estado, el índice único normalizado de código y los índices de sucursal y activo. En este paso todavía no existen endpoints, imágenes ni reservaciones para vestidos.
+La migration `CreateVestidos1794697200000` crea la tabla, la relación con sucursales, las restricciones monetarias y de estado, el índice único normalizado de código y los índices de sucursal y activo.
+
+### Crear un vestido
+
+La única operación disponible inicialmente es:
+
+```text
+POST /api/vestidos
+```
+
+Requiere un access token con empresa seleccionada y una membresía `OWNER` activa. `EMPLOYEE` recibe `403`. El body acepta `sucursalId`, pero rechaza `empresaId`, `empresaSlug`, `schemaName`, `activo` y cualquier campo desconocido.
+
+```bash
+curl --request POST http://localhost:3000/api/vestidos \
+  --header 'Authorization: Bearer TOKEN_OWNER_CON_EMPRESA' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "sucursalId":"a18c2a56-d33f-4d88-a8e7-42931121e295",
+    "codigo":"v-001",
+    "nombre":"Vestido azul",
+    "descripcion":"Corte largo",
+    "talla":"M",
+    "color":"Azul",
+    "marca":"Marca ejemplo",
+    "precioRenta":"1250.50",
+    "deposito":"500.00",
+    "estadoOperativo":"DISPONIBLE"
+  }'
+```
+
+El backend normaliza `codigo` a mayúsculas, valida que la sucursal exista y esté activa dentro del tenant autenticado, y ejecuta la creación completa mediante `TenantContextService`. `estadoOperativo` es opcional y usa `DISPONIBLE` por defecto. Los importes aceptan texto decimal o número, se normalizan a dos decimales sin realizar cálculos de punto flotante y deben estar entre `0.00` y `9999999999.99`.
+
+Un código repetido dentro de la empresa responde `409`, incluso ante solicitudes concurrentes; el mismo código puede existir en otra empresa. Una sucursal inexistente, inactiva o perteneciente a otro tenant responde `404`.
+
+Todavía no existen endpoints de consulta, actualización o eliminación, ni imágenes, reservaciones o disponibilidad por fechas.
 
 ## Sucursales
 
