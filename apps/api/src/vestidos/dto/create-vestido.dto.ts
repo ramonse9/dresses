@@ -50,7 +50,7 @@ function rejectUnexpectedFields(input: Record<string, unknown>): void {
   }
 }
 
-function parseRequiredText(
+export function parseRequiredVestidoText(
   value: unknown,
   field: string,
   maximumLength: number,
@@ -70,7 +70,7 @@ function parseRequiredText(
   return normalized;
 }
 
-function parseOptionalText(
+export function parseOptionalVestidoText(
   value: unknown,
   field: string,
   maximumLength: number,
@@ -94,7 +94,7 @@ function parseOptionalText(
   return normalized.length === 0 ? null : normalized;
 }
 
-function parseMoney(value: unknown, field: string): string {
+export function parseVestidoMoney(value: unknown, field: string): string {
   if (typeof value !== 'string' && typeof value !== 'number') {
     throw new BadRequestException(
       `${field} debe ser un importe no negativo con máximo 2 decimales`,
@@ -113,7 +113,9 @@ function parseMoney(value: unknown, field: string): string {
   return `${match[1]}.${(match[2] ?? '').padEnd(2, '0')}`;
 }
 
-function parseEstadoOperativo(value: unknown): VestidoEstadoOperativo {
+export function parseVestidoEstadoOperativo(
+  value: unknown,
+): VestidoEstadoOperativo {
   if (value === undefined) {
     return VestidoEstadoOperativo.DISPONIBLE;
   }
@@ -141,16 +143,16 @@ export function parseCreateVestidoBody(body: unknown): CreateVestidoDto {
 
   const result: CreateVestidoDto = {
     sucursalId: input.sucursalId.toLowerCase(),
-    codigo: parseRequiredText(input.codigo, 'codigo', 50).toUpperCase(),
-    nombre: parseRequiredText(input.nombre, 'nombre', 160),
-    talla: parseRequiredText(input.talla, 'talla', 30),
-    color: parseRequiredText(input.color, 'color', 80),
-    precioRenta: parseMoney(input.precioRenta, 'precioRenta'),
-    estadoOperativo: parseEstadoOperativo(input.estadoOperativo),
+    codigo: parseRequiredVestidoText(input.codigo, 'codigo', 50).toUpperCase(),
+    nombre: parseRequiredVestidoText(input.nombre, 'nombre', 160),
+    talla: parseRequiredVestidoText(input.talla, 'talla', 30),
+    color: parseRequiredVestidoText(input.color, 'color', 80),
+    precioRenta: parseVestidoMoney(input.precioRenta, 'precioRenta'),
+    estadoOperativo: parseVestidoEstadoOperativo(input.estadoOperativo),
   };
 
   if ('descripcion' in input) {
-    result.descripcion = parseOptionalText(
+    result.descripcion = parseOptionalVestidoText(
       input.descripcion,
       'descripcion',
       1_000,
@@ -158,12 +160,14 @@ export function parseCreateVestidoBody(body: unknown): CreateVestidoDto {
   }
 
   if ('marca' in input) {
-    result.marca = parseOptionalText(input.marca, 'marca', 100);
+    result.marca = parseOptionalVestidoText(input.marca, 'marca', 100);
   }
 
   if ('deposito' in input) {
     result.deposito =
-      input.deposito === null ? null : parseMoney(input.deposito, 'deposito');
+      input.deposito === null
+        ? null
+        : parseVestidoMoney(input.deposito, 'deposito');
   }
 
   return result;

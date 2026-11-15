@@ -79,4 +79,42 @@ describe('VestidosController', () => {
     );
     expect(findOne).toHaveBeenCalledWith(tenant, 'dress-id');
   });
+
+  it('forwards normalized partial updates', async () => {
+    const vestido = { id: 'dress-id', codigo: 'V-002' } as Vestido;
+    const update = vi.fn().mockResolvedValue(vestido);
+    const controller = new VestidosController({
+      update,
+    } as unknown as VestidosService);
+
+    await expect(
+      controller.update(tenant, 'dress-id', {
+        sucursalId: 'A18C2A56-D33F-4D88-A8E7-42931121E295',
+        codigo: ' v-002 ',
+        precioRenta: 1500,
+        deposito: null,
+        activo: true,
+      }),
+    ).resolves.toBe(vestido);
+    expect(update).toHaveBeenCalledWith(tenant, 'dress-id', {
+      sucursalId: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+      codigo: 'V-002',
+      precioRenta: '1500.00',
+      deposito: null,
+      activo: true,
+    });
+  });
+
+  it('forwards soft deletion only with the authenticated tenant', async () => {
+    const vestido = { id: 'dress-id', activo: false } as Vestido;
+    const deactivate = vi.fn().mockResolvedValue(vestido);
+    const controller = new VestidosController({
+      deactivate,
+    } as unknown as VestidosService);
+
+    await expect(controller.deactivate(tenant, 'dress-id')).resolves.toBe(
+      vestido,
+    );
+    expect(deactivate).toHaveBeenCalledWith(tenant, 'dress-id');
+  });
 });

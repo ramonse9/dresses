@@ -5,6 +5,7 @@ import { Sucursal } from '../sucursales/entities/sucursal.tenant-entity.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import type { CreateVestidoDto } from './dto/create-vestido.dto.js';
 import type { ListVestidosQueryDto } from './dto/list-vestidos-query.dto.js';
+import type { UpdateVestidoDto } from './dto/update-vestido.dto.js';
 import {
   Vestido,
   VestidoEstadoOperativo,
@@ -157,6 +158,70 @@ describe('VestidosService', () => {
     };
   }
 
+  function buildMutationService(options?: {
+    existing?: Vestido | null;
+    duplicate?: Vestido | null;
+    destination?: Sucursal | null;
+    saveError?: unknown;
+  }) {
+    const existing =
+      options && 'existing' in options
+        ? options.existing
+        : Object.assign(new Vestido(), {
+            id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+            ...input,
+            descripcion: null,
+            marca: null,
+            deposito: null,
+            activo: false,
+          });
+    const findOne = vi.fn(async (query: { where?: { id?: unknown } }) =>
+      typeof query.where?.id === 'string'
+        ? existing
+        : (options?.duplicate ?? null),
+    );
+    const save = options?.saveError
+      ? vi.fn().mockRejectedValue(options.saveError)
+      : vi.fn(async (vestido: Vestido) => vestido);
+    const vestidoRepository = {
+      findOne,
+      save,
+    } as unknown as Repository<Vestido>;
+    const sucursalFindOne = vi
+      .fn()
+      .mockResolvedValue(
+        options && 'destination' in options
+          ? options.destination
+          : { id: 'b18c2a56-d33f-4d88-a8e7-42931121e295', activo: true },
+      );
+    const sucursalRepository = {
+      findOne: sucursalFindOne,
+    } as unknown as Repository<Sucursal>;
+    const manager = {
+      getRepository: vi.fn((entity: typeof Sucursal | typeof Vestido) =>
+        entity === Sucursal ? sucursalRepository : vestidoRepository,
+      ),
+    } as unknown as EntityManager;
+    const run = vi.fn(
+      async <T>(
+        scope: TenantScope,
+        operation: (entityManager: EntityManager) => Promise<T>,
+      ) => {
+        expect(scope).toBe(tenant);
+        return operation(manager);
+      },
+    );
+
+    return {
+      service: new VestidosService({ run } as unknown as TenantContextService),
+      existing,
+      findOne,
+      save,
+      sucursalFindOne,
+      run,
+    };
+  }
+
   it('creates a dress inside the authenticated tenant transaction', async () => {
     const { service, vestido, sucursalFindOne, vestidoCreate, run } =
       buildService();
@@ -296,6 +361,78 @@ describe('VestidosService', () => {
 
     await expect(
       service.findOne(tenant, 'd18c2a56-d33f-4d88-a8e7-42931121e295'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('updates, transfers and reactivates a dress in one tenant transaction', async () => {
+    const { service, existing, findOne, save, sucursalFindOne, run } =
+      buildMutationService();
+    const update: UpdateVestidoDto = {
+      sucursalId: 'b18c2a56-d33f-4d88-a8e7-42931121e295',
+      codigo: 'V-002',
+      nombre: 'Vestido Rojo',
+      descripcion: 'Nuevo corte',
+      talla: 'L',
+      color: 'Rojo',
+      marca: 'Luna',
+      precioRenta: '1500.00',
+      deposito: '250.00',
+      estadoOperativo: VestidoEstadoOperativo.MANTENIMIENTO,
+      activo: true,
+    };
+
+    await expect(
+      service.update(tenant, existing!.id, update),
+    ).resolves.toMatchObject(update);
+    expect(run).toHaveBeenCalledOnce();
+    expect(sucursalFindOne).toHaveBeenCalledWith({
+      where: { id: update.sucursalId, activo: true },
+    });
+    expect(findOne).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledWith(existing);
+    expect(existing).toMatchObject(update);
+  });
+
+  it('rejects a duplicate code during update', async () => {
+    const { service, existing } = buildMutationService({
+      duplicate: Object.assign(new Vestido(), { id: 'duplicate' }),
+    });
+
+    await expect(
+      service.update(tenant, existing!.id, { codigo: 'V-002' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects a transfer to an absent or inactive branch', async () => {
+    const { service, existing } = buildMutationService({ destination: null });
+
+    await expect(
+      service.update(tenant, existing!.id, {
+        sucursalId: 'b18c2a56-d33f-4d88-a8e7-42931121e295',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('soft-deletes a dress without removing it', async () => {
+    const { service, existing, save } = buildMutationService();
+    existing!.activo = true;
+
+    await expect(
+      service.deactivate(tenant, existing!.id),
+    ).resolves.toMatchObject({ activo: false });
+    expect(save).toHaveBeenCalledWith(existing);
+  });
+
+  it('returns 404 when updating or deactivating a foreign dress', async () => {
+    const { service } = buildMutationService({ existing: null });
+
+    await expect(
+      service.update(tenant, 'd18c2a56-d33f-4d88-a8e7-42931121e295', {
+        nombre: 'No permitido',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.deactivate(tenant, 'd18c2a56-d33f-4d88-a8e7-42931121e295'),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

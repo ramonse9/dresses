@@ -326,17 +326,19 @@ Cada fila de `vestidos` representa una pieza física individual y pertenece a un
 
 La migration `CreateVestidos1794697200000` crea la tabla, la relación con sucursales, las restricciones monetarias y de estado, el índice único normalizado de código y los índices de sucursal y activo.
 
-### Crear y consultar vestidos
+### CRUD parcial de vestidos
 
 Las operaciones disponibles son:
 
 ```text
-POST /api/vestidos
-GET  /api/vestidos
-GET  /api/vestidos/:id
+POST   /api/vestidos
+GET    /api/vestidos
+GET    /api/vestidos/:id
+PATCH  /api/vestidos/:id
+DELETE /api/vestidos/:id
 ```
 
-La creación requiere un access token con empresa seleccionada y una membresía `OWNER` activa. `EMPLOYEE` recibe `403` al crear, pero tanto `OWNER` como `EMPLOYEE` pueden consultar. El body acepta `sucursalId`, pero rechaza `empresaId`, `empresaSlug`, `schemaName`, `activo` y cualquier campo desconocido.
+Crear, actualizar, trasladar, reactivar o desactivar requiere un access token con empresa seleccionada y una membresía `OWNER` activa. `EMPLOYEE` recibe `403` para esas operaciones, pero tanto `OWNER` como `EMPLOYEE` pueden consultar. Los cuerpos rechazan `empresaId`, `empresaSlug`, `schemaName` y cualquier campo desconocido.
 
 ```bash
 curl --request POST http://localhost:3000/api/vestidos \
@@ -392,7 +394,37 @@ Los resultados se ordenan de forma estable por `createdAt DESC` y devuelven:
 
 Cada vestido incluye únicamente los datos básicos de su sucursal (`id`, `nombre` y `activo`), obtenidos en la misma consulta para evitar N+1. Nunca se exponen `schemaName` ni otros datos internos del tenant. Los parámetros desconocidos y los selectores `empresaId`, `empresaSlug` o `schemaName` se rechazan con `400`. Consultar un UUID inexistente o perteneciente a otro tenant responde `404`.
 
-Todavía no existen endpoints de actualización o eliminación de vestidos, ni imágenes, reservaciones o disponibilidad por fechas.
+Actualizar, trasladar o reactivar una pieza:
+
+```bash
+curl --request PATCH http://localhost:3000/api/vestidos/ID \
+  --header 'Authorization: Bearer TOKEN_OWNER_CON_EMPRESA' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "sucursalId":"b28c2a56-d33f-4d88-a8e7-42931121e295",
+    "codigo":"v-002",
+    "precioRenta":"1500.00",
+    "activo":true
+  }'
+```
+
+Todos los campos editables del vestido son opcionales en `PATCH`, pero se requiere al menos uno. Cambiar `sucursalId` traslada la pieza únicamente si la sucursal destino pertenece al tenant autenticado y está activa. El código se vuelve a normalizar y conserva su unicidad por empresa; un conflicto responde `409`.
+
+```bash
+curl --request DELETE http://localhost:3000/api/vestidos/ID \
+  --header 'Authorization: Bearer TOKEN_OWNER_CON_EMPRESA'
+```
+
+`DELETE` realiza exclusivamente una baja lógica con `activo=false`; el registro permanece en la tabla y puede reactivarse con `PATCH`. Todas las mutaciones se ejecutan en una transacción tenant. Un vestido inexistente o de otro tenant responde `404`.
+
+| Operación                   | OWNER     | EMPLOYEE  |
+| --------------------------- | --------- | --------- |
+| Listar o consultar vestidos | Permitido | Permitido |
+| Crear vestidos              | Permitido | 403       |
+| Actualizar o trasladar      | Permitido | 403       |
+| Reactivar o desactivar      | Permitido | 403       |
+
+El historial de movimientos, la auditoría, las imágenes, las reservaciones y la disponibilidad por fechas quedan fuera de este alcance.
 
 ## Sucursales
 

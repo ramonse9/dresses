@@ -313,6 +313,51 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .get(`/api/vestidos/${String(vestidoAResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .expect(404);
+    await request(app.getHttpServer())
+      .patch(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({ nombre: 'No autorizada' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .delete(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({ codigo: ' token-002 ', nombre: 'Vestido actualizado' })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          codigo: 'TOKEN-002',
+          nombre: 'Vestido actualizado',
+          activo: true,
+        });
+      });
+    await request(app.getHttpServer())
+      .delete(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({ activo: false });
+      });
+    await request(app.getHttpServer())
+      .patch(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({ activo: true })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({ activo: true });
+      });
+    await request(app.getHttpServer())
+      .patch(`/api/vestidos/${String(vestidoAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({ nombre: 'Cruce' })
+      .expect(404);
+    await request(app.getHttpServer())
+      .delete(`/api/vestidos/${String(vestidoAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(404);
 
     await request(app.getHttpServer())
       .get('/api/sucursales')

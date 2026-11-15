@@ -3,7 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EntityManager, ILike, QueryFailedError, Repository } from 'typeorm';
+import {
+  EntityManager,
+  ILike,
+  Not,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import { TenantContextService } from '../database/tenant-context.service.js';
 import { Sucursal } from '../sucursales/entities/sucursal.tenant-entity.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
@@ -13,6 +19,7 @@ import type {
   PaginatedVestidosResponseDto,
   VestidoResponseDto,
 } from './dto/vestido-response.dto.js';
+import type { UpdateVestidoDto } from './dto/update-vestido.dto.js';
 import { Vestido } from './entities/vestido.tenant-entity.js';
 
 @Injectable()
@@ -113,6 +120,71 @@ export class VestidosService {
     });
   }
 
+  async update(
+    tenant: TenantScope,
+    id: string,
+    input: UpdateVestidoDto,
+  ): Promise<Vestido> {
+    try {
+      return await this.tenantContext.run(tenant, async (manager) => {
+        const repository = manager.getRepository(Vestido);
+        const vestido = await this.requireVestido(repository, id);
+
+        if (
+          input.sucursalId !== undefined &&
+          input.sucursalId !== vestido.sucursalId
+        ) {
+          await this.requireActiveSucursal(manager, input.sucursalId);
+          vestido.sucursalId = input.sucursalId;
+        }
+        if (input.codigo !== undefined && input.codigo !== vestido.codigo) {
+          await this.ensureUniqueCode(repository, input.codigo, id);
+          vestido.codigo = input.codigo;
+        }
+        if (input.nombre !== undefined) {
+          vestido.nombre = input.nombre;
+        }
+        if (input.descripcion !== undefined) {
+          vestido.descripcion = input.descripcion;
+        }
+        if (input.talla !== undefined) {
+          vestido.talla = input.talla;
+        }
+        if (input.color !== undefined) {
+          vestido.color = input.color;
+        }
+        if (input.marca !== undefined) {
+          vestido.marca = input.marca;
+        }
+        if (input.precioRenta !== undefined) {
+          vestido.precioRenta = input.precioRenta;
+        }
+        if (input.deposito !== undefined) {
+          vestido.deposito = input.deposito;
+        }
+        if (input.estadoOperativo !== undefined) {
+          vestido.estadoOperativo = input.estadoOperativo;
+        }
+        if (input.activo !== undefined) {
+          vestido.activo = input.activo;
+        }
+
+        return repository.save(vestido);
+      });
+    } catch (error) {
+      this.rethrowCodeConflict(error);
+    }
+  }
+
+  deactivate(tenant: TenantScope, id: string): Promise<Vestido> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const repository = manager.getRepository(Vestido);
+      const vestido = await this.requireVestido(repository, id);
+      vestido.activo = false;
+      return repository.save(vestido);
+    });
+  }
+
   private async requireActiveSucursal(
     manager: EntityManager,
     sucursalId: string,
@@ -129,9 +201,13 @@ export class VestidosService {
   private async ensureUniqueCode(
     repository: Repository<Vestido>,
     codigo: string,
+    excludedId?: string,
   ): Promise<void> {
     const duplicate = await repository.findOne({
-      where: { codigo: ILike(codigo) },
+      where: {
+        codigo: ILike(codigo),
+        ...(excludedId ? { id: Not(excludedId) } : {}),
+      },
     });
 
     if (duplicate) {
@@ -139,6 +215,19 @@ export class VestidosService {
         'Ya existe un vestido con ese código en la empresa',
       );
     }
+  }
+
+  private async requireVestido(
+    repository: Repository<Vestido>,
+    id: string,
+  ): Promise<Vestido> {
+    const vestido = await repository.findOne({ where: { id } });
+
+    if (!vestido) {
+      throw new NotFoundException('Vestido no encontrado');
+    }
+
+    return vestido;
   }
 
   private rethrowCodeConflict(error: unknown): never {

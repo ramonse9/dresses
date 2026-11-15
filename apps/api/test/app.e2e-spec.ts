@@ -67,6 +67,12 @@ describe('AppController (e2e)', () => {
     updatedAt: new Date('2026-11-14T12:00:00.000Z'),
     sucursal: { id: sucursalId, nombre: 'Centro', activo: true },
   };
+  const vestidoUpdateResponse = {
+    ...vestidoCreateResponse,
+    codigo: 'V-002',
+    nombre: 'Vestido Rojo',
+    activo: true,
+  };
 
   const authenticatedUser = {
     sub: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
@@ -192,6 +198,11 @@ describe('AppController (e2e)', () => {
               },
             }),
             findOne: vi.fn().mockResolvedValue(vestidoResponse),
+            update: vi.fn().mockResolvedValue(vestidoUpdateResponse),
+            deactivate: vi.fn().mockResolvedValue({
+              ...vestidoUpdateResponse,
+              activo: false,
+            }),
           },
         },
       ],
@@ -571,6 +582,49 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/api/vestidos/not-a-uuid')
       .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(400);
+  });
+
+  it('/api/vestidos/:id (PATCH) updates a dress for OWNER', () => {
+    return request(app.getHttpServer())
+      .patch(`/api/vestidos/${vestidoId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ codigo: ' v-002 ', nombre: 'Vestido Rojo', activo: true })
+      .expect(200)
+      .expect(vestidoUpdateResponse);
+  });
+
+  it('/api/vestidos/:id (DELETE) soft-deletes a dress for OWNER', () => {
+    return request(app.getHttpServer())
+      .delete(`/api/vestidos/${vestidoId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(200)
+      .expect({ ...vestidoUpdateResponse, activo: false });
+  });
+
+  it.each([
+    ['patch', { activo: true }],
+    ['delete', undefined],
+  ] as const)(
+    'returns 403 when EMPLOYEE uses %s /api/vestidos/:id',
+    (method, body) => {
+      const operation = request(app.getHttpServer())
+        [method](`/api/vestidos/${vestidoId}`)
+        .set('Authorization', 'Bearer employee.jwt.token');
+
+      if (body !== undefined) {
+        operation.send(body);
+      }
+
+      return operation.expect(403);
+    },
+  );
+
+  it('/api/vestidos/:id (PATCH) rejects tenant selectors', () => {
+    return request(app.getHttpServer())
+      .patch(`/api/vestidos/${vestidoId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ empresaId: selectedEmpresaId, activo: true })
       .expect(400);
   });
 

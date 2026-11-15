@@ -217,6 +217,81 @@ describe('PostgreSQL vestidos creation', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('updates, transfers, reactivates and soft-deletes only inside its tenant', async () => {
+    const destination = await sucursalesService.create(tenantA, {
+      nombre: 'Traslados A',
+    });
+    const inactiveDestination = await sucursalesService.create(tenantA, {
+      nombre: 'Inactiva A',
+    });
+    const vestido = await vestidosService.create(
+      tenantA,
+      createInput(sucursalAId, 'V-MUTATION', 'Vestido Original'),
+    );
+
+    const deactivated = await vestidosService.deactivate(tenantA, vestido.id);
+    expect(deactivated.activo).toBe(false);
+    const persistedAfterDelete = await vestidosService.findOne(
+      tenantA,
+      vestido.id,
+    );
+    expect(persistedAfterDelete).toMatchObject({
+      id: vestido.id,
+      activo: false,
+    });
+
+    const updated = await vestidosService.update(tenantA, vestido.id, {
+      sucursalId: destination.id,
+      codigo: 'V-MOVED',
+      nombre: 'Vestido Trasladado',
+      descripcion: 'Actualizado',
+      talla: 'L',
+      color: 'Rojo',
+      marca: 'Luna',
+      precioRenta: '1750.00',
+      deposito: '300.00',
+      estadoOperativo: VestidoEstadoOperativo.MANTENIMIENTO,
+      activo: true,
+    });
+    expect(updated).toMatchObject({
+      sucursalId: destination.id,
+      codigo: 'V-MOVED',
+      nombre: 'Vestido Trasladado',
+      descripcion: 'Actualizado',
+      talla: 'L',
+      color: 'Rojo',
+      marca: 'Luna',
+      precioRenta: '1750.00',
+      deposito: '300.00',
+      estadoOperativo: VestidoEstadoOperativo.MANTENIMIENTO,
+      activo: true,
+    });
+
+    await expect(
+      vestidosService.update(tenantA, vestido.id, { codigo: 'V-001' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    await sucursalesService.deactivate(tenantA, inactiveDestination.id);
+    await expect(
+      vestidosService.update(tenantA, vestido.id, {
+        sucursalId: inactiveDestination.id,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      vestidosService.update(tenantB, vestido.id, { nombre: 'Cruce' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      vestidosService.deactivate(tenantB, vestido.id),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const persisted = await vestidosService.findOne(tenantA, vestido.id);
+    expect(persisted).toMatchObject({
+      codigo: 'V-MOVED',
+      sucursalId: destination.id,
+      activo: true,
+    });
+  });
+
   it('returns 404 for a branch from another tenant or an inactive branch', async () => {
     await expect(
       vestidosService.create(

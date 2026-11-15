@@ -1,9 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -18,6 +22,7 @@ import type {
   PaginatedVestidosResponseDto,
   VestidoResponseDto,
 } from './dto/vestido-response.dto.js';
+import { parseUpdateVestidoBody } from './dto/update-vestido.dto.js';
 import { Vestido } from './entities/vestido.tenant-entity.js';
 import { VestidosService } from './vestidos.service.js';
 
@@ -51,5 +56,29 @@ export class VestidosController {
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<VestidoResponseDto> {
     return this.vestidosService.findOne(tenant, id);
+  }
+
+  @Patch(':id')
+  @Roles(EmpresaUsuarioRol.OWNER)
+  update(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: unknown,
+  ): Promise<Vestido> {
+    return this.vestidosService.update(
+      tenant,
+      id,
+      parseUpdateVestidoBody(body),
+    );
+  }
+
+  @Delete(':id')
+  @Roles(EmpresaUsuarioRol.OWNER)
+  @HttpCode(HttpStatus.OK)
+  deactivate(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<Vestido> {
+    return this.vestidosService.deactivate(tenant, id);
   }
 }
