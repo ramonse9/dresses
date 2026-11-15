@@ -46,6 +46,27 @@ describe('AppController (e2e)', () => {
   const rotatedRefreshToken = 'B'.repeat(43);
   const selectedEmpresaId = 'a18c2a56-d33f-4d88-a8e7-42931121e295';
   const sucursalId = 'd18c2a56-d33f-4d88-a8e7-42931121e295';
+  const vestidoId = 'e18c2a56-d33f-4d88-a8e7-42931121e295';
+  const vestidoCreateResponse = {
+    id: vestidoId,
+    sucursalId,
+    codigo: 'V-001',
+    nombre: 'Vestido Azul',
+    descripcion: null,
+    talla: 'M',
+    color: 'Azul',
+    marca: null,
+    precioRenta: '1250.50',
+    deposito: null,
+    estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
+    activo: true,
+  };
+  const vestidoResponse = {
+    ...vestidoCreateResponse,
+    createdAt: new Date('2026-11-14T12:00:00.000Z'),
+    updatedAt: new Date('2026-11-14T12:00:00.000Z'),
+    sucursal: { id: sucursalId, nombre: 'Centro', activo: true },
+  };
 
   const authenticatedUser = {
     sub: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
@@ -160,20 +181,17 @@ describe('AppController (e2e)', () => {
         {
           provide: VestidosService,
           useValue: {
-            create: vi.fn().mockResolvedValue({
-              id: 'e18c2a56-d33f-4d88-a8e7-42931121e295',
-              sucursalId,
-              codigo: 'V-001',
-              nombre: 'Vestido Azul',
-              descripcion: null,
-              talla: 'M',
-              color: 'Azul',
-              marca: null,
-              precioRenta: '1250.50',
-              deposito: null,
-              estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
-              activo: true,
+            create: vi.fn().mockResolvedValue(vestidoCreateResponse),
+            findAll: vi.fn().mockResolvedValue({
+              data: [vestidoResponse],
+              pagination: {
+                page: 1,
+                limit: 20,
+                total: 1,
+                totalPages: 1,
+              },
             }),
+            findOne: vi.fn().mockResolvedValue(vestidoResponse),
           },
         },
       ],
@@ -450,7 +468,7 @@ describe('AppController (e2e)', () => {
       })
       .expect(201)
       .expect({
-        id: 'e18c2a56-d33f-4d88-a8e7-42931121e295',
+        id: vestidoId,
         sucursalId,
         codigo: 'V-001',
         nombre: 'Vestido Azul',
@@ -498,6 +516,62 @@ describe('AppController (e2e)', () => {
 
   it('/api/vestidos rejects requests without JWT', () => {
     return request(app.getHttpServer()).post('/api/vestidos').expect(401);
+  });
+
+  it('/api/vestidos (GET) returns a paginated catalog for OWNER', () => {
+    return request(app.getHttpServer())
+      .get('/api/vestidos?page=1&limit=20&activo=true&q=azul')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .set('x-empresa-id', 'b28c2a56-d33f-4d88-a8e7-42931121e295')
+      .set('x-schema-name', 'tenant_untrusted')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          data: [
+            {
+              id: vestidoId,
+              sucursal: { id: sucursalId, nombre: 'Centro', activo: true },
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        });
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
+        expect(JSON.stringify(response.body)).not.toContain('schemaName');
+      });
+  });
+
+  it('/api/vestidos (GET) allows EMPLOYEE', () => {
+    return request(app.getHttpServer())
+      .get('/api/vestidos')
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .expect(200);
+  });
+
+  it('/api/vestidos/:id (GET) allows EMPLOYEE', () => {
+    return request(app.getHttpServer())
+      .get(`/api/vestidos/${vestidoId}`)
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: vestidoId,
+          sucursal: { id: sucursalId, nombre: 'Centro', activo: true },
+        });
+      });
+  });
+
+  it('/api/vestidos (GET) rejects unknown tenant selectors', () => {
+    return request(app.getHttpServer())
+      .get(`/api/vestidos?empresaId=${selectedEmpresaId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(400);
+  });
+
+  it('/api/vestidos/:id (GET) validates UUIDs', () => {
+    return request(app.getHttpServer())
+      .get('/api/vestidos/not-a-uuid')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(400);
   });
 
   it('does not expose the previous empresaSlug route', () => {

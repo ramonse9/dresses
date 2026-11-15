@@ -1,10 +1,23 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { CurrentTenant } from '../auth/current-tenant.decorator.js';
 import { Roles } from '../auth/roles.decorator.js';
 import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { parseCreateVestidoBody } from './dto/create-vestido.dto.js';
+import { parseListVestidosQuery } from './dto/list-vestidos-query.dto.js';
+import type {
+  PaginatedVestidosResponseDto,
+  VestidoResponseDto,
+} from './dto/vestido-response.dto.js';
 import { Vestido } from './entities/vestido.tenant-entity.js';
 import { VestidosService } from './vestidos.service.js';
 
@@ -20,5 +33,23 @@ export class VestidosController {
     @Body() body: unknown,
   ): Promise<Vestido> {
     return this.vestidosService.create(tenant, parseCreateVestidoBody(body));
+  }
+
+  @Get()
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  findAll(
+    @CurrentTenant() tenant: TenantScope,
+    @Query() query: unknown,
+  ): Promise<PaginatedVestidosResponseDto> {
+    return this.vestidosService.findAll(tenant, parseListVestidosQuery(query));
+  }
+
+  @Get(':id')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  findOne(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<VestidoResponseDto> {
+    return this.vestidosService.findOne(tenant, id);
   }
 }

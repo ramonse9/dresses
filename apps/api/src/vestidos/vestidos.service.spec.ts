@@ -4,6 +4,7 @@ import { TenantContextService } from '../database/tenant-context.service.js';
 import { Sucursal } from '../sucursales/entities/sucursal.tenant-entity.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import type { CreateVestidoDto } from './dto/create-vestido.dto.js';
+import type { ListVestidosQueryDto } from './dto/list-vestidos-query.dto.js';
 import {
   Vestido,
   VestidoEstadoOperativo,
@@ -85,6 +86,77 @@ describe('VestidosService', () => {
     };
   }
 
+  function buildQueryService(options?: {
+    vestidos?: Vestido[];
+    total?: number;
+    vestido?: Vestido | null;
+  }) {
+    const innerJoinAndSelect = vi.fn();
+    const andWhere = vi.fn();
+    const orderBy = vi.fn();
+    const addOrderBy = vi.fn();
+    const skip = vi.fn();
+    const take = vi.fn();
+    const where = vi.fn();
+    const getManyAndCount = vi
+      .fn()
+      .mockResolvedValue([options?.vestidos ?? [], options?.total ?? 0]);
+    const getOne = vi.fn().mockResolvedValue(options?.vestido ?? null);
+    const builder = {
+      innerJoinAndSelect,
+      andWhere,
+      orderBy,
+      addOrderBy,
+      skip,
+      take,
+      where,
+      getManyAndCount,
+      getOne,
+    };
+
+    for (const method of [
+      innerJoinAndSelect,
+      andWhere,
+      orderBy,
+      addOrderBy,
+      skip,
+      take,
+      where,
+    ]) {
+      method.mockReturnValue(builder);
+    }
+
+    const createQueryBuilder = vi.fn().mockReturnValue(builder);
+    const manager = {
+      getRepository: vi.fn(() => ({ createQueryBuilder })),
+    } as unknown as EntityManager;
+    const run = vi.fn(
+      async <T>(
+        scope: TenantScope,
+        operation: (entityManager: EntityManager) => Promise<T>,
+      ) => {
+        expect(scope).toBe(tenant);
+        return operation(manager);
+      },
+    );
+    const service = new VestidosService({
+      run,
+    } as unknown as TenantContextService);
+
+    return {
+      service,
+      innerJoinAndSelect,
+      andWhere,
+      orderBy,
+      addOrderBy,
+      skip,
+      take,
+      where,
+      getManyAndCount,
+      getOne,
+    };
+  }
+
   it('creates a dress inside the authenticated tenant transaction', async () => {
     const { service, vestido, sucursalFindOne, vestidoCreate, run } =
       buildService();
@@ -136,4 +208,118 @@ describe('VestidosService', () => {
       ConflictException,
     );
   });
+
+  it('returns a filtered page with one joined sucursal query', async () => {
+    const vestido = buildCatalogVestido();
+    const {
+      service,
+      innerJoinAndSelect,
+      andWhere,
+      orderBy,
+      addOrderBy,
+      skip,
+      take,
+      getManyAndCount,
+    } = buildQueryService({ vestidos: [vestido], total: 21 });
+    const filters: ListVestidosQueryDto = {
+      page: 2,
+      limit: 20,
+      sucursalId: input.sucursalId,
+      activo: true,
+      estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
+      q: 'Azul%_\\',
+    };
+
+    await expect(service.findAll(tenant, filters)).resolves.toEqual({
+      data: [
+        expect.objectContaining({
+          id: vestido.id,
+          sucursal: {
+            id: vestido.sucursal.id,
+            nombre: vestido.sucursal.nombre,
+            activo: true,
+          },
+        }),
+      ],
+      pagination: { page: 2, limit: 20, total: 21, totalPages: 2 },
+    });
+    expect(innerJoinAndSelect).toHaveBeenCalledWith(
+      'vestido.sucursal',
+      'sucursal',
+    );
+    expect(andWhere).toHaveBeenCalledWith('vestido.sucursalId = :sucursalId', {
+      sucursalId: input.sucursalId,
+    });
+    expect(andWhere).toHaveBeenCalledWith('vestido.activo = :activo', {
+      activo: true,
+    });
+    expect(andWhere).toHaveBeenCalledWith(
+      'vestido.estadoOperativo = :estadoOperativo',
+      { estadoOperativo: VestidoEstadoOperativo.DISPONIBLE },
+    );
+    expect(andWhere).toHaveBeenCalledWith(expect.stringContaining('ILIKE'), {
+      search: '%Azul\\%\\_\\\\%',
+    });
+    expect(orderBy).toHaveBeenCalledWith('vestido.createdAt', 'DESC');
+    expect(addOrderBy).toHaveBeenCalledWith('vestido.id', 'DESC');
+    expect(skip).toHaveBeenCalledWith(20);
+    expect(take).toHaveBeenCalledWith(20);
+    expect(getManyAndCount).toHaveBeenCalledOnce();
+  });
+
+  it('returns one dress without exposing tenant schema data', async () => {
+    const vestido = buildCatalogVestido();
+    const { service, innerJoinAndSelect, where, getOne } = buildQueryService({
+      vestido,
+    });
+
+    const result = await service.findOne(tenant, vestido.id);
+
+    expect(result).toMatchObject({
+      id: vestido.id,
+      sucursal: { id: vestido.sucursal.id, nombre: 'Centro', activo: true },
+    });
+    expect(JSON.stringify(result)).not.toContain('tenant_');
+    expect(JSON.stringify(result)).not.toContain('schemaName');
+    expect(innerJoinAndSelect).toHaveBeenCalledWith(
+      'vestido.sucursal',
+      'sucursal',
+    );
+    expect(where).toHaveBeenCalledWith('vestido.id = :id', {
+      id: vestido.id,
+    });
+    expect(getOne).toHaveBeenCalledOnce();
+  });
+
+  it('returns 404 when a dress is absent from the authenticated tenant', async () => {
+    const { service } = buildQueryService({ vestido: null });
+
+    await expect(
+      service.findOne(tenant, 'd18c2a56-d33f-4d88-a8e7-42931121e295'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
 });
+
+function buildCatalogVestido(): Vestido {
+  return Object.assign(new Vestido(), {
+    id: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+    sucursalId: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+    codigo: 'V-001',
+    nombre: 'Vestido Azul',
+    descripcion: null,
+    talla: 'M',
+    color: 'Azul',
+    marca: 'Marca',
+    precioRenta: '1250.50',
+    deposito: null,
+    estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
+    activo: true,
+    createdAt: new Date('2026-11-14T12:00:00.000Z'),
+    updatedAt: new Date('2026-11-14T12:00:00.000Z'),
+    sucursal: {
+      id: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+      nombre: 'Centro',
+      activo: true,
+    } as Sucursal,
+  });
+}

@@ -1,6 +1,6 @@
 # Dresses SaaS
 
-Base de un SaaS multi-tenant para negocios de renta de vestidos. El proyecto contiene una aplicación web, un API con autenticación JWT y la infraestructura local de PostgreSQL con TypeORM. Los módulos de negocio de vestidos y reservaciones todavía no están implementados.
+Base de un SaaS multi-tenant para negocios de renta de vestidos. El proyecto contiene una aplicación web, un API con autenticación JWT y la infraestructura local de PostgreSQL con TypeORM. El módulo de vestidos permite crear y consultar el catálogo; reservaciones todavía no está implementado.
 
 ## Tecnologías
 
@@ -326,15 +326,17 @@ Cada fila de `vestidos` representa una pieza física individual y pertenece a un
 
 La migration `CreateVestidos1794697200000` crea la tabla, la relación con sucursales, las restricciones monetarias y de estado, el índice único normalizado de código y los índices de sucursal y activo.
 
-### Crear un vestido
+### Crear y consultar vestidos
 
-La única operación disponible inicialmente es:
+Las operaciones disponibles son:
 
 ```text
 POST /api/vestidos
+GET  /api/vestidos
+GET  /api/vestidos/:id
 ```
 
-Requiere un access token con empresa seleccionada y una membresía `OWNER` activa. `EMPLOYEE` recibe `403`. El body acepta `sucursalId`, pero rechaza `empresaId`, `empresaSlug`, `schemaName`, `activo` y cualquier campo desconocido.
+La creación requiere un access token con empresa seleccionada y una membresía `OWNER` activa. `EMPLOYEE` recibe `403` al crear, pero tanto `OWNER` como `EMPLOYEE` pueden consultar. El body acepta `sucursalId`, pero rechaza `empresaId`, `empresaSlug`, `schemaName`, `activo` y cualquier campo desconocido.
 
 ```bash
 curl --request POST http://localhost:3000/api/vestidos \
@@ -358,7 +360,39 @@ El backend normaliza `codigo` a mayúsculas, valida que la sucursal exista y est
 
 Un código repetido dentro de la empresa responde `409`, incluso ante solicitudes concurrentes; el mismo código puede existir en otra empresa. Una sucursal inexistente, inactiva o perteneciente a otro tenant responde `404`.
 
-Todavía no existen endpoints de consulta, actualización o eliminación, ni imágenes, reservaciones o disponibilidad por fechas.
+El listado acepta estos query parameters opcionales:
+
+| Parámetro         | Regla                                                     |
+| ----------------- | --------------------------------------------------------- |
+| `page`            | Entero positivo; valor predeterminado `1`                 |
+| `limit`           | Entero entre `1` y `100`; valor predeterminado `20`       |
+| `sucursalId`      | UUID de una sucursal del tenant                           |
+| `activo`          | Únicamente `true` o `false`                               |
+| `estadoOperativo` | `DISPONIBLE` o `MANTENIMIENTO`                            |
+| `q`               | Busca sin distinguir mayúsculas en código, nombre o marca |
+
+```bash
+curl 'http://localhost:3000/api/vestidos?page=1&limit=20&activo=true&q=azul' \
+  --header 'Authorization: Bearer TOKEN_CON_EMPRESA'
+```
+
+Los resultados se ordenan de forma estable por `createdAt DESC` y devuelven:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 0,
+    "totalPages": 0
+  }
+}
+```
+
+Cada vestido incluye únicamente los datos básicos de su sucursal (`id`, `nombre` y `activo`), obtenidos en la misma consulta para evitar N+1. Nunca se exponen `schemaName` ni otros datos internos del tenant. Los parámetros desconocidos y los selectores `empresaId`, `empresaSlug` o `schemaName` se rechazan con `400`. Consultar un UUID inexistente o perteneciente a otro tenant responde `404`.
+
+Todavía no existen endpoints de actualización o eliminación de vestidos, ni imágenes, reservaciones o disponibilidad por fechas.
 
 ## Sucursales
 
@@ -408,7 +442,7 @@ No se aceptan `empresaSlug`, `empresaId` ni `schemaName` en rutas o DTOs de sucu
 
 ## Aislamiento de tenants
 
-Sucursales es el primer módulo que utiliza el flujo reutilizable JWT → `TenantScope` → transacción. Los futuros módulos autenticados de vestidos y reservaciones pueden aplicar la misma abstracción:
+Sucursales y vestidos utilizan el flujo reutilizable JWT → `TenantScope` → transacción. Los futuros módulos autenticados, como reservaciones, pueden aplicar la misma abstracción:
 
 1. `JwtAuthGuard` verifica firma, expiración, sesión y usuario, y deja los claims validados en la solicitud.
 2. `TenantAuthGuard` lee `empresaId` exclusivamente de esos claims. Ignora headers personalizados, parámetros, query strings y cuerpos HTTP.
@@ -437,7 +471,7 @@ No se utiliza `SET search_path` de sesión ni se aceptan nombres de schema en he
 
 ### Pruebas PostgreSQL de aislamiento
 
-Las suites crean empresas y sucursales temporales, permiten el mismo nombre en tenants distintos y fuerzan `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión. `test:auth-database` recorre las rutas HTTP con access tokens OWNER y EMPLOYEE, comprueba los `403` por rol o membresía/empresa inactiva, el `404` cruzado, la baja lógica y que la ruta anterior por slug permanezca deshabilitada; `test:tenancy` verifica el aislamiento directamente en la capa de persistencia.
+Las suites crean empresas, sucursales y vestidos temporales, permiten los mismos nombres y códigos en tenants distintos y fuerzan `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión. `test:auth-database` recorre las rutas HTTP con access tokens OWNER y EMPLOYEE, comprueba las consultas del catálogo, los `403` por rol o membresía/empresa inactiva, los `404` cruzados, la baja lógica y que la ruta anterior por slug permanezca deshabilitada; `test:tenancy` verifica directamente en PostgreSQL la paginación, los filtros, la búsqueda, las migrations tenant y el aislamiento de persistencia.
 
 ```bash
 NODE_ENV=test \

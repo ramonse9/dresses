@@ -121,6 +121,102 @@ describe('PostgreSQL vestidos creation', () => {
     });
   });
 
+  it('paginates, filters, searches and joins the branch without tenant data', async () => {
+    const sucursalNorte = await sucursalesService.create(tenantA, {
+      nombre: 'Norte A',
+    });
+    const maintenance = await vestidosService.create(tenantA, {
+      ...createInput(sucursalAId, 'V-GALA', 'Gala Roja'),
+      marca: 'Luna',
+      estadoOperativo: VestidoEstadoOperativo.MANTENIMIENTO,
+    });
+    await vestidosService.create(
+      tenantA,
+      createInput(sucursalNorte.id, 'V-NORTH', 'Vestido Norte'),
+    );
+    const inactive = await vestidosService.create(
+      tenantA,
+      createInput(sucursalAId, 'V-INACTIVE-CATALOG', 'Vestido Archivado'),
+    );
+    await dataSource.query(
+      `UPDATE ${quoteTenantSchemaName(tenantA.schemaName)}."vestidos" SET "activo" = false WHERE "id" = $1`,
+      [inactive.id],
+    );
+
+    const firstPage = await vestidosService.findAll(tenantA, {
+      page: 1,
+      limit: 2,
+    });
+    const secondPage = await vestidosService.findAll(tenantA, {
+      page: 2,
+      limit: 2,
+    });
+    expect(firstPage.pagination).toMatchObject({
+      page: 1,
+      limit: 2,
+      total: 5,
+      totalPages: 3,
+    });
+    expect(firstPage.data).toHaveLength(2);
+    expect(secondPage.data).toHaveLength(2);
+    expect(secondPage.data.map(({ id }) => id)).not.toEqual(
+      firstPage.data.map(({ id }) => id),
+    );
+
+    await expect(
+      vestidosService.findAll(tenantA, {
+        page: 1,
+        limit: 20,
+        sucursalId: sucursalNorte.id,
+      }),
+    ).resolves.toMatchObject({
+      data: [expect.objectContaining({ codigo: 'V-NORTH' })],
+      pagination: { total: 1 },
+    });
+    await expect(
+      vestidosService.findAll(tenantA, {
+        page: 1,
+        limit: 20,
+        activo: false,
+      }),
+    ).resolves.toMatchObject({
+      data: [expect.objectContaining({ id: inactive.id })],
+      pagination: { total: 1 },
+    });
+    await expect(
+      vestidosService.findAll(tenantA, {
+        page: 1,
+        limit: 20,
+        estadoOperativo: VestidoEstadoOperativo.MANTENIMIENTO,
+      }),
+    ).resolves.toMatchObject({
+      data: [expect.objectContaining({ id: maintenance.id })],
+      pagination: { total: 1 },
+    });
+
+    for (const q of ['V-GALA', 'Gala Roja', 'Luna']) {
+      const search = await vestidosService.findAll(tenantA, {
+        page: 1,
+        limit: 20,
+        q,
+      });
+      expect(search.data).toEqual([
+        expect.objectContaining({ id: maintenance.id }),
+      ]);
+    }
+
+    const detail = await vestidosService.findOne(tenantA, maintenance.id);
+    expect(detail).toMatchObject({
+      id: maintenance.id,
+      sucursal: { id: sucursalAId, nombre: 'Centro A', activo: true },
+    });
+    expect(JSON.stringify(detail)).not.toContain('tenant_');
+    expect(JSON.stringify(detail)).not.toContain('schemaName');
+    await expect(
+      vestidosService.findOne(tenantB, maintenance.id),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('returns 404 for a branch from another tenant or an inactive branch', async () => {
     await expect(
       vestidosService.create(
