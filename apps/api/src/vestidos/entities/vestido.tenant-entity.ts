@@ -18,8 +18,10 @@ export enum VestidoEstadoOperativo {
 }
 
 @Entity({ name: 'vestidos' })
-@Index('IDX_vestidos_sucursal_id', ['sucursalId'])
-@Index('IDX_vestidos_activo', ['activo'])
+@Index('IDX_vestidos_catalog_order', ['createdAt', 'id'])
+@Index('IDX_vestidos_sucursal_id', ['sucursalId', 'createdAt', 'id'])
+@Index('IDX_vestidos_activo', ['activo', 'createdAt', 'id'])
+@Index('IDX_vestidos_estado_operativo', ['estadoOperativo', 'createdAt', 'id'])
 @Check(
   'CHK_vestidos_estado_operativo',
   `"estado_operativo" IN ('DISPONIBLE', 'MANTENIMIENTO')`,

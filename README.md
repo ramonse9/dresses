@@ -324,7 +324,7 @@ Cada fila de `vestidos` representa una pieza física individual y pertenece a un
 
 `estado_operativo=DISPONIBLE` indica que la pieza puede operar normalmente; no garantiza que esté libre para un rango de fechas. Esa disponibilidad se calculará posteriormente a partir de reservaciones.
 
-La migration `CreateVestidos1794697200000` crea la tabla, la relación con sucursales, las restricciones monetarias y de estado, el índice único normalizado de código y los índices de sucursal y activo.
+La migration `CreateVestidos1794697200000` crea la tabla, la relación con sucursales, las restricciones monetarias y de estado y el índice único normalizado de código. `OptimizeVestidosCatalog1794783600000` añade índices compuestos para el orden paginado estable y los filtros por sucursal, activo y estado operativo. Ambas se aplican automáticamente a tenants nuevos; para schemas existentes se utiliza `npm run tenant:migration:run`.
 
 ### CRUD parcial de vestidos
 
@@ -339,6 +339,16 @@ DELETE /api/vestidos/:id
 ```
 
 Crear, actualizar, trasladar, reactivar o desactivar requiere un access token con empresa seleccionada y una membresía `OWNER` activa. `EMPLOYEE` recibe `403` para esas operaciones, pero tanto `OWNER` como `EMPLOYEE` pueden consultar. Los cuerpos rechazan `empresaId`, `empresaSlug`, `schemaName` y cualquier campo desconocido.
+
+Todas las rutas de vestidos aplican `JwtAuthGuard` → `TenantAuthGuard` → `RolesGuard` mediante `@TenantAuthenticated()`. El rol se obtiene de la membresía activa consultada durante la solicitud, no solamente del claim incluido en el JWT; desactivar la membresía o la empresa revoca el acceso inmediatamente.
+
+Los DTOs estrictos aceptan:
+
+- Creación: `sucursalId`, `codigo`, `nombre`, `descripcion`, `talla`, `color`, `marca`, `precioRenta`, `deposito` y `estadoOperativo`.
+- Actualización: los mismos campos de forma parcial, además de `activo`; se exige al menos un campo.
+- Listado: únicamente los filtros y parámetros de paginación descritos abajo.
+
+El tenant nunca forma parte de esos DTOs. Los headers personalizados con empresa o schema no sustituyen la empresa verificada del JWT y se ignoran como fuente de autorización.
 
 ```bash
 curl --request POST http://localhost:3000/api/vestidos \
@@ -417,12 +427,15 @@ curl --request DELETE http://localhost:3000/api/vestidos/ID \
 
 `DELETE` realiza exclusivamente una baja lógica con `activo=false`; el registro permanece en la tabla y puede reactivarse con `PATCH`. Todas las mutaciones se ejecutan en una transacción tenant. Un vestido inexistente o de otro tenant responde `404`.
 
-| Operación                   | OWNER     | EMPLOYEE  |
-| --------------------------- | --------- | --------- |
-| Listar o consultar vestidos | Permitido | Permitido |
-| Crear vestidos              | Permitido | 403       |
-| Actualizar o trasladar      | Permitido | 403       |
-| Reactivar o desactivar      | Permitido | 403       |
+| Operación  | OWNER     | EMPLOYEE  |
+| ---------- | --------- | --------- |
+| Crear      | Permitido | 403       |
+| Listar     | Permitido | Permitido |
+| Consultar  | Permitido | Permitido |
+| Actualizar | Permitido | 403       |
+| Trasladar  | Permitido | 403       |
+| Activar    | Permitido | 403       |
+| Desactivar | Permitido | 403       |
 
 El historial de movimientos, la auditoría, las imágenes, las reservaciones y la disponibilidad por fechas quedan fuera de este alcance.
 

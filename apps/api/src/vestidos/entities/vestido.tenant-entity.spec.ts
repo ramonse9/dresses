@@ -54,4 +54,31 @@ describe('Vestido tenant entity', () => {
       'MANTENIMIENTO',
     ]);
   });
+
+  it('declares indexes for stable catalog ordering and filters', () => {
+    const indexes = getMetadataArgsStorage().indices.filter(
+      (index) => index.target === Vestido,
+    );
+
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'IDX_vestidos_catalog_order',
+          columns: ['createdAt', 'id'],
+        }),
+        expect.objectContaining({
+          name: 'IDX_vestidos_sucursal_id',
+          columns: ['sucursalId', 'createdAt', 'id'],
+        }),
+        expect.objectContaining({
+          name: 'IDX_vestidos_activo',
+          columns: ['activo', 'createdAt', 'id'],
+        }),
+        expect.objectContaining({
+          name: 'IDX_vestidos_estado_operativo',
+          columns: ['estadoOperativo', 'createdAt', 'id'],
+        }),
+      ]),
+    );
+  });
 });

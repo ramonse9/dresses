@@ -103,21 +103,39 @@ describe('PostgreSQL vestidos tenant migration', () => {
     });
 
     const migrations = (await dataSource.query(
-      `SELECT "name" FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" = $1`,
-      ['CreateVestidos1794697200000'],
+      `SELECT "name" FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" IN ($1, $2) ORDER BY "name"`,
+      ['CreateVestidos1794697200000', 'OptimizeVestidosCatalog1794783600000'],
     )) as Array<{ name: string }>;
-    expect(migrations).toEqual([{ name: 'CreateVestidos1794697200000' }]);
+    expect(migrations).toEqual([
+      { name: 'CreateVestidos1794697200000' },
+      { name: 'OptimizeVestidosCatalog1794783600000' },
+    ]);
 
     const indexes = (await dataSource.query(
-      `SELECT indexname AS "indexName" FROM pg_indexes WHERE schemaname = $1 AND tablename = 'vestidos' ORDER BY indexname`,
+      `SELECT indexname AS "indexName", indexdef AS "indexDefinition" FROM pg_indexes WHERE schemaname = $1 AND tablename = 'vestidos' ORDER BY indexname`,
       [empresa.schemaName],
-    )) as Array<{ indexName: string }>;
+    )) as Array<{ indexName: string; indexDefinition: string }>;
     expect(indexes.map(({ indexName }) => indexName)).toEqual([
       'IDX_vestidos_activo',
+      'IDX_vestidos_catalog_order',
+      'IDX_vestidos_estado_operativo',
       'IDX_vestidos_sucursal_id',
       'PK_vestidos_id',
       'UQ_vestidos_codigo_normalized',
     ]);
+    expect(
+      indexes.find(({ indexName }) => indexName === 'IDX_vestidos_activo')
+        ?.indexDefinition,
+    ).toContain('(activo, created_at, id)');
+    expect(
+      indexes.find(({ indexName }) => indexName === 'IDX_vestidos_sucursal_id')
+        ?.indexDefinition,
+    ).toContain('(sucursal_id, created_at, id)');
+    expect(
+      indexes.find(
+        ({ indexName }) => indexName === 'IDX_vestidos_estado_operativo',
+      )?.indexDefinition,
+    ).toContain('(estado_operativo, created_at, id)');
 
     await dataSource.query(
       `INSERT INTO ${schemaIdentifier}."vestidos" ("sucursal_id", "codigo", "nombre", "talla", "color", "precio_renta", "deposito") VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -206,8 +224,8 @@ describe('PostgreSQL vestidos tenant migration', () => {
 
     await dataSource.query(`DROP TABLE ${schemaIdentifier}."vestidos"`);
     await dataSource.query(
-      `DELETE FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" = $1`,
-      ['CreateVestidos1794697200000'],
+      `DELETE FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" IN ($1, $2)`,
+      ['CreateVestidos1794697200000', 'OptimizeVestidosCatalog1794783600000'],
     );
 
     await tenantMigrationService.ensureMigrations(empresa.schemaName);
@@ -220,10 +238,13 @@ describe('PostgreSQL vestidos tenant migration', () => {
 
     await tenantMigrationService.ensureMigrations(empresa.schemaName);
     const migrationRows = (await dataSource.query(
-      `SELECT "name" FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" = $1`,
-      ['CreateVestidos1794697200000'],
+      `SELECT "name" FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" IN ($1, $2) ORDER BY "name"`,
+      ['CreateVestidos1794697200000', 'OptimizeVestidosCatalog1794783600000'],
     )) as Array<{ name: string }>;
-    expect(migrationRows).toEqual([{ name: 'CreateVestidos1794697200000' }]);
+    expect(migrationRows).toEqual([
+      { name: 'CreateVestidos1794697200000' },
+      { name: 'OptimizeVestidosCatalog1794783600000' },
+    ]);
   });
 });
 

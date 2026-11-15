@@ -251,6 +251,16 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .send({ nombre: 'Token Centro' })
       .expect(201);
+    const sucursalASecondaryResponse = await request(app.getHttpServer())
+      .post('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({ nombre: 'Token Norte' })
+      .expect(201);
+    const sucursalBSecondaryResponse = await request(app.getHttpServer())
+      .post('/api/sucursales')
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({ nombre: 'Token Norte' })
+      .expect(201);
     expect(sucursalAResponse.body).toMatchObject({
       nombre: 'Token Centro',
       activo: true,
@@ -260,7 +270,12 @@ describe('PostgreSQL authenticated empresa selection', () => {
       activo: true,
     });
     expect(
-      JSON.stringify([sucursalAResponse.body, sucursalBResponse.body]),
+      JSON.stringify([
+        sucursalAResponse.body,
+        sucursalBResponse.body,
+        sucursalASecondaryResponse.body,
+        sucursalBSecondaryResponse.body,
+      ]),
     ).not.toContain('tenant_');
 
     const vestidoAResponse = await request(app.getHttpServer())
@@ -289,10 +304,45 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .expect(201);
     expect(vestidoAResponse.body).toMatchObject({ codigo: 'TOKEN-001' });
     expect(vestidoBResponse.body).toMatchObject({ codigo: 'TOKEN-001' });
+    expect(
+      JSON.stringify([vestidoAResponse.body, vestidoBResponse.body]),
+    ).not.toContain('tenant_');
+
+    await request(app.getHttpServer())
+      .post('/api/vestidos')
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({
+        sucursalId: sucursalBResponse.body.id,
+        codigo: 'EMPLOYEE-DENIED',
+        nombre: 'No autorizada',
+        talla: 'M',
+        color: 'Negro',
+        precioRenta: '500.00',
+      })
+      .expect(403);
+    await request(app.getHttpServer())
+      .post('/api/vestidos')
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({
+        sucursalId: sucursalBResponse.body.id,
+        codigo: 'TENANT-SELECTOR-DENIED',
+        nombre: 'Selector rechazado',
+        talla: 'M',
+        color: 'Negro',
+        precioRenta: '500.00',
+        schemaName: empresaA.schemaName,
+      })
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(`/api/vestidos?schemaName=${empresaA.schemaName}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(400);
 
     await request(app.getHttpServer())
       .get('/api/vestidos')
       .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .set('x-empresa-id', empresaA.id)
+      .set('x-schema-name', empresaA.schemaName)
       .expect(200)
       .expect((response) => {
         expect(response.body).toMatchObject({
@@ -310,13 +360,59 @@ describe('PostgreSQL authenticated empresa selection', () => {
         expect(JSON.stringify(response.body)).not.toContain('tenant_');
       });
     await request(app.getHttpServer())
+      .get(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .set('x-empresa-id', empresaA.id)
+      .set('x-schema-name', empresaA.schemaName)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({ id: vestidoBResponse.body.id });
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
+      });
+    await request(app.getHttpServer())
       .get(`/api/vestidos/${String(vestidoAResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .expect(404);
+    const vestidoASecondaryResponse = await request(app.getHttpServer())
+      .post('/api/vestidos')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({
+        sucursalId: sucursalASecondaryResponse.body.id,
+        codigo: 'TOKEN-SECOND',
+        nombre: 'Vestido Secundario A',
+        talla: 'L',
+        color: 'Verde',
+        precioRenta: '900.00',
+      })
+      .expect(201);
+    const vestidoBSecondaryResponse = await request(app.getHttpServer())
+      .post('/api/vestidos')
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({
+        sucursalId: sucursalBSecondaryResponse.body.id,
+        codigo: 'TOKEN-SECOND',
+        nombre: 'Vestido Secundario B',
+        talla: 'L',
+        color: 'Verde',
+        precioRenta: '900.00',
+      })
+      .expect(201);
+    expect(vestidoASecondaryResponse.body.codigo).toBe('TOKEN-SECOND');
+    expect(vestidoBSecondaryResponse.body.codigo).toBe('TOKEN-SECOND');
     await request(app.getHttpServer())
       .patch(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
       .send({ nombre: 'No autorizada' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({ sucursalId: sucursalBSecondaryResponse.body.id })
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({ activo: true })
       .expect(403);
     await request(app.getHttpServer())
       .delete(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
@@ -325,15 +421,26 @@ describe('PostgreSQL authenticated empresa selection', () => {
     await request(app.getHttpServer())
       .patch(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
-      .send({ codigo: ' token-002 ', nombre: 'Vestido actualizado' })
+      .send({
+        codigo: ' token-002 ',
+        nombre: 'Vestido actualizado',
+        sucursalId: sucursalBSecondaryResponse.body.id,
+      })
       .expect(200)
       .expect((response) => {
         expect(response.body).toMatchObject({
           codigo: 'TOKEN-002',
           nombre: 'Vestido actualizado',
+          sucursalId: sucursalBSecondaryResponse.body.id,
           activo: true,
         });
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
       });
+    await request(app.getHttpServer())
+      .patch(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({ empresaId: empresaA.id, activo: true })
+      .expect(400);
     await request(app.getHttpServer())
       .delete(`/api/vestidos/${String(vestidoBResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
@@ -364,9 +471,15 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
       .expect(200)
       .expect((response) => {
-        expect(response.body).toEqual([
-          expect.objectContaining({ id: sucursalBResponse.body.id }),
-        ]);
+        expect(response.body).toHaveLength(2);
+        expect(response.body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: sucursalBResponse.body.id }),
+            expect.objectContaining({
+              id: sucursalBSecondaryResponse.body.id,
+            }),
+          ]),
+        );
       });
     await request(app.getHttpServer())
       .post('/api/sucursales')
@@ -441,6 +554,31 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .get('/api/vestidos')
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
       .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/vestidos/${String(vestidoAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/vestidos')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({
+        sucursalId: sucursalASecondaryResponse.body.id,
+        codigo: 'STALE-ROLE',
+        nombre: 'Rol obsoleto',
+        talla: 'M',
+        color: 'Negro',
+        precioRenta: '500.00',
+      })
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/vestidos/${String(vestidoAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({ activo: true })
+      .expect(403);
+    await request(app.getHttpServer())
+      .delete(`/api/vestidos/${String(vestidoAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(403);
     await request(app.getHttpServer())
       .post('/api/sucursales')
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
