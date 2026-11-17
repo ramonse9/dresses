@@ -7,6 +7,7 @@ import {
   type Relation,
   UpdateDateColumn,
 } from 'typeorm';
+import { Reservacion } from '../../reservaciones/entities/reservacion.tenant-entity.js';
 import { Vestido } from '../../vestidos/entities/vestido.tenant-entity.js';
 
 @Entity({ name: 'sucursales' })
@@ -34,4 +35,7 @@ export class Sucursal {
 
   @OneToMany(() => Vestido, (vestido) => vestido.sucursal)
   vestidos!: Relation<Vestido[]>;
+
+  @OneToMany(() => Reservacion, (reservacion) => reservacion.sucursal)
+  reservaciones!: Relation<Reservacion[]>;
 }

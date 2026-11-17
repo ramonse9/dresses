@@ -396,6 +396,45 @@ curl --request PATCH http://localhost:3000/api/clientes/CLIENTE_UUID/estado \
   --data '{"activo":false}'
 ```
 
+## Modelo tenant de reservaciones
+
+Las reservaciones existen únicamente dentro del schema de cada empresa y se almacenan en dos tablas:
+
+- `reservaciones`: cabecera relacionada con un cliente y una sucursal.
+- `reservacion_vestidos`: detalle con uno o varios vestidos físicos y la copia histórica de sus importes.
+
+La cabecera contiene `cliente_id`, `sucursal_id`, `fecha_inicio`, `fecha_fin`, estado, notas, `importe_renta`, `deposito_requerido`, las fechas opcionales de confirmación, entrega, devolución y cancelación, el motivo opcional de cancelación y las fechas de creación y actualización. El detalle contiene `reservacion_id`, `vestido_id`, `precio_renta`, `deposito` y `created_at`.
+
+Los importes utilizan `numeric(12,2)`, son no negativos y se representan como cadenas en TypeScript para evitar cálculos con punto flotante. `reservacion_vestidos.precio_renta` y `reservacion_vestidos.deposito` son copias de los valores vigentes al agregar la pieza. Cambiar posteriormente el precio o depósito del catálogo no modifica el histórico; un vestido sin depósito se representará en el detalle con `0.00`.
+
+Los estados modelados inicialmente son:
+
+```text
+BORRADOR
+CONFIRMADA
+ENTREGADA
+DEVUELTA
+CANCELADA
+```
+
+El estado predeterminado es `BORRADOR`. Esta etapa solamente define los estados y sus columnas de seguimiento; todavía no implementa transiciones, entrega, devolución ni cancelación.
+
+### Rangos de fechas
+
+`fecha_inicio` y `fecha_fin` usan `timestamptz` y forman un rango semiabierto `[fechaInicio, fechaFin)`: el inicio pertenece a la reservación y el instante final no. Por ello, una reservación puede terminar exactamente cuando comienza otra. PostgreSQL exige `fecha_fin > fecha_inicio`; las APIs posteriores deberán recibir fechas ISO 8601 con zona horaria explícita.
+
+No existe todavía una restricción de solapamiento ni una consulta de disponibilidad. Esas reglas se implementarán al crear el flujo seguro de reservaciones.
+
+Las llaves foráneas hacia cliente, sucursal y vestido apuntan a tablas del mismo schema tenant y usan `ON DELETE RESTRICT`. Una reservación no puede repetir el mismo vestido porque `reservacion_id + vestido_id` es único. Los índices cubren consultas por cliente, sucursal, estado, fechas, reservación y vestido.
+
+La migration tenant `CreateReservaciones1795215600000` se aplica automáticamente a empresas nuevas. Para aplicarla de forma idempotente a schemas existentes:
+
+```bash
+npm run tenant:migration:run
+```
+
+No existen tablas de reservaciones en `public` ni endpoints de reservaciones en esta etapa.
+
 ## Modelo tenant de vestidos
 
 Cada fila de `vestidos` representa una pieza física individual y pertenece a una sucursal del mismo tenant. No existe una entidad de vestidos en `public` ni un inventario acumulado por modelo.

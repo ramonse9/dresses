@@ -7,6 +7,7 @@ import { ClientesModule } from './clientes/clientes.module.js';
 import { validateApplicationEnvironment } from './config/application-environment.js';
 import { DatabaseModule } from './database/database.module.js';
 import { EmpresasModule } from './empresas/empresas.module.js';
+import { ReservacionesModule } from './reservaciones/reservaciones.module.js';
 import { SucursalesModule } from './sucursales/sucursales.module.js';
 import { UsuariosModule } from './usuarios/usuarios.module.js';
 import { VestidosModule } from './vestidos/vestidos.module.js';
@@ -24,6 +25,7 @@ import { VestidosModule } from './vestidos/vestidos.module.js';
     UsuariosModule,
     AuthModule,
     ClientesModule,
+    ReservacionesModule,
     VestidosModule,
   ],
   controllers: [AppController],

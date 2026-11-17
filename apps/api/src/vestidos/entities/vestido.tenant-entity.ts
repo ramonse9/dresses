@@ -6,10 +6,12 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   type Relation,
   UpdateDateColumn,
 } from 'typeorm';
+import { ReservacionVestido } from '../../reservaciones/entities/reservacion-vestido.tenant-entity.js';
 import { Sucursal } from '../../sucursales/entities/sucursal.tenant-entity.js';
 
 export enum VestidoEstadoOperativo {
@@ -82,4 +84,10 @@ export class Vestido {
   })
   @JoinColumn({ name: 'sucursal_id' })
   sucursal!: Relation<Sucursal>;
+
+  @OneToMany(
+    () => ReservacionVestido,
+    (reservacionVestido) => reservacionVestido.vestido,
+  )
+  reservacionVestidos!: Relation<ReservacionVestido[]>;
 }

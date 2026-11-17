@@ -6,9 +6,12 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  OneToMany,
   PrimaryGeneratedColumn,
+  type Relation,
   UpdateDateColumn,
 } from 'typeorm';
+import { Reservacion } from '../../reservaciones/entities/reservacion.tenant-entity.js';
 
 function normalizeOptionalText(
   value: string | null | undefined,
@@ -77,6 +80,9 @@ export class Cliente {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
+
+  @OneToMany(() => Reservacion, (reservacion) => reservacion.cliente)
+  reservaciones!: Relation<Reservacion[]>;
 
   @BeforeInsert()
   @BeforeUpdate()

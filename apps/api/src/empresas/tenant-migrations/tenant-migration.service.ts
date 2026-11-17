@@ -6,6 +6,7 @@ import { CreateSucursales1794378000000 } from './1794378000000-create-sucursales
 import { CreateVestidos1794697200000 } from './1794697200000-create-vestidos.js';
 import { OptimizeVestidosCatalog1794783600000 } from './1794783600000-optimize-vestidos-catalog.js';
 import { CreateClientes1794956400000 } from './1794956400000-create-clientes.js';
+import { CreateReservaciones1795215600000 } from './1795215600000-create-reservaciones.js';
 import { TenantMigration } from './tenant-migration.js';
 
 const tenantMigrations: readonly TenantMigration[] = [
@@ -14,6 +15,7 @@ const tenantMigrations: readonly TenantMigration[] = [
   new CreateVestidos1794697200000(),
   new OptimizeVestidosCatalog1794783600000(),
   new CreateClientes1794956400000(),
+  new CreateReservaciones1795215600000(),
 ];
 
 @Injectable()
