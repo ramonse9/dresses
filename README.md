@@ -327,7 +327,74 @@ Los tenants nuevos reciben la tabla durante su creación. Para aplicarla a schem
 npm run tenant:migration:run
 ```
 
-El UUID de `clientes` queda preparado para la futura relación `clienteId` de reservaciones. Todavía no existen endpoints, historial de rentas, documentos, imágenes ni deduplicación automática de clientes.
+El UUID de `clientes` queda preparado para la futura relación `clienteId` de reservaciones. Todavía no existen reservaciones, historial de rentas, documentos, imágenes ni deduplicación automática de clientes.
+
+### CRUD de clientes
+
+Todas las rutas requieren un access token con una empresa seleccionada. El backend aplica `JwtAuthGuard` → `TenantAuthGuard` → `RolesGuard`, obtiene el tenant del token verificado y vuelve a consultar la membresía y la empresa en cada solicitud. No se aceptan `empresaId`, `empresaSlug` ni `schemaName` en rutas, query strings o DTOs; los headers personalizados tampoco se utilizan para seleccionar el tenant.
+
+```text
+POST   /api/clientes
+GET    /api/clientes
+GET    /api/clientes/:id
+PATCH  /api/clientes/:id
+PATCH  /api/clientes/:id/estado
+DELETE /api/clientes/:id
+```
+
+Los DTOs son estrictos y rechazan campos desconocidos:
+
+- Creación: `nombre` y, como mínimo, uno entre `telefono` y `email`; también admite `direccion` y `notas`.
+- Actualización: admite parcialmente `nombre`, `telefono`, `email`, `direccion` y `notas`, pero no `activo`. El estado final debe conservar teléfono o email.
+- Cambio de estado: acepta exclusivamente `{ "activo": true }` o `{ "activo": false }`.
+- Listado: admite `page`, `limit`, `activo` y `q`. `q` busca por nombre, email o teléfono.
+
+La página predeterminada es `1`, el límite predeterminado es `20` y el máximo es `100`. El orden estable es `createdAt DESC, id DESC`, y la respuesta tiene este formato:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 0,
+    "totalPages": 0
+  }
+}
+```
+
+La matriz inicial de permisos es:
+
+| Operación                    | `OWNER` | `EMPLOYEE` |
+| ---------------------------- | ------- | ---------- |
+| Crear                        | Sí      | Sí         |
+| Listar y consultar           | Sí      | Sí         |
+| Actualizar datos de contacto | Sí      | Sí         |
+| Desactivar o reactivar       | Sí      | No (`403`) |
+
+`DELETE` nunca elimina una fila: establece `activo=false`. Un UUID inexistente o perteneciente a otro tenant responde `404`. Una membresía o empresa inactiva pierde acceso inmediatamente.
+
+Ejemplos, usando un access token emitido después de seleccionar la empresa:
+
+```bash
+curl --request POST http://localhost:3000/api/clientes \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data '{"nombre":"Ana López","telefono":"555-0100","email":"ANA@EXAMPLE.COM"}'
+
+curl 'http://localhost:3000/api/clientes?page=1&limit=20&activo=true&q=ana' \
+  --header "Authorization: Bearer $ACCESS_TOKEN"
+
+curl --request PATCH http://localhost:3000/api/clientes/CLIENTE_UUID \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data '{"telefono":"555-0200","notas":"Prefiere contacto por la tarde"}'
+
+curl --request PATCH http://localhost:3000/api/clientes/CLIENTE_UUID/estado \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data '{"activo":false}'
+```
 
 ## Modelo tenant de vestidos
 

@@ -16,6 +16,8 @@ import { CurrentTenant } from './../src/auth/current-tenant.decorator.js';
 import { JwtAuthGuard } from './../src/auth/jwt-auth.guard.js';
 import { TenantAuthGuard } from './../src/auth/tenant-auth.guard.js';
 import { TenantAuthenticated } from './../src/auth/tenant-authenticated.decorator.js';
+import { ClientesController } from './../src/clientes/clientes.controller.js';
+import { ClientesService } from './../src/clientes/clientes.service.js';
 import { DatabaseHealthService } from './../src/database/database-health.service.js';
 import { DevTenantAdminGuard } from './../src/empresas/dev-tenant-admin.guard.js';
 import { EmpresasController } from './../src/empresas/empresas.controller.js';
@@ -47,6 +49,16 @@ describe('AppController (e2e)', () => {
   const selectedEmpresaId = 'a18c2a56-d33f-4d88-a8e7-42931121e295';
   const sucursalId = 'd18c2a56-d33f-4d88-a8e7-42931121e295';
   const vestidoId = 'e18c2a56-d33f-4d88-a8e7-42931121e295';
+  const clienteId = 'f18c2a56-d33f-4d88-a8e7-42931121e295';
+  const clienteResponse = {
+    id: clienteId,
+    nombre: 'Ana López',
+    telefono: null,
+    email: 'ana@example.com',
+    direccion: null,
+    notas: null,
+    activo: true,
+  };
   const vestidoCreateResponse = {
     id: vestidoId,
     sucursalId,
@@ -85,6 +97,7 @@ describe('AppController (e2e)', () => {
       controllers: [
         AppController,
         AuthController,
+        ClientesController,
         EmpresasController,
         SucursalesController,
         VestidosController,
@@ -122,6 +135,34 @@ describe('AppController (e2e)', () => {
               expiresIn: 900,
             }),
             getProfile: vi.fn().mockReturnValue(authenticatedUser),
+          },
+        },
+        {
+          provide: ClientesService,
+          useValue: {
+            create: vi.fn().mockResolvedValue(clienteResponse),
+            findAll: vi.fn().mockResolvedValue({
+              data: [clienteResponse],
+              pagination: {
+                page: 1,
+                limit: 20,
+                total: 1,
+                totalPages: 1,
+              },
+            }),
+            findOne: vi.fn().mockResolvedValue(clienteResponse),
+            update: vi.fn().mockResolvedValue({
+              ...clienteResponse,
+              telefono: '555-0100',
+            }),
+            updateEstado: vi.fn().mockResolvedValue({
+              ...clienteResponse,
+              activo: false,
+            }),
+            deactivate: vi.fn().mockResolvedValue({
+              ...clienteResponse,
+              activo: false,
+            }),
           },
         },
         {
@@ -463,6 +504,109 @@ describe('AppController (e2e)', () => {
 
   it('/api/sucursales rejects requests without JWT', () => {
     return request(app.getHttpServer()).get('/api/sucursales').expect(401);
+  });
+
+  it('/api/clientes (POST) allows OWNER and normalizes email', () => {
+    return request(app.getHttpServer())
+      .post('/api/clientes')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ nombre: ' Ana López ', email: ' ANA@EXAMPLE.COM ' })
+      .expect(201)
+      .expect(clienteResponse);
+  });
+
+  it('/api/clientes (POST) allows EMPLOYEE', () => {
+    return request(app.getHttpServer())
+      .post('/api/clientes')
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .send({ nombre: 'Ana López', telefono: '555-0100' })
+      .expect(201);
+  });
+
+  it('/api/clientes (GET) returns the paginated list for OWNER', () => {
+    return request(app.getHttpServer())
+      .get('/api/clientes?page=1&limit=20&activo=true&q=ana')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .set('x-empresa-id', 'b28c2a56-d33f-4d88-a8e7-42931121e295')
+      .set('x-schema-name', 'tenant_untrusted')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          data: [clienteResponse],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        });
+        expect(JSON.stringify(response.body)).not.toContain('schemaName');
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
+      });
+  });
+
+  it('/api/clientes (GET) and detail allow EMPLOYEE', async () => {
+    await request(app.getHttpServer())
+      .get('/api/clientes')
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/clientes/${clienteId}`)
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .expect(200)
+      .expect(clienteResponse);
+  });
+
+  it('/api/clientes/:id (PATCH) allows EMPLOYEE contact updates', () => {
+    return request(app.getHttpServer())
+      .patch(`/api/clientes/${clienteId}`)
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .send({ telefono: ' 555-0100 ' })
+      .expect(200)
+      .expect({ ...clienteResponse, telefono: '555-0100' });
+  });
+
+  it('/api/clientes/:id/estado (PATCH) allows OWNER', () => {
+    return request(app.getHttpServer())
+      .patch(`/api/clientes/${clienteId}/estado`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ activo: false })
+      .expect(200)
+      .expect({ ...clienteResponse, activo: false });
+  });
+
+  it('/api/clientes/:id (DELETE) soft-deletes for OWNER', () => {
+    return request(app.getHttpServer())
+      .delete(`/api/clientes/${clienteId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(200)
+      .expect({ ...clienteResponse, activo: false });
+  });
+
+  it.each([
+    ['patch', `/api/clientes/${clienteId}/estado`],
+    ['delete', `/api/clientes/${clienteId}`],
+  ] as const)('returns 403 when EMPLOYEE uses %s %s', (method, path) => {
+    const operation = request(app.getHttpServer())
+      [method](path)
+      .set('Authorization', 'Bearer employee.jwt.token');
+
+    if (method === 'patch') {
+      operation.send({ activo: true });
+    }
+
+    return operation.expect(403);
+  });
+
+  it('/api/clientes/:id (PATCH) rejects activo and tenant selectors', async () => {
+    await request(app.getHttpServer())
+      .patch(`/api/clientes/${clienteId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ activo: false })
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(`/api/clientes?empresaId=${selectedEmpresaId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(400);
+  });
+
+  it('/api/clientes rejects requests without JWT', () => {
+    return request(app.getHttpServer()).get('/api/clientes').expect(401);
   });
 
   it('/api/vestidos (POST) creates a dress for OWNER', () => {

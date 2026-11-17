@@ -8,6 +8,7 @@ export default defineConfig({
     include: [
       'test/tenant-isolation.integration.ts',
       'test/clientes-migration.integration.ts',
+      'test/clientes-crud.integration.ts',
       'test/vestidos-create.integration.ts',
       'test/vestidos-migration.integration.ts',
     ],
