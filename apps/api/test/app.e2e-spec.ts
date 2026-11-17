@@ -280,6 +280,19 @@ describe('AppController (e2e)', () => {
               },
             }),
             findOne: vi.fn().mockResolvedValue(vestidoResponse),
+            findAvailability: vi.fn().mockResolvedValue({
+              data: [vestidoResponse],
+              pagination: {
+                page: 1,
+                limit: 20,
+                total: 1,
+                totalPages: 1,
+              },
+              range: {
+                fechaInicio: new Date('2026-12-10T23:00:00.000Z'),
+                fechaFin: new Date('2026-12-12T23:00:00.000Z'),
+              },
+            }),
             update: vi.fn().mockResolvedValue(vestidoUpdateResponse),
             deactivate: vi.fn().mockResolvedValue({
               ...vestidoUpdateResponse,
@@ -792,6 +805,51 @@ describe('AppController (e2e)', () => {
       .get('/api/vestidos')
       .set('Authorization', 'Bearer employee.jwt.token')
       .expect(200);
+  });
+
+  it.each(['selected.jwt.token', 'employee.jwt.token'])(
+    '/api/vestidos/disponibilidad allows tenant role with %s',
+    (token) =>
+      request(app.getHttpServer())
+        .get('/api/vestidos/disponibilidad')
+        .query({
+          sucursalId,
+          fechaInicio: '2026-12-10T16:00:00-07:00',
+          fechaFin: '2026-12-12T16:00:00-07:00',
+        })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            data: [expect.objectContaining({ id: vestidoId })],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+            range: {
+              fechaInicio: '2026-12-10T23:00:00.000Z',
+              fechaFin: '2026-12-12T23:00:00.000Z',
+            },
+          });
+          expect(JSON.stringify(response.body)).not.toContain('schemaName');
+          expect(JSON.stringify(response.body)).not.toContain('tenant_');
+        }),
+  );
+
+  it('/api/vestidos/disponibilidad rejects unknown tenant selectors', async () => {
+    for (const selector of [
+      { empresaId: selectedEmpresaId },
+      { empresaSlug: 'atelier-norte' },
+      { schemaName: 'tenant_untrusted' },
+    ]) {
+      await request(app.getHttpServer())
+        .get('/api/vestidos/disponibilidad')
+        .query({
+          sucursalId,
+          fechaInicio: '2026-12-10T16:00:00-07:00',
+          fechaFin: '2026-12-12T16:00:00-07:00',
+          ...selector,
+        })
+        .set('Authorization', 'Bearer selected.jwt.token')
+        .expect(400);
+    }
   });
 
   it('/api/vestidos/:id (GET) allows EMPLOYEE', () => {

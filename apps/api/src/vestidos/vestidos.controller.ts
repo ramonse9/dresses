@@ -17,8 +17,10 @@ import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { parseCreateVestidoBody } from './dto/create-vestido.dto.js';
+import { parseDisponibilidadVestidosQuery } from './dto/disponibilidad-vestidos-query.dto.js';
 import { parseListVestidosQuery } from './dto/list-vestidos-query.dto.js';
 import type {
+  DisponibilidadVestidosResponseDto,
   PaginatedVestidosResponseDto,
   VestidoResponseDto,
 } from './dto/vestido-response.dto.js';
@@ -47,6 +49,18 @@ export class VestidosController {
     @Query() query: unknown,
   ): Promise<PaginatedVestidosResponseDto> {
     return this.vestidosService.findAll(tenant, parseListVestidosQuery(query));
+  }
+
+  @Get('disponibilidad')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  findAvailability(
+    @CurrentTenant() tenant: TenantScope,
+    @Query() query: unknown,
+  ): Promise<DisponibilidadVestidosResponseDto> {
+    return this.vestidosService.findAvailability(
+      tenant,
+      parseDisponibilidadVestidosQuery(query),
+    );
   }
 
   @Get(':id')

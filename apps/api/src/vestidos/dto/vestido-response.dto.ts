@@ -31,3 +31,10 @@ export type PaginatedVestidosResponseDto = {
     totalPages: number;
   };
 };
+
+export type DisponibilidadVestidosResponseDto = PaginatedVestidosResponseDto & {
+  range: {
+    fechaInicio: Date;
+    fechaFin: Date;
+  };
+};

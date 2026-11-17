@@ -492,6 +492,53 @@ curl --request POST http://localhost:3000/api/reservaciones \
 
 La respuesta incluye cliente y sucursal básicos, vestidos con sus importes históricos, totales, fechas y estado. No incluye nombres de schemas. Todavía no existen actualización, cancelación, entrega, devolución, pagos ni imágenes.
 
+### Consulta de disponibilidad de vestidos
+
+`GET /api/vestidos/disponibilidad` permite a `OWNER` y `EMPLOYEE` consultar piezas libres para un rango. La ruta estática se registra antes de `GET /api/vestidos/:id` y utiliza los mismos guards JWT, tenant y roles del catálogo.
+
+Son obligatorios `sucursalId`, `fechaInicio` y `fechaFin`. Opcionalmente acepta `talla`, `color`, `estadoOperativo`, `page` y `limit`. La página predeterminada es `1`, el límite predeterminado es `20` y el máximo es `100`. `estadoOperativo` utiliza `DISPONIBLE` por defecto.
+
+```bash
+curl --get http://localhost:3000/api/vestidos/disponibilidad \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --data-urlencode 'sucursalId=b18c2a56-d33f-4d88-a8e7-42931121e295' \
+  --data-urlencode 'fechaInicio=2026-12-10T16:00:00-07:00' \
+  --data-urlencode 'fechaFin=2026-12-12T16:00:00-07:00' \
+  --data-urlencode 'talla=M' \
+  --data-urlencode 'color=Azul' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'limit=20'
+```
+
+La disponibilidad combina dos conceptos independientes:
+
+- Disponibilidad operativa: el campo actual `estadoOperativo` del vestido. Una pieza en `MANTENIMIENTO` no es rentable, aunque no tenga reservaciones.
+- Disponibilidad por calendario: ausencia de reservaciones `CONFIRMADA` o `ENTREGADA` que se solapen con el rango solicitado.
+
+Si se solicita explícitamente `estadoOperativo=MANTENIMIENTO`, el endpoint devuelve las piezas activas de ese estado que estén libres por calendario y conserva `MANTENIMIENTO` en la respuesta. Esto permite inspeccionarlas sin presentarlas como rentables.
+
+La consulta ignora reservaciones `BORRADOR`, `CANCELADA` y `DEVUELTA`, aplica la misma regla semiabierta de solapamiento y permite periodos contiguos. Internamente utiliza un `NOT EXISTS` parametrizado sobre `reservacion_vestidos` y `reservaciones`, junto con los índices por vestido, estado y fechas; la sucursal se carga mediante join y no se realizan consultas por cada pieza.
+
+La respuesta incluye el catálogo actual, precio, depósito, estado operativo, sucursal básica, paginación y el rango normalizado a UTC:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 0,
+    "totalPages": 0
+  },
+  "range": {
+    "fechaInicio": "2026-12-10T23:00:00.000Z",
+    "fechaFin": "2026-12-12T23:00:00.000Z"
+  }
+}
+```
+
+La consulta no crea ni modifica reservaciones y nunca acepta ni expone selectores o nombres de schemas.
+
 ## Modelo tenant de vestidos
 
 Cada fila de `vestidos` representa una pieza física individual y pertenece a una sucursal del mismo tenant. No existe una entidad de vestidos en `public` ni un inventario acumulado por modelo.

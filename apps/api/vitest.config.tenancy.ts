@@ -12,6 +12,7 @@ export default defineConfig({
       'test/reservaciones-migration.integration.ts',
       'test/reservaciones-create.integration.ts',
       'test/vestidos-create.integration.ts',
+      'test/vestidos-disponibilidad.integration.ts',
       'test/vestidos-migration.integration.ts',
     ],
     fileParallelism: false,

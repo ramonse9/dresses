@@ -11,11 +11,14 @@ import {
   Repository,
 } from 'typeorm';
 import { TenantContextService } from '../database/tenant-context.service.js';
+import { ReservacionEstado } from '../reservaciones/entities/reservacion.tenant-entity.js';
 import { Sucursal } from '../sucursales/entities/sucursal.tenant-entity.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import type { CreateVestidoDto } from './dto/create-vestido.dto.js';
+import type { DisponibilidadVestidosQueryDto } from './dto/disponibilidad-vestidos-query.dto.js';
 import type { ListVestidosQueryDto } from './dto/list-vestidos-query.dto.js';
 import type {
+  DisponibilidadVestidosResponseDto,
   PaginatedVestidosResponseDto,
   VestidoResponseDto,
 } from './dto/vestido-response.dto.js';
@@ -117,6 +120,85 @@ export class VestidosService {
       }
 
       return this.toResponse(vestido);
+    });
+  }
+
+  findAvailability(
+    tenant: TenantScope,
+    input: DisponibilidadVestidosQueryDto,
+  ): Promise<DisponibilidadVestidosResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const sucursal = await manager.getRepository(Sucursal).findOne({
+        where: { id: input.sucursalId, activo: true },
+      });
+
+      if (!sucursal) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const query = manager
+        .getRepository(Vestido)
+        .createQueryBuilder('vestido')
+        .innerJoinAndSelect('vestido.sucursal', 'sucursal')
+        .where('vestido.sucursalId = :sucursalId', {
+          sucursalId: input.sucursalId,
+        })
+        .andWhere('vestido.activo = true')
+        .andWhere('vestido.estadoOperativo = :estadoOperativo', {
+          estadoOperativo: input.estadoOperativo,
+        })
+        .andWhere(
+          `NOT EXISTS (
+            SELECT 1
+            FROM "reservacion_vestidos" "detalle"
+            INNER JOIN "reservaciones" "reservacion"
+              ON "reservacion"."id" = "detalle"."reservacion_id"
+            WHERE "detalle"."vestido_id" = "vestido"."id"
+              AND "reservacion"."estado" IN (:...blockingStates)
+              AND "reservacion"."fecha_inicio" < :fechaFin
+              AND "reservacion"."fecha_fin" > :fechaInicio
+          )`,
+          {
+            blockingStates: [
+              ReservacionEstado.CONFIRMADA,
+              ReservacionEstado.ENTREGADA,
+            ],
+            fechaInicio: input.fechaInicio,
+            fechaFin: input.fechaFin,
+          },
+        );
+
+      if (input.talla !== undefined) {
+        query.andWhere('LOWER(vestido.talla) = LOWER(:talla)', {
+          talla: input.talla,
+        });
+      }
+      if (input.color !== undefined) {
+        query.andWhere('LOWER(vestido.color) = LOWER(:color)', {
+          color: input.color,
+        });
+      }
+
+      const [vestidos, total] = await query
+        .orderBy('vestido.createdAt', 'DESC')
+        .addOrderBy('vestido.id', 'DESC')
+        .skip((input.page - 1) * input.limit)
+        .take(input.limit)
+        .getManyAndCount();
+
+      return {
+        data: vestidos.map((vestido) => this.toResponse(vestido)),
+        pagination: {
+          page: input.page,
+          limit: input.limit,
+          total,
+          totalPages: Math.ceil(total / input.limit),
+        },
+        range: {
+          fechaInicio: input.fechaInicio,
+          fechaFin: input.fechaFin,
+        },
+      };
     });
   }
 

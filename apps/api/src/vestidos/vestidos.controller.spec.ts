@@ -67,6 +67,37 @@ describe('VestidosController', () => {
     });
   });
 
+  it('forwards a normalized availability range from the authenticated tenant', async () => {
+    const response = {
+      data: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      range: {
+        fechaInicio: new Date('2026-12-10T23:00:00.000Z'),
+        fechaFin: new Date('2026-12-12T23:00:00.000Z'),
+      },
+    };
+    const findAvailability = vi.fn().mockResolvedValue(response);
+    const controller = new VestidosController({
+      findAvailability,
+    } as unknown as VestidosService);
+
+    await expect(
+      controller.findAvailability(tenant, {
+        sucursalId: 'A18C2A56-D33F-4D88-A8E7-42931121E295',
+        fechaInicio: '2026-12-10T16:00:00-07:00',
+        fechaFin: '2026-12-12T16:00:00-07:00',
+      }),
+    ).resolves.toBe(response);
+    expect(findAvailability).toHaveBeenCalledWith(tenant, {
+      sucursalId: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+      fechaInicio: new Date('2026-12-10T23:00:00.000Z'),
+      fechaFin: new Date('2026-12-12T23:00:00.000Z'),
+      estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
+      page: 1,
+      limit: 20,
+    });
+  });
+
   it('forwards lookup ids only with the authenticated tenant', async () => {
     const response = { id: 'dress-id' };
     const findOne = vi.fn().mockResolvedValue(response);

@@ -4,6 +4,7 @@ import { TenantContextService } from '../database/tenant-context.service.js';
 import { Sucursal } from '../sucursales/entities/sucursal.tenant-entity.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import type { CreateVestidoDto } from './dto/create-vestido.dto.js';
+import type { DisponibilidadVestidosQueryDto } from './dto/disponibilidad-vestidos-query.dto.js';
 import type { ListVestidosQueryDto } from './dto/list-vestidos-query.dto.js';
 import type { UpdateVestidoDto } from './dto/update-vestido.dto.js';
 import {
@@ -222,6 +223,85 @@ describe('VestidosService', () => {
     };
   }
 
+  function buildAvailabilityService(options?: {
+    sucursal?: Sucursal | null;
+    vestidos?: Vestido[];
+    total?: number;
+  }) {
+    const sucursalFindOne = vi
+      .fn()
+      .mockResolvedValue(
+        options && 'sucursal' in options
+          ? options.sucursal
+          : { id: input.sucursalId, activo: true },
+      );
+    const innerJoinAndSelect = vi.fn();
+    const where = vi.fn();
+    const andWhere = vi.fn();
+    const orderBy = vi.fn();
+    const addOrderBy = vi.fn();
+    const skip = vi.fn();
+    const take = vi.fn();
+    const getManyAndCount = vi
+      .fn()
+      .mockResolvedValue([options?.vestidos ?? [], options?.total ?? 0]);
+    const builder = {
+      innerJoinAndSelect,
+      where,
+      andWhere,
+      orderBy,
+      addOrderBy,
+      skip,
+      take,
+      getManyAndCount,
+    };
+
+    for (const method of [
+      innerJoinAndSelect,
+      where,
+      andWhere,
+      orderBy,
+      addOrderBy,
+      skip,
+      take,
+    ]) {
+      method.mockReturnValue(builder);
+    }
+
+    const createQueryBuilder = vi.fn().mockReturnValue(builder);
+    const manager = {
+      getRepository: vi.fn((entity: typeof Sucursal | typeof Vestido) =>
+        entity === Sucursal
+          ? { findOne: sucursalFindOne }
+          : { createQueryBuilder },
+      ),
+    } as unknown as EntityManager;
+    const run = vi.fn(
+      async <T>(
+        scope: TenantScope,
+        operation: (entityManager: EntityManager) => Promise<T>,
+      ) => {
+        expect(scope).toBe(tenant);
+        return operation(manager);
+      },
+    );
+
+    return {
+      service: new VestidosService({ run } as unknown as TenantContextService),
+      run,
+      sucursalFindOne,
+      createQueryBuilder,
+      innerJoinAndSelect,
+      where,
+      andWhere,
+      orderBy,
+      addOrderBy,
+      skip,
+      take,
+      getManyAndCount,
+    };
+  }
+
   it('creates a dress inside the authenticated tenant transaction', async () => {
     const { service, vestido, sucursalFindOne, vestidoCreate, run } =
       buildService();
@@ -362,6 +442,84 @@ describe('VestidosService', () => {
     await expect(
       service.findOne(tenant, 'd18c2a56-d33f-4d88-a8e7-42931121e295'),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('returns an available page with one catalog query and no N+1', async () => {
+    const vestido = buildCatalogVestido();
+    const context = buildAvailabilityService({
+      vestidos: [vestido],
+      total: 21,
+    });
+    const filters: DisponibilidadVestidosQueryDto = {
+      sucursalId: input.sucursalId,
+      fechaInicio: new Date('2026-12-10T23:00:00.000Z'),
+      fechaFin: new Date('2026-12-12T23:00:00.000Z'),
+      talla: 'M',
+      color: 'Azul',
+      estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
+      page: 2,
+      limit: 20,
+    };
+
+    await expect(
+      context.service.findAvailability(tenant, filters),
+    ).resolves.toEqual({
+      data: [expect.objectContaining({ id: vestido.id })],
+      pagination: { page: 2, limit: 20, total: 21, totalPages: 2 },
+      range: {
+        fechaInicio: filters.fechaInicio,
+        fechaFin: filters.fechaFin,
+      },
+    });
+    expect(context.run).toHaveBeenCalledOnce();
+    expect(context.sucursalFindOne).toHaveBeenCalledWith({
+      where: { id: input.sucursalId, activo: true },
+    });
+    expect(context.createQueryBuilder).toHaveBeenCalledOnce();
+    expect(context.getManyAndCount).toHaveBeenCalledOnce();
+    expect(context.innerJoinAndSelect).toHaveBeenCalledWith(
+      'vestido.sucursal',
+      'sucursal',
+    );
+    expect(context.where).toHaveBeenCalledWith(
+      'vestido.sucursalId = :sucursalId',
+      { sucursalId: input.sucursalId },
+    );
+    expect(context.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('NOT EXISTS'),
+      expect.objectContaining({
+        fechaInicio: filters.fechaInicio,
+        fechaFin: filters.fechaFin,
+      }),
+    );
+    expect(context.andWhere).toHaveBeenCalledWith(
+      'LOWER(vestido.talla) = LOWER(:talla)',
+      { talla: 'M' },
+    );
+    expect(context.andWhere).toHaveBeenCalledWith(
+      'LOWER(vestido.color) = LOWER(:color)',
+      { color: 'Azul' },
+    );
+    expect(context.orderBy).toHaveBeenCalledWith('vestido.createdAt', 'DESC');
+    expect(context.addOrderBy).toHaveBeenCalledWith('vestido.id', 'DESC');
+    expect(context.skip).toHaveBeenCalledWith(20);
+    expect(context.take).toHaveBeenCalledWith(20);
+  });
+
+  it('returns 404 before querying dresses for an inactive or foreign branch', async () => {
+    const context = buildAvailabilityService({ sucursal: null });
+
+    await expect(
+      context.service.findAvailability(tenant, {
+        sucursalId: input.sucursalId,
+        fechaInicio: new Date('2026-12-10T23:00:00.000Z'),
+        fechaFin: new Date('2026-12-12T23:00:00.000Z'),
+        estadoOperativo: VestidoEstadoOperativo.DISPONIBLE,
+        page: 1,
+        limit: 20,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(context.createQueryBuilder).not.toHaveBeenCalled();
   });
 
   it('updates, transfers and reactivates a dress in one tenant transaction', async () => {
