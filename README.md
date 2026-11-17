@@ -423,7 +423,7 @@ El estado predeterminado es `BORRADOR`. Esta etapa solamente define los estados 
 
 `fecha_inicio` y `fecha_fin` usan `timestamptz` y forman un rango semiabierto `[fechaInicio, fechaFin)`: el inicio pertenece a la reservación y el instante final no. Por ello, una reservación puede terminar exactamente cuando comienza otra. PostgreSQL exige `fecha_fin > fecha_inicio`; las APIs posteriores deberán recibir fechas ISO 8601 con zona horaria explícita.
 
-No existe todavía una restricción de solapamiento ni una consulta de disponibilidad. Esas reglas se implementarán al crear el flujo seguro de reservaciones.
+No existe una restricción de exclusión en la tabla. El flujo de creación confirmada comprueba los solapamientos de forma transaccional; una consulta independiente de disponibilidad se implementará posteriormente.
 
 Las llaves foráneas hacia cliente, sucursal y vestido apuntan a tablas del mismo schema tenant y usan `ON DELETE RESTRICT`. Una reservación no puede repetir el mismo vestido porque `reservacion_id + vestido_id` es único. Los índices cubren consultas por cliente, sucursal, estado, fechas, reservación y vestido.
 
@@ -433,7 +433,64 @@ La migration tenant `CreateReservaciones1795215600000` se aplica automáticament
 npm run tenant:migration:run
 ```
 
-No existen tablas de reservaciones en `public` ni endpoints de reservaciones en esta etapa.
+No existen tablas de reservaciones en `public`.
+
+### Creación segura de reservaciones
+
+`POST /api/reservaciones` permite crear reservaciones a membresías activas `OWNER` y `EMPLOYEE`. La ruta utiliza `JwtAuthGuard`, `TenantAuthGuard` y `RolesGuard`; el tenant se obtiene exclusivamente del `TenantScope` autenticado.
+
+El cuerpo acepta únicamente:
+
+```json
+{
+  "clienteId": "a18c2a56-d33f-4d88-a8e7-42931121e295",
+  "sucursalId": "b18c2a56-d33f-4d88-a8e7-42931121e295",
+  "vestidoIds": ["c18c2a56-d33f-4d88-a8e7-42931121e295"],
+  "fechaInicio": "2026-12-10T16:00:00-07:00",
+  "fechaFin": "2026-12-12T16:00:00-07:00",
+  "notas": "Entrega por la tarde",
+  "confirmar": true
+}
+```
+
+`confirmar` es opcional y vale `true` por defecto. `true` crea una reservación `CONFIRMADA`; `false` crea un `BORRADOR`. Se exige entre 1 y 50 vestidos sin UUID repetidos, fechas ISO 8601 con zona horaria explícita y `fechaFin > fechaInicio`. Los campos desconocidos, importes, totales, estados y selectores de tenant son rechazados.
+
+Dentro de una única llamada a `TenantContextService.run()`, el backend:
+
+1. Comprueba que cliente y sucursal estén activos en el tenant autenticado.
+2. Realiza una comprobación rápida de conflictos y, si no encuentra ninguno, adquiere advisory locks transaccionales por vestido en orden de UUID.
+3. Valida que todos los vestidos estén activos, disponibles operativamente y pertenezcan a la sucursal.
+4. Consulta nuevamente los conflictos después de adquirir los locks.
+5. Copia precios y depósitos, suma los importes con aritmética decimal basada en `bigint` y guarda cabecera y detalles.
+6. Confirma la transacción únicamente si todos los pasos terminan correctamente.
+
+Las claves de lock se derivan internamente de `empresaId` verificado y `vestidoId`; no se reciben del cliente. Los locks son `pg_advisory_xact_lock`, por lo que PostgreSQL los libera automáticamente en `COMMIT` o `ROLLBACK`. El orden estable evita deadlocks entre reservaciones con varios vestidos.
+
+Solamente `CONFIRMADA` y `ENTREGADA` bloquean disponibilidad. La consulta utiliza el rango semiabierto:
+
+```text
+existente.fechaInicio < nueva.fechaFin
+AND existente.fechaFin > nueva.fechaInicio
+```
+
+Por ello los rangos contiguos están permitidos. Los borradores pueden solaparse; un conflicto al confirmar responde `409` sin indicar cuál pieza causó el conflicto. Cualquier fallo revierte tanto la cabecera como los detalles y libera los locks.
+
+Ejemplo:
+
+```bash
+curl --request POST http://localhost:3000/api/reservaciones \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "clienteId":"a18c2a56-d33f-4d88-a8e7-42931121e295",
+    "sucursalId":"b18c2a56-d33f-4d88-a8e7-42931121e295",
+    "vestidoIds":["c18c2a56-d33f-4d88-a8e7-42931121e295"],
+    "fechaInicio":"2026-12-10T16:00:00-07:00",
+    "fechaFin":"2026-12-12T16:00:00-07:00"
+  }'
+```
+
+La respuesta incluye cliente y sucursal básicos, vestidos con sus importes históricos, totales, fechas y estado. No incluye nombres de schemas. Todavía no existen actualización, cancelación, entrega, devolución, pagos ni imágenes.
 
 ## Modelo tenant de vestidos
 

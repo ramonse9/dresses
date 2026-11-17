@@ -22,6 +22,9 @@ import { DatabaseHealthService } from './../src/database/database-health.service
 import { DevTenantAdminGuard } from './../src/empresas/dev-tenant-admin.guard.js';
 import { EmpresasController } from './../src/empresas/empresas.controller.js';
 import { EmpresasService } from './../src/empresas/empresas.service.js';
+import { ReservacionEstado } from './../src/reservaciones/entities/reservacion.tenant-entity.js';
+import { ReservacionesController } from './../src/reservaciones/reservaciones.controller.js';
+import { ReservacionesService } from './../src/reservaciones/reservaciones.service.js';
 import { SucursalesController } from './../src/sucursales/sucursales.controller.js';
 import { SucursalesService } from './../src/sucursales/sucursales.service.js';
 import type { TenantScope } from './../src/tenancy/tenant-scope.js';
@@ -50,6 +53,7 @@ describe('AppController (e2e)', () => {
   const sucursalId = 'd18c2a56-d33f-4d88-a8e7-42931121e295';
   const vestidoId = 'e18c2a56-d33f-4d88-a8e7-42931121e295';
   const clienteId = 'f18c2a56-d33f-4d88-a8e7-42931121e295';
+  const reservacionId = '918c2a56-d33f-4d88-a8e7-42931121e295';
   const clienteResponse = {
     id: clienteId,
     nombre: 'Ana López',
@@ -85,6 +89,36 @@ describe('AppController (e2e)', () => {
     nombre: 'Vestido Rojo',
     activo: true,
   };
+  const reservacionResponse = {
+    id: reservacionId,
+    cliente: {
+      id: clienteId,
+      nombre: 'Ana López',
+      telefono: null,
+      email: 'ana@example.com',
+    },
+    sucursal: { id: sucursalId, nombre: 'Centro' },
+    vestidos: [
+      {
+        id: vestidoId,
+        codigo: 'V-001',
+        nombre: 'Vestido Azul',
+        talla: 'M',
+        color: 'Azul',
+        precioRenta: '1250.50',
+        deposito: '0.00',
+      },
+    ],
+    fechaInicio: new Date('2026-12-10T23:00:00.000Z'),
+    fechaFin: new Date('2026-12-12T23:00:00.000Z'),
+    estado: ReservacionEstado.CONFIRMADA,
+    notas: null,
+    importeRenta: '1250.50',
+    depositoRequerido: '0.00',
+    confirmadaAt: new Date('2026-11-17T20:00:00.000Z'),
+    createdAt: new Date('2026-11-17T20:00:00.000Z'),
+    updatedAt: new Date('2026-11-17T20:00:00.000Z'),
+  };
 
   const authenticatedUser = {
     sub: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
@@ -99,6 +133,7 @@ describe('AppController (e2e)', () => {
         AuthController,
         ClientesController,
         EmpresasController,
+        ReservacionesController,
         SucursalesController,
         VestidosController,
         TenantProbeController,
@@ -181,6 +216,12 @@ describe('AppController (e2e)', () => {
               schemaName: 'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
               activo: true,
             }),
+          },
+        },
+        {
+          provide: ReservacionesService,
+          useValue: {
+            create: vi.fn().mockResolvedValue(reservacionResponse),
           },
         },
         {
@@ -607,6 +648,57 @@ describe('AppController (e2e)', () => {
 
   it('/api/clientes rejects requests without JWT', () => {
     return request(app.getHttpServer()).get('/api/clientes').expect(401);
+  });
+
+  it.each(['selected.jwt.token', 'employee.jwt.token'])(
+    '/api/reservaciones (POST) allows an authenticated tenant role with %s',
+    (token) =>
+      request(app.getHttpServer())
+        .post('/api/reservaciones')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          clienteId,
+          sucursalId,
+          vestidoIds: [vestidoId],
+          fechaInicio: '2026-12-10T16:00:00-07:00',
+          fechaFin: '2026-12-12T16:00:00-07:00',
+        })
+        .expect(201)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            id: reservacionId,
+            estado: ReservacionEstado.CONFIRMADA,
+            importeRenta: '1250.50',
+          });
+          expect(JSON.stringify(response.body)).not.toContain('schemaName');
+          expect(JSON.stringify(response.body)).not.toContain('tenant_');
+        }),
+  );
+
+  it('/api/reservaciones rejects client-controlled totals and tenant selectors', async () => {
+    for (const extra of [
+      { importeRenta: '1.00' },
+      { estado: 'CONFIRMADA' },
+      { empresaId: selectedEmpresaId },
+      { schemaName: 'tenant_untrusted' },
+    ]) {
+      await request(app.getHttpServer())
+        .post('/api/reservaciones')
+        .set('Authorization', 'Bearer selected.jwt.token')
+        .send({
+          clienteId,
+          sucursalId,
+          vestidoIds: [vestidoId],
+          fechaInicio: '2026-12-10T16:00:00-07:00',
+          fechaFin: '2026-12-12T16:00:00-07:00',
+          ...extra,
+        })
+        .expect(400);
+    }
+  });
+
+  it('/api/reservaciones rejects requests without JWT', () => {
+    return request(app.getHttpServer()).post('/api/reservaciones').expect(401);
   });
 
   it('/api/vestidos (POST) creates a dress for OWNER', () => {
