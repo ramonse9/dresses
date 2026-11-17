@@ -282,7 +282,7 @@ El backend genera el UUID y `schemaName`; el cliente no puede proporcionar el no
 }
 ```
 
-La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. Las migrations del tenant crean su tabla de control y las tablas `sucursales` y `vestidos`.
+La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. Las migrations del tenant crean su tabla de control y las tablas `sucursales`, `vestidos` y `clientes`.
 
 Verifica el registro y el schema desde `psql`:
 
@@ -301,6 +301,33 @@ npm run tenant:migration:run
 ```
 
 El comando obtiene internamente los nombres de schema desde `public.empresas`, valida cada nombre con la convención segura del backend y usa un bloqueo transaccional por tenant. No recibe schemas desde argumentos del cliente y puede ejecutarse nuevamente sin duplicar migrations.
+
+## Modelo tenant de clientes
+
+Cada fila de `clientes` pertenece exclusivamente al schema de una empresa. No existe una tabla ni entidad de clientes en `public`.
+
+| Campo                      | Tipo PostgreSQL | Regla principal                      |
+| -------------------------- | --------------- | ------------------------------------ |
+| `id`                       | `uuid`          | Llave primaria                       |
+| `nombre`                   | `varchar(160)`  | Obligatorio y sin espacios laterales |
+| `telefono`                 | `varchar(40)`   | Opcional                             |
+| `email`                    | `varchar(254)`  | Opcional, almacenado en minúsculas   |
+| `direccion`                | `varchar(255)`  | Opcional                             |
+| `notas`                    | `varchar(2000)` | Opcional                             |
+| `activo`                   | `boolean`       | `true` por defecto                   |
+| `created_at`, `updated_at` | `timestamptz`   | Fechas administradas por TypeORM     |
+
+Todo cliente debe tener al menos teléfono o email. La entidad elimina espacios laterales, convierte el email a minúsculas y transforma cadenas opcionales vacías en `null`. Las restricciones PostgreSQL impiden guardar nombres vacíos, contactos ausentes o valores sin normalizar mediante escritura directa.
+
+Teléfono y email no son únicos: varias personas pueden compartirlos. La migration `CreateClientes1794956400000` crea índices no únicos para nombre y email normalizados, teléfono y el listado por `activo`, `createdAt` e `id`.
+
+Los tenants nuevos reciben la tabla durante su creación. Para aplicarla a schemas existentes:
+
+```bash
+npm run tenant:migration:run
+```
+
+El UUID de `clientes` queda preparado para la futura relación `clienteId` de reservaciones. Todavía no existen endpoints, historial de rentas, documentos, imágenes ni deduplicación automática de clientes.
 
 ## Modelo tenant de vestidos
 

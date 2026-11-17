@@ -5,6 +5,7 @@ import { InitializeTenant1794377000000 } from './1794377000000-initialize-tenant
 import { CreateSucursales1794378000000 } from './1794378000000-create-sucursales.js';
 import { CreateVestidos1794697200000 } from './1794697200000-create-vestidos.js';
 import { OptimizeVestidosCatalog1794783600000 } from './1794783600000-optimize-vestidos-catalog.js';
+import { CreateClientes1794956400000 } from './1794956400000-create-clientes.js';
 import { TenantMigration } from './tenant-migration.js';
 
 const tenantMigrations: readonly TenantMigration[] = [
@@ -12,6 +13,7 @@ const tenantMigrations: readonly TenantMigration[] = [
   new CreateSucursales1794378000000(),
   new CreateVestidos1794697200000(),
   new OptimizeVestidosCatalog1794783600000(),
+  new CreateClientes1794956400000(),
 ];
 
 @Injectable()
