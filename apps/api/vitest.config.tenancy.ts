@@ -11,6 +11,7 @@ export default defineConfig({
       'test/clientes-crud.integration.ts',
       'test/reservaciones-migration.integration.ts',
       'test/reservaciones-create.integration.ts',
+      'test/reservaciones-lifecycle.integration.ts',
       'test/reservaciones-query-update.integration.ts',
       'test/vestidos-create.integration.ts',
       'test/vestidos-disponibilidad.integration.ts',

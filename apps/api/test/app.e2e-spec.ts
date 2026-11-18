@@ -246,6 +246,24 @@ describe('AppController (e2e)', () => {
               ...reservacionResponse,
               notas: 'Actualizada',
             }),
+            confirm: vi.fn().mockResolvedValue(reservacionResponse),
+            deliver: vi.fn().mockResolvedValue({
+              ...reservacionResponse,
+              estado: ReservacionEstado.ENTREGADA,
+              entregadaAt: new Date('2026-11-18T20:00:00.000Z'),
+            }),
+            returnReservation: vi.fn().mockResolvedValue({
+              ...reservacionResponse,
+              estado: ReservacionEstado.DEVUELTA,
+              entregadaAt: new Date('2026-11-18T20:00:00.000Z'),
+              devueltaAt: new Date('2026-11-19T20:00:00.000Z'),
+            }),
+            cancel: vi.fn().mockResolvedValue({
+              ...reservacionResponse,
+              estado: ReservacionEstado.CANCELADA,
+              canceladaAt: new Date('2026-11-18T20:00:00.000Z'),
+              motivoCancelacion: 'Cambio de planes',
+            }),
           },
         },
         {
@@ -826,6 +844,73 @@ describe('AppController (e2e)', () => {
       .get(`/api/reservaciones?empresaId=${selectedEmpresaId}`)
       .set('Authorization', 'Bearer selected.jwt.token')
       .expect(400);
+  });
+
+  it.each(['selected.jwt.token', 'employee.jwt.token'])(
+    '/api/reservaciones/:id/confirmar allows %s',
+    (token) =>
+      request(app.getHttpServer())
+        .post(`/api/reservaciones/${reservacionId}/confirmar`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(201)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            id: reservacionId,
+            estado: ReservacionEstado.CONFIRMADA,
+          });
+        }),
+  );
+
+  it.each([
+    ['entregar', ReservacionEstado.ENTREGADA],
+    ['devolver', ReservacionEstado.DEVUELTA],
+  ] as const)(
+    '/api/reservaciones/:id/%s allows OWNER and EMPLOYEE',
+    async (operation, estado) => {
+      for (const token of ['selected.jwt.token', 'employee.jwt.token']) {
+        await request(app.getHttpServer())
+          .post(`/api/reservaciones/${reservacionId}/${operation}`)
+          .set('Authorization', `Bearer ${token}`)
+          .expect(201)
+          .expect((response) => {
+            expect(response.body).toMatchObject({ id: reservacionId, estado });
+          });
+      }
+    },
+  );
+
+  it('/api/reservaciones/:id/cancelar allows OWNER with a normalized reason', () => {
+    return request(app.getHttpServer())
+      .post(`/api/reservaciones/${reservacionId}/cancelar`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ motivo: '  Cambio de planes  ' })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: reservacionId,
+          estado: ReservacionEstado.CANCELADA,
+          motivoCancelacion: 'Cambio de planes',
+        });
+      });
+  });
+
+  it('/api/reservaciones/:id/cancelar returns 403 for EMPLOYEE', () => {
+    return request(app.getHttpServer())
+      .post(`/api/reservaciones/${reservacionId}/cancelar`)
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .send({ motivo: 'No autorizado' })
+      .expect(403);
+  });
+
+  it('/api/reservaciones lifecycle rejects unknown fields and requests without JWT', async () => {
+    await request(app.getHttpServer())
+      .post(`/api/reservaciones/${reservacionId}/cancelar`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ estado: ReservacionEstado.CANCELADA })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/reservaciones/${reservacionId}/confirmar`)
+      .expect(401);
   });
 
   it('/api/vestidos (POST) creates a dress for OWNER', () => {

@@ -1,6 +1,6 @@
 # Dresses SaaS
 
-Base de un SaaS multi-tenant para negocios de renta de vestidos. El proyecto contiene una aplicación web, un API con autenticación JWT y la infraestructura local de PostgreSQL con TypeORM. Incluye clientes, catálogo, disponibilidad y creación y consulta de reservaciones aisladas por tenant.
+Base de un SaaS multi-tenant para negocios de renta de vestidos. El proyecto contiene una aplicación web, un API con autenticación JWT y la infraestructura local de PostgreSQL con TypeORM. Incluye clientes, catálogo, disponibilidad y reservaciones con ciclo de vida controlado, aisladas por tenant.
 
 ## Tecnologías
 
@@ -548,6 +548,64 @@ curl --request PATCH http://localhost:3000/api/reservaciones/RESERVACION_UUID \
 Solamente `BORRADOR` y `CONFIRMADA` son editables. Para cambios estructurales se vuelven a validar referencias activas, sucursal y rango. Los vestidos existentes conservan sus snapshots; las piezas agregadas toman los importes actuales y los totales se recalculan con aritmética decimal exacta.
 
 Las confirmadas bloquean la fila de reservación y la unión ordenada de vestidos anteriores y nuevos, excluyen su propio UUID al buscar solapamientos y responden `409` ante conflictos. Los borradores pueden solaparse. Todo se ejecuta en una única transacción tenant. `ENTREGADA`, `DEVUELTA` y `CANCELADA` responden `409`; sus transiciones de estado no forman parte de este `PATCH`.
+
+### Ciclo de vida de la renta
+
+Las transiciones se exponen como operaciones explícitas; no existe un endpoint genérico para enviar un estado arbitrario:
+
+```text
+POST /api/reservaciones/:id/confirmar
+POST /api/reservaciones/:id/entregar
+POST /api/reservaciones/:id/devolver
+POST /api/reservaciones/:id/cancelar
+```
+
+El diagrama permitido es:
+
+```text
+BORRADOR ── confirmar ──> CONFIRMADA ── entregar ──> ENTREGADA ── devolver ──> DEVUELTA
+BORRADOR ── cancelar ────────────────────────────────────────────> CANCELADA
+CONFIRMADA ── cancelar ─────────────────────────────────────────> CANCELADA
+```
+
+`DEVUELTA` y `CANCELADA` son terminales. Cualquier salto, repetición o transición fuera del diagrama responde `409`.
+
+| Operación | OWNER     | EMPLOYEE  |
+| --------- | --------- | --------- |
+| Confirmar | Permitido | Permitido |
+| Entregar  | Permitido | Permitido |
+| Devolver  | Permitido | Permitido |
+| Cancelar  | Permitido | `403`     |
+
+El rol se obtiene de la membresía vigente comprobada por `TenantAuthGuard` y `RolesGuard`; desactivar la membresía o empresa revoca inmediatamente estas operaciones.
+
+Al confirmar un borrador, la transacción bloquea primero la reservación, adquiere advisory locks por vestido en orden estable y vuelve a comprobar cliente, sucursal, catálogo y solapamientos. Esto impide que dos borradores solapados confirmen simultáneamente la misma pieza. La confirmación establece `confirmadaAt`.
+
+La entrega exige una reservación `CONFIRMADA`, vuelve a comprobar que las piezas estén activas y operativamente disponibles y establece `entregadaAt`. No cambia `estadoOperativo`: ese campo continúa representando mantenimiento, no ocupación por calendario. La devolución exige `ENTREGADA`, establece `devueltaAt` y libera la disponibilidad porque `DEVUELTA` no bloquea fechas.
+
+La cancelación solo admite `BORRADOR` o `CONFIRMADA`, establece `canceladaAt` y libera inmediatamente la disponibilidad. Su cuerpo es opcional y acepta únicamente un motivo de hasta 1,000 caracteres:
+
+```bash
+curl --request POST http://localhost:3000/api/reservaciones/RESERVACION_UUID/cancelar \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data '{"motivo":"Cambio de planes"}'
+```
+
+Ejemplo de avance normal:
+
+```bash
+curl --request POST http://localhost:3000/api/reservaciones/RESERVACION_UUID/confirmar \
+  --header "Authorization: Bearer $ACCESS_TOKEN"
+
+curl --request POST http://localhost:3000/api/reservaciones/RESERVACION_UUID/entregar \
+  --header "Authorization: Bearer $ACCESS_TOKEN"
+
+curl --request POST http://localhost:3000/api/reservaciones/RESERVACION_UUID/devolver \
+  --header "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+Todas las transiciones usan `TenantContextService`, `SET LOCAL search_path` y un lock de escritura sobre la fila antes de evaluar el estado. Los UUID de otro tenant responden `404` y ninguna respuesta incluye nombres de schemas. Todavía no se gestionan pagos, reembolsos, daños, mantenimiento automático, imágenes ni auditoría completa.
 
 ### Consulta de disponibilidad de vestidos
 

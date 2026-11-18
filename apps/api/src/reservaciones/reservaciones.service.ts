@@ -13,6 +13,7 @@ import {
   Vestido,
   VestidoEstadoOperativo,
 } from '../vestidos/entities/vestido.tenant-entity.js';
+import type { CancelReservacionDto } from './dto/cancel-reservacion.dto.js';
 import type { CreateReservacionDto } from './dto/create-reservacion.dto.js';
 import type { ListReservacionesQueryDto } from './dto/list-reservaciones-query.dto.js';
 import type {
@@ -383,6 +384,157 @@ export class ReservacionesService {
 
       return this.toDetailResponse(updated);
     });
+  }
+
+  confirm(tenant: TenantScope, id: string): Promise<ReservacionResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const reservacion = await this.requireLockedReservation(manager, id);
+      this.requireState(reservacion, ReservacionEstado.BORRADOR);
+
+      const vestidoIds = await this.loadReservationDressIds(manager, id);
+      const lockOrder = [...vestidoIds].sort();
+
+      await this.acquireDressLocks(manager, tenant, lockOrder);
+      await this.requireActiveCliente(manager, reservacion.clienteId);
+      await this.requireActiveSucursal(manager, reservacion.sucursalId);
+      await this.requireAvailableCatalogDresses(
+        manager,
+        { sucursalId: reservacion.sucursalId, vestidoIds },
+        lockOrder,
+      );
+      await this.ensureNoBlockingOverlap(
+        manager,
+        {
+          vestidoIds,
+          fechaInicio: reservacion.fechaInicio,
+          fechaFin: reservacion.fechaFin,
+        },
+        reservacion.id,
+      );
+
+      reservacion.estado = ReservacionEstado.CONFIRMADA;
+      reservacion.confirmadaAt = new Date();
+      await manager.getRepository(Reservacion).save(reservacion);
+
+      return this.requireReservationDetail(manager, reservacion.id);
+    });
+  }
+
+  deliver(tenant: TenantScope, id: string): Promise<ReservacionResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const reservacion = await this.requireLockedReservation(manager, id);
+      this.requireState(reservacion, ReservacionEstado.CONFIRMADA);
+
+      const vestidoIds = await this.loadReservationDressIds(manager, id);
+      await this.requireAvailableCatalogDresses(
+        manager,
+        { sucursalId: reservacion.sucursalId, vestidoIds },
+        [...vestidoIds].sort(),
+      );
+
+      reservacion.estado = ReservacionEstado.ENTREGADA;
+      reservacion.entregadaAt = new Date();
+      await manager.getRepository(Reservacion).save(reservacion);
+
+      return this.requireReservationDetail(manager, reservacion.id);
+    });
+  }
+
+  returnReservation(
+    tenant: TenantScope,
+    id: string,
+  ): Promise<ReservacionResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const reservacion = await this.requireLockedReservation(manager, id);
+      this.requireState(reservacion, ReservacionEstado.ENTREGADA);
+
+      reservacion.estado = ReservacionEstado.DEVUELTA;
+      reservacion.devueltaAt = new Date();
+      await manager.getRepository(Reservacion).save(reservacion);
+
+      return this.requireReservationDetail(manager, reservacion.id);
+    });
+  }
+
+  cancel(
+    tenant: TenantScope,
+    id: string,
+    input: CancelReservacionDto,
+  ): Promise<ReservacionResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const reservacion = await this.requireLockedReservation(manager, id);
+
+      if (
+        reservacion.estado !== ReservacionEstado.BORRADOR &&
+        reservacion.estado !== ReservacionEstado.CONFIRMADA
+      ) {
+        throw new ConflictException('Transición de estado no permitida');
+      }
+
+      reservacion.estado = ReservacionEstado.CANCELADA;
+      reservacion.canceladaAt = new Date();
+      reservacion.motivoCancelacion = input.motivo;
+      await manager.getRepository(Reservacion).save(reservacion);
+
+      return this.requireReservationDetail(manager, reservacion.id);
+    });
+  }
+
+  private async requireLockedReservation(
+    manager: EntityManager,
+    id: string,
+  ): Promise<Reservacion> {
+    const reservacion = await manager
+      .getRepository(Reservacion)
+      .createQueryBuilder('reservacion')
+      .where('reservacion.id = :id', { id })
+      .setLock('pessimistic_write')
+      .getOne();
+
+    if (!reservacion) {
+      throw new NotFoundException('Reservación no encontrada');
+    }
+
+    return reservacion;
+  }
+
+  private requireState(
+    reservacion: Reservacion,
+    expected: ReservacionEstado,
+  ): void {
+    if (reservacion.estado !== expected) {
+      throw new ConflictException('Transición de estado no permitida');
+    }
+  }
+
+  private async loadReservationDressIds(
+    manager: EntityManager,
+    reservacionId: string,
+  ): Promise<string[]> {
+    const details = await manager.getRepository(ReservacionVestido).find({
+      select: { vestidoId: true },
+      where: { reservacionId },
+      order: { vestidoId: 'ASC' },
+    });
+
+    if (details.length === 0) {
+      throw new ConflictException('La reservación no contiene vestidos');
+    }
+
+    return details.map(({ vestidoId }) => vestidoId);
+  }
+
+  private async requireReservationDetail(
+    manager: EntityManager,
+    id: string,
+  ): Promise<ReservacionResponseDto> {
+    const reservacion = await this.loadReservationDetail(manager, id);
+
+    if (!reservacion) {
+      throw new NotFoundException('Reservación no encontrada');
+    }
+
+    return this.toDetailResponse(reservacion);
   }
 
   private async requireActiveCliente(

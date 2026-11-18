@@ -98,4 +98,41 @@ describe('ReservacionesController', () => {
       notas: 'Cambio',
     });
   });
+
+  it.each([
+    ['confirm', 'confirm'],
+    ['deliver', 'deliver'],
+    ['returnReservation', 'returnReservation'],
+  ] as const)(
+    'forwards %s without accepting a state',
+    async (method, serviceMethod) => {
+      const response = { id: 'reservation-id' };
+      const operation = vi.fn().mockResolvedValue(response);
+      const controller = new ReservacionesController({
+        [serviceMethod]: operation,
+      } as unknown as ReservacionesService);
+
+      await expect(controller[method](tenant, 'reservation-id')).resolves.toBe(
+        response,
+      );
+      expect(operation).toHaveBeenCalledWith(tenant, 'reservation-id');
+    },
+  );
+
+  it('normalizes the optional cancellation reason', async () => {
+    const response = { id: 'reservation-id' };
+    const cancel = vi.fn().mockResolvedValue(response);
+    const controller = new ReservacionesController({
+      cancel,
+    } as unknown as ReservacionesService);
+
+    await expect(
+      controller.cancel(tenant, 'reservation-id', {
+        motivo: '  Cambio de planes  ',
+      }),
+    ).resolves.toBe(response);
+    expect(cancel).toHaveBeenCalledWith(tenant, 'reservation-id', {
+      motivo: 'Cambio de planes',
+    });
+  });
 });

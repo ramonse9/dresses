@@ -433,6 +433,39 @@ describe('PostgreSQL authenticated empresa selection', () => {
         fechaFin: '2027-11-12T16:00:00-07:00',
       })
       .expect(201);
+    const cancelDraftAResponse = await request(app.getHttpServer())
+      .post('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({
+        clienteId: clienteAResponse.body.id,
+        sucursalId: sucursalAResponse.body.id,
+        vestidoIds: [vestidoAResponse.body.id],
+        fechaInicio: '2027-12-10T16:00:00-07:00',
+        fechaFin: '2027-12-12T16:00:00-07:00',
+        confirmar: false,
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(
+        `/api/reservaciones/${String(cancelDraftAResponse.body.id)}/cancelar`,
+      )
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({ motivo: ' Cambio de planes ' })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          estado: 'CANCELADA',
+          motivoCancelacion: 'Cambio de planes',
+        });
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
+      });
+    await request(app.getHttpServer())
+      .post(
+        `/api/reservaciones/${String(reservacionBResponse.body.id)}/cancelar`,
+      )
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({ motivo: 'No autorizado' })
+      .expect(403);
     await request(app.getHttpServer())
       .get('/api/reservaciones')
       .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
@@ -749,6 +782,31 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .send({ notas: 'Actualizada con membresía EMPLOYEE vigente' })
       .expect(200);
     await request(app.getHttpServer())
+      .post(
+        `/api/reservaciones/${String(reservacionAResponse.body.id)}/entregar`,
+      )
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({ estado: 'ENTREGADA' });
+      });
+    await request(app.getHttpServer())
+      .post(
+        `/api/reservaciones/${String(reservacionAResponse.body.id)}/devolver`,
+      )
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({ estado: 'DEVUELTA' });
+      });
+    await request(app.getHttpServer())
+      .post(
+        `/api/reservaciones/${String(reservacionAResponse.body.id)}/cancelar`,
+      )
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({ motivo: 'No autorizado' })
+      .expect(403);
+    await request(app.getHttpServer())
       .post('/api/vestidos')
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
       .send({
@@ -793,6 +851,12 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .get('/api/reservaciones')
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
       .expect(403);
+    await request(app.getHttpServer())
+      .post(
+        `/api/reservaciones/${String(reservacionAResponse.body.id)}/confirmar`,
+      )
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(403);
     await expect(
       authService.selectEmpresa(payloadA, { empresaId: empresaA.id }),
     ).rejects.toThrow('No tienes acceso a esta empresa');
@@ -813,6 +877,12 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .expect(403);
     await request(app.getHttpServer())
       .get('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .post(
+        `/api/reservaciones/${String(reservacionBResponse.body.id)}/entregar`,
+      )
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .expect(403);
     await expect(authService.listEmpresas(payloadA)).resolves.toEqual([]);

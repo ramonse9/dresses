@@ -13,6 +13,7 @@ import { Roles } from '../auth/roles.decorator.js';
 import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
+import { parseCancelReservacionBody } from './dto/cancel-reservacion.dto.js';
 import { parseCreateReservacionBody } from './dto/create-reservacion.dto.js';
 import { parseListReservacionesQuery } from './dto/list-reservaciones-query.dto.js';
 import type {
@@ -71,6 +72,47 @@ export class ReservacionesController {
       tenant,
       id,
       parseUpdateReservacionBody(body),
+    );
+  }
+
+  @Post(':id/confirmar')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  confirm(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ReservacionResponseDto> {
+    return this.reservacionesService.confirm(tenant, id);
+  }
+
+  @Post(':id/entregar')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  deliver(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ReservacionResponseDto> {
+    return this.reservacionesService.deliver(tenant, id);
+  }
+
+  @Post(':id/devolver')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  returnReservation(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ReservacionResponseDto> {
+    return this.reservacionesService.returnReservation(tenant, id);
+  }
+
+  @Post(':id/cancelar')
+  @Roles(EmpresaUsuarioRol.OWNER)
+  cancel(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: unknown,
+  ): Promise<ReservacionResponseDto> {
+    return this.reservacionesService.cancel(
+      tenant,
+      id,
+      parseCancelReservacionBody(body),
     );
   }
 }
