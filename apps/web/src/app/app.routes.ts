@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { authGuard, guestGuard } from './core/auth/auth.guards';
 
 export const routes: Routes = [
   {
@@ -18,13 +19,15 @@ export const routes: Routes = [
       },
       {
         path: 'login',
+        canActivate: [guestGuard],
         loadComponent: () =>
-          import('./features/auth/login/login-placeholder.component').then(
-            ({ LoginPlaceholderComponent }) => LoginPlaceholderComponent,
+          import('./features/auth/login/login-page.component').then(
+            ({ LoginPageComponent }) => LoginPageComponent,
           ),
       },
       {
         path: 'seleccionar-empresa',
+        canActivate: [authGuard],
         loadComponent: () =>
           import('./features/tenancy/select-company/select-company-placeholder.component').then(
             ({ SelectCompanyPlaceholderComponent }) => SelectCompanyPlaceholderComponent,
@@ -34,6 +37,7 @@ export const routes: Routes = [
   },
   {
     path: 'app',
+    canActivate: [authGuard],
     loadComponent: () =>
       import('./layouts/app-layout/app-layout.component').then(
         ({ AppLayoutComponent }) => AppLayoutComponent,

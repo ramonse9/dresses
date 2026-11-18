@@ -127,6 +127,29 @@ describe('AuthStore', () => {
     expect(api.me).toHaveBeenCalledOnce();
   });
 
+  it('shares one refresh and clears the session when refresh fails', async () => {
+    const refreshResponse = new Subject<AccessTokenResponse>();
+    api.refresh.mockReturnValueOnce(refreshResponse);
+
+    const first = firstValueFrom(store.refreshAccessToken());
+    const second = firstValueFrom(store.refreshAccessToken());
+    expect(api.refresh).toHaveBeenCalledOnce();
+
+    refreshResponse.next(accessResponse);
+    refreshResponse.complete();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      accessResponse.accessToken,
+      accessResponse.accessToken,
+    ]);
+
+    api.refresh.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 401 })));
+    await expect(firstValueFrom(store.refreshAccessToken())).rejects.toBeInstanceOf(
+      HttpErrorResponse,
+    );
+    expect(store.status()).toBe('anonymous');
+    expect(store.getAccessToken()).toBeNull();
+  });
+
   it('sets and completely clears an in-memory session', () => {
     store.setAuthenticatedSession(accessResponse, user);
     expect(store.getAccessToken()).toBe(accessResponse.accessToken);

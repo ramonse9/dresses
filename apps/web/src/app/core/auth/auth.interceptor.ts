@@ -5,7 +5,8 @@ import { API_BASE_URL } from '../config/api-config';
 import { AccessTokenStore } from './access-token.store';
 import { AuthStore } from './auth.store';
 
-const nonRefreshablePaths = ['/auth/login', '/auth/refresh', '/auth/me'] as const;
+const bearerExcludedPaths = ['/auth/login', '/auth/refresh'] as const;
+const refreshExcludedPaths = [...bearerExcludedPaths, '/auth/me'] as const;
 
 export const authInterceptor: HttpInterceptorFn = (request, next) => {
   const baseUrl = inject(API_BASE_URL).trim().replace(/\/+$/g, '');
@@ -17,9 +18,10 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
   }
 
   const accessToken = accessTokens.token();
-  const authenticatedRequest = accessToken
-    ? request.clone({ setHeaders: { Authorization: `Bearer ${accessToken}` } })
-    : request;
+  const authenticatedRequest =
+    accessToken && !matchesPath(request.url, baseUrl, bearerExcludedPaths)
+      ? request.clone({ setHeaders: { Authorization: `Bearer ${accessToken}` } })
+      : request;
 
   return next(authenticatedRequest).pipe(
     catchError((error: unknown) => {
@@ -27,7 +29,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
         !(error instanceof HttpErrorResponse) ||
         error.status !== 401 ||
         !accessToken ||
-        isNonRefreshableRequest(request.url, baseUrl)
+        matchesPath(request.url, baseUrl, refreshExcludedPaths)
       ) {
         return throwError(() => error);
       }
@@ -49,6 +51,6 @@ function isApiRequest(url: string, baseUrl: string): boolean {
   return url === baseUrl || url.startsWith(`${baseUrl}/`);
 }
 
-function isNonRefreshableRequest(url: string, baseUrl: string): boolean {
-  return nonRefreshablePaths.some((path) => url === `${baseUrl}${path}`);
+function matchesPath(url: string, baseUrl: string, paths: readonly string[]): boolean {
+  return paths.some((path) => url === `${baseUrl}${path}`);
 }

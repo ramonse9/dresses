@@ -14,14 +14,14 @@ src/app
 
 Las rutas se cargan de forma diferida y actualmente preparan estos puntos de entrada:
 
-| Ruta                   | Propósito                          |
-| ---------------------- | ---------------------------------- |
-| `/`                    | Página pública existente           |
-| `/login`               | Placeholder del futuro acceso      |
-| `/seleccionar-empresa` | Placeholder de selección de tenant |
-| `/app`                 | Placeholder del área privada       |
+| Ruta                   | Propósito                                     |
+| ---------------------- | --------------------------------------------- |
+| `/`                    | Página pública existente                      |
+| `/login`               | Formulario de acceso para invitados           |
+| `/seleccionar-empresa` | Próximo paso autenticado, todavía placeholder |
+| `/app`                 | Área privada protegida                        |
 
-La infraestructura de autenticación ya restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. Todavía no existen formulario de login, guards de rutas ni selección real de empresa.
+La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. El login, logout y los guards ya están activos; la selección real de empresa todavía no está implementada.
 
 ## Configuración del API
 
@@ -50,11 +50,19 @@ Los errores HTTP se convierten al contrato `ApiError`, formado por `status`, `me
 - `authInterceptor` agrega Bearer únicamente a solicitudes del API configurado;
 - el inicializador de la aplicación intenta restaurar la sesión mediante la cookie HttpOnly antes de completar el arranque.
 
-Login, refresh y logout utilizan `withCredentials=true`. El refresh token nunca está disponible para Angular. No se utilizan `localStorage`, `sessionStorage`, IndexedDB ni cookies accesibles desde JavaScript para persistir tokens.
+Login, refresh, logout y perfil utilizan `withCredentials=true`. El refresh token nunca está disponible para Angular. No se utilizan `localStorage`, `sessionStorage`, IndexedDB ni cookies accesibles desde JavaScript para persistir tokens.
 
 El ciclo inicial comienza en `initializing`, ejecuta un único refresh compartido y después consulta `/auth/me`. Una sesión válida pasa a `authenticated`; una respuesta `401` pasa a `anonymous` sin mostrarse como error de inicialización. Los errores de red se normalizan en `initializationError`, y un timeout de 10 segundos evita bloquear indefinidamente el renderizado. Los tokens obtenidos por refresh se consideran globales, sin tenant ni rol seleccionados.
 
-Ante un `401` de una solicitud protegida, el interceptor comparte una sola rotación entre consumidores concurrentes y reintenta una vez con el access token nuevo. Login, refresh y perfil están excluidos del reintento para evitar ciclos. Un refresh rechazado limpia inmediatamente la identidad y el access token locales.
+Ante un `401` de una solicitud protegida, el interceptor comparte una sola rotación entre consumidores concurrentes y reintenta una vez con el access token nuevo. Login, refresh y perfil están excluidos del reintento para evitar ciclos. `Authorization` nunca se agrega a login, refresh ni URLs externas. Un refresh rechazado limpia inmediatamente la identidad y el access token locales.
+
+## Login, guards y logout
+
+`/login` utiliza Reactive Forms, valida correo y contraseña, muestra errores accesibles y evita envíos duplicados. Las credenciales incorrectas siempre producen el mismo mensaje genérico. Tras autenticar, una `returnUrl` interna tiene prioridad; de lo contrario se navega al futuro paso `/seleccionar-empresa`.
+
+`authGuard` protege `/seleccionar-empresa` y `/app`, enviando al usuario anónimo a `/login` con su URL interna de retorno. `guestGuard` evita mostrar login a una sesión ya autenticada. El sanitizador rechaza protocolos, URLs externas, rutas relativas a otro host, barras invertidas y variantes codificadas.
+
+El logout está disponible desde las superficies autenticadas. Siempre llama al API, limpia el estado aunque la solicitud falle y termina en `/login`.
 
 ## Convenciones para features
 

@@ -1,0 +1,112 @@
+<main
+  class="relative grid min-h-screen place-items-center overflow-hidden bg-stone-950 px-6 py-12 text-stone-50"
+>
+  <div
+    class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(244,63,94,0.2),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(251,191,36,0.1),transparent_35%)]"
+    aria-hidden="true"
+  ></div>
+
+  <section
+    class="relative w-full max-w-md rounded-[2rem] border border-white/10 bg-white/[0.07] p-7 shadow-2xl backdrop-blur-xl sm:p-10"
+    aria-labelledby="login-title"
+  >
+    <a class="inline-flex items-center gap-3" routerLink="/" aria-label="Atelier, inicio">
+      <span
+        class="grid size-10 place-items-center rounded-full border border-rose-300/30 bg-rose-300/10"
+        aria-hidden="true"
+      >
+        <svg class="size-5 text-rose-200" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M9 4.75 12 3l3 1.75M12 3v4m-5.5 1.5L12 7l5.5 1.5-2 11h-7l-2-11Z"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </span>
+      <span class="font-serif text-xl tracking-wide">Atelier</span>
+    </a>
+
+    <div class="mt-9">
+      <p class="text-sm font-semibold uppercase tracking-[0.2em] text-rose-200">Acceso seguro</p>
+      <h1 id="login-title" class="mt-3 font-serif text-4xl">Inicia sesión</h1>
+      <p class="mt-3 text-base leading-7 text-stone-300">
+        Ingresa con las credenciales asignadas a tu cuenta.
+      </p>
+    </div>
+
+    <form class="mt-8 space-y-6" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+      <div>
+        <label class="text-sm font-semibold text-stone-100" for="email">Correo electrónico</label>
+        <input
+          id="email"
+          type="email"
+          formControlName="email"
+          autocomplete="email"
+          inputmode="email"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-white/15 bg-stone-900/80 px-4 text-base text-white outline-none transition placeholder:text-stone-500 focus:border-rose-300 focus:ring-2 focus:ring-rose-300/30"
+          placeholder="nombre@boutique.com"
+          [attr.aria-invalid]="form.controls.email.touched && form.controls.email.invalid"
+          [attr.aria-describedby]="
+            form.controls.email.touched && form.controls.email.invalid ? 'email-error' : null
+          "
+        />
+        @if (form.controls.email.touched && form.controls.email.hasError('required')) {
+          <p id="email-error" class="mt-2 text-sm text-rose-200" role="alert">
+            El correo electrónico es obligatorio.
+          </p>
+        } @else if (form.controls.email.touched && form.controls.email.hasError('email')) {
+          <p id="email-error" class="mt-2 text-sm text-rose-200" role="alert">
+            Ingresa un correo electrónico válido.
+          </p>
+        }
+      </div>
+
+      <div>
+        <label class="text-sm font-semibold text-stone-100" for="password">Contraseña</label>
+        <input
+          id="password"
+          type="password"
+          formControlName="password"
+          autocomplete="current-password"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-white/15 bg-stone-900/80 px-4 text-base text-white outline-none transition placeholder:text-stone-500 focus:border-rose-300 focus:ring-2 focus:ring-rose-300/30"
+          placeholder="Tu contraseña"
+          [attr.aria-invalid]="form.controls.password.touched && form.controls.password.invalid"
+          [attr.aria-describedby]="
+            form.controls.password.touched && form.controls.password.invalid
+              ? 'password-error'
+              : null
+          "
+        />
+        @if (form.controls.password.touched && form.controls.password.hasError('required')) {
+          <p id="password-error" class="mt-2 text-sm text-rose-200" role="alert">
+            La contraseña es obligatoria.
+          </p>
+        }
+      </div>
+
+      @if (errorMessage()) {
+        <div
+          class="rounded-2xl border border-rose-300/25 bg-rose-300/10 p-4 text-sm text-rose-100"
+          role="alert"
+          aria-live="polite"
+        >
+          {{ errorMessage() }}
+        </div>
+      }
+
+      <app-submit-button
+        class="block [&>button]:w-full"
+        label="Iniciar sesión"
+        loadingLabel="Iniciando sesión…"
+        [loading]="submitting()"
+        [disabled]="submitting()"
+      />
+    </form>
+
+    <p class="mt-7 text-center text-sm text-stone-400">
+      ¿Necesitas ayuda? Contacta a la persona administradora de tu boutique.
+    </p>
+  </section>
+</main>

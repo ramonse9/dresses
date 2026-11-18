@@ -1,0 +1,40 @@
+const internalOrigin = 'http://angular.internal';
+
+export function sanitizeReturnUrl(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  let candidate = value.trim();
+  if (!candidate) {
+    return null;
+  }
+
+  try {
+    for (let index = 0; index < 2; index += 1) {
+      const decoded = decodeURIComponent(candidate);
+      if (decoded === candidate) {
+        break;
+      }
+      candidate = decoded;
+    }
+  } catch {
+    return null;
+  }
+
+  if (
+    !candidate.startsWith('/') ||
+    candidate.startsWith('//') ||
+    candidate.includes('\\') ||
+    /[\u0000-\u001f\u007f]/.test(candidate)
+  ) {
+    return null;
+  }
+
+  const parsed = new URL(candidate, internalOrigin);
+  if (parsed.origin !== internalOrigin) {
+    return null;
+  }
+
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
