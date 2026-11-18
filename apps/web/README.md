@@ -1,59 +1,66 @@
-# Web
+# Aplicación web
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.6.
+Frontend standalone de Angular para Dresses SaaS. Tailwind CSS se carga globalmente desde `src/styles.css` y no se utiliza una biblioteca de componentes.
 
-## Development server
+## Estructura
 
-To start a local development server, run:
-
-```bash
-ng serve
+```text
+src/app
+├── core       # configuración y servicios singleton de infraestructura
+├── shared     # componentes presentacionales reutilizables
+├── layouts    # contenedores de rutas públicas y privadas
+└── features   # funcionalidades agrupadas por dominio
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Las rutas se cargan de forma diferida y actualmente preparan estos puntos de entrada:
 
-## Code scaffolding
+| Ruta                   | Propósito                          |
+| ---------------------- | ---------------------------------- |
+| `/`                    | Página pública existente           |
+| `/login`               | Placeholder del futuro acceso      |
+| `/seleccionar-empresa` | Placeholder de selección de tenant |
+| `/app`                 | Placeholder del área privada       |
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+Todavía no existen autenticación frontend, almacenamiento de tokens, interceptores, guards ni selección real de empresa.
 
-```bash
-ng generate component component-name
+## Configuración del API
+
+`API_BASE_URL` es el único token de configuración que deben consumir los servicios. Angular sustituye el archivo de entorno durante `ng serve`:
+
+- desarrollo: `http://localhost:3000/api`;
+- producción: `/api`, para usar el mismo origen del despliegue.
+
+Los componentes no deben escribir URLs absolutas. `ApiClient` construye rutas relativas y ofrece métodos genéricos `GET`, `POST`, `PATCH` y `DELETE`; tampoco contiene autenticación ni permite seleccionar schemas.
+
+Ejemplo para un futuro servicio de feature:
+
+```ts
+return this.apiClient.get<Cliente>('clientes/cliente-id');
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+Los errores HTTP se convierten al contrato `ApiError`, formado por `status`, `message`, `code` opcional y errores de validación opcionales. Los estados comunes de carga, error, vacío y envío se encuentran en `shared/ui`.
+
+## Convenciones para features
+
+- Crear componentes standalone dentro de `features/<dominio>`.
+- Mantener acceso HTTP y estado de dominio en servicios del feature; los componentes coordinan la vista.
+- Usar signals para estado local y derivado.
+- Reutilizar `ApiClient`, `ApiError` y los componentes de `shared/ui`.
+- No enviar `schemaName` ni construir rutas con nombres de schemas; el tenant se resolverá mediante la autenticación.
+- Agregar la ruta con carga diferida y sus pruebas.
+
+## Ejecución y validación
+
+Desde la raíz del monorepo:
 
 ```bash
-ng generate --help
+npm run dev:web
+npm run build --workspace=web
+npm run test --workspace=web
 ```
 
-## Building
-
-To build the project run:
+La aplicación se sirve en <http://localhost:4200>. Este workspace aún no tiene un target de lint; el build aplica la validación estricta de TypeScript y templates, y Prettier puede comprobarse con:
 
 ```bash
-ng build
+npx prettier --check "apps/web/**/*.{ts,html,css,json,md}"
 ```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

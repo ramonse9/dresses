@@ -919,6 +919,23 @@ La suite elimina en `afterAll` únicamente las empresas y schemas temporales que
 
 ## Desarrollo
 
+### Arquitectura frontend
+
+La aplicación Angular organiza `apps/web/src/app` por responsabilidad:
+
+```text
+core/       configuración y clientes de infraestructura
+shared/     UI presentacional reutilizable
+layouts/    contenedores de rutas
+features/   funcionalidades por dominio
+```
+
+Las rutas base son `/`, `/login`, `/seleccionar-empresa` y `/app`. Salvo la página pública, las demás son placeholders deliberados para los siguientes pasos de autenticación y negocio.
+
+La URL del API se inyecta mediante `API_BASE_URL`: desarrollo usa `http://localhost:3000/api` y producción usa `/api`. Los servicios futuros deben consumir el `ApiClient` genérico con rutas relativas; no deben duplicar URLs absolutas ni aceptar nombres de schemas. Los errores se normalizan como `ApiError` y los estados comunes de carga, error, vacío y envío están disponibles en `shared/ui`.
+
+Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
+
 Para iniciar el API y la aplicación web al mismo tiempo:
 
 ```bash
