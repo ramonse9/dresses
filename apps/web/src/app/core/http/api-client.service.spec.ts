@@ -68,6 +68,20 @@ describe('ApiClient', () => {
     await expect(deleted).resolves.toBeNull();
   });
 
+  it('passes credential mode explicitly when requested', async () => {
+    const response = firstValueFrom(
+      client.post<{ accessToken: string }, null>('auth/refresh', null, {
+        withCredentials: true,
+      }),
+    );
+    const request = httpController.expectOne('http://localhost:3000/api/auth/refresh');
+
+    expect(request.request.withCredentials).toBe(true);
+    expect(request.request.body).toBeNull();
+    request.flush({ accessToken: 'signed.jwt.token' });
+    await expect(response).resolves.toEqual({ accessToken: 'signed.jwt.token' });
+  });
+
   it('rejects absolute URLs and schema selectors', () => {
     expect(() => client.get('https://example.com/api')).toThrow('La ruta del API no es válida.');
     expect(() => client.get('tenant_019a6f3382b77a22971b6a8d7c5e4f30/vestidos')).toThrow(

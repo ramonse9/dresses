@@ -939,6 +939,8 @@ Las rutas base son `/`, `/login`, `/seleccionar-empresa` y `/app`. Salvo la pág
 
 La URL del API se inyecta mediante `API_BASE_URL`: desarrollo usa `http://localhost:3000/api` y producción usa `/api`. Los servicios futuros deben consumir el `ApiClient` genérico con rutas relativas; no deben duplicar URLs absolutas ni aceptar nombres de schemas. Los errores se normalizan como `ApiError` y los estados comunes de carga, error, vacío y envío están disponibles en `shared/ui`.
 
+El estado de autenticación frontend vive en `core/auth` y utiliza signals. Al arrancar, Angular intenta rotar la cookie HttpOnly y consulta `/auth/me`; si la sesión es válida mantiene únicamente el access token en memoria. El interceptor agrega Bearer solo a solicitudes dirigidas al API configurado, comparte un único refresh ante solicitudes `401` concurrentes y nunca persiste tokens en almacenamiento del navegador.
+
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 
 Para iniciar el API y la aplicación web al mismo tiempo:

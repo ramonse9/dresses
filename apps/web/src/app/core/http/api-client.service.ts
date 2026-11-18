@@ -7,6 +7,7 @@ export type ApiQueryValue = string | number | boolean | readonly (string | numbe
 
 export interface ApiRequestOptions {
   readonly params?: Readonly<Record<string, ApiQueryValue | null | undefined>>;
+  readonly withCredentials?: boolean;
 }
 
 const schemaNamePattern = /(?:^|\/)tenant_[^/]+(?:\/|$)/i;
@@ -19,6 +20,7 @@ export class ApiClient {
   get<TResponse>(path: string, options: ApiRequestOptions = {}): Observable<TResponse> {
     return this.http.get<TResponse>(this.buildUrl(path), {
       params: this.buildParams(options.params),
+      withCredentials: options.withCredentials,
     });
   }
 
@@ -29,6 +31,7 @@ export class ApiClient {
   ): Observable<TResponse> {
     return this.http.post<TResponse>(this.buildUrl(path), body, {
       params: this.buildParams(options.params),
+      withCredentials: options.withCredentials,
     });
   }
 
@@ -39,12 +42,14 @@ export class ApiClient {
   ): Observable<TResponse> {
     return this.http.patch<TResponse>(this.buildUrl(path), body, {
       params: this.buildParams(options.params),
+      withCredentials: options.withCredentials,
     });
   }
 
   delete<TResponse>(path: string, options: ApiRequestOptions = {}): Observable<TResponse> {
     return this.http.delete<TResponse>(this.buildUrl(path), {
       params: this.buildParams(options.params),
+      withCredentials: options.withCredentials,
     });
   }
 
