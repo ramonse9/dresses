@@ -70,11 +70,15 @@ describe('PostgreSQL reservaciones tenant migration', () => {
     expect(publicTables).toEqual([]);
 
     const migrationRows = (await dataSource.query(
-      `SELECT "name" FROM ${schema}."tenant_migrations" WHERE "name" = $1`,
-      ['CreateReservaciones1795215600000'],
+      `SELECT "name" FROM ${schema}."tenant_migrations" WHERE "name" IN ($1, $2) ORDER BY "name"`,
+      [
+        'CreateReservaciones1795215600000',
+        'OptimizeReservaciones1795302000000',
+      ],
     )) as Array<{ name: string }>;
     expect(migrationRows).toEqual([
       { name: 'CreateReservaciones1795215600000' },
+      { name: 'OptimizeReservaciones1795302000000' },
     ]);
 
     const columns = (await dataSource.query(
@@ -148,6 +152,9 @@ describe('PostgreSQL reservaciones tenant migration', () => {
     expect(indexes.map(({ indexName }) => indexName)).toEqual(
       expect.arrayContaining([
         'IDX_reservaciones_cliente_created_at',
+        'IDX_reservaciones_created_at_id',
+        'IDX_reservaciones_fechas',
+        'IDX_reservaciones_sucursal_created_at_id',
         'IDX_reservaciones_sucursal_estado_fechas',
         'IDX_reservaciones_estado_fechas',
         'IDX_reservacion_vestidos_reservacion_id',
@@ -161,6 +168,16 @@ describe('PostgreSQL reservaciones tenant migration', () => {
           indexName === 'UQ_reservacion_vestidos_reservacion_vestido',
       )?.definition,
     ).toContain('UNIQUE');
+    expect(
+      indexes.find(
+        ({ indexName }) => indexName === 'IDX_reservaciones_cliente_created_at',
+      )?.definition,
+    ).toContain('cliente_id, created_at DESC, id DESC');
+    expect(
+      indexes.find(
+        ({ indexName }) => indexName === 'IDX_reservacion_vestidos_vestido_id',
+      )?.definition,
+    ).toContain('vestido_id, reservacion_id');
 
     const [sucursal] = (await dataSource.query(
       `INSERT INTO ${schema}."sucursales" ("nombre") VALUES ($1) RETURNING "id"`,
@@ -390,8 +407,11 @@ describe('PostgreSQL reservaciones tenant migration', () => {
     await dataSource.query(`DROP TABLE ${schema}."reservacion_vestidos"`);
     await dataSource.query(`DROP TABLE ${schema}."reservaciones"`);
     await dataSource.query(
-      `DELETE FROM ${schema}."tenant_migrations" WHERE "name" = $1`,
-      ['CreateReservaciones1795215600000'],
+      `DELETE FROM ${schema}."tenant_migrations" WHERE "name" IN ($1, $2)`,
+      [
+        'CreateReservaciones1795215600000',
+        'OptimizeReservaciones1795302000000',
+      ],
     );
 
     await tenantMigrationService.ensureMigrations(empresa.schemaName);
@@ -406,10 +426,26 @@ describe('PostgreSQL reservaciones tenant migration', () => {
       { tableName: 'reservaciones' },
     ]);
     const migrations = (await dataSource.query(
-      `SELECT "name" FROM ${schema}."tenant_migrations" WHERE "name" = $1`,
-      ['CreateReservaciones1795215600000'],
+      `SELECT "name" FROM ${schema}."tenant_migrations" WHERE "name" IN ($1, $2) ORDER BY "name"`,
+      [
+        'CreateReservaciones1795215600000',
+        'OptimizeReservaciones1795302000000',
+      ],
     )) as Array<{ name: string }>;
-    expect(migrations).toEqual([{ name: 'CreateReservaciones1795215600000' }]);
+    expect(migrations).toEqual([
+      { name: 'CreateReservaciones1795215600000' },
+      { name: 'OptimizeReservaciones1795302000000' },
+    ]);
+    const optimizedIndexes = (await dataSource.query(
+      `SELECT indexname AS "indexName", indexdef AS "definition" FROM pg_indexes WHERE schemaname = $1 AND indexname IN ('IDX_reservaciones_created_at_id', 'IDX_reservaciones_sucursal_created_at_id', 'IDX_reservaciones_fechas', 'IDX_reservacion_vestidos_vestido_id') ORDER BY indexname`,
+      [empresa.schemaName],
+    )) as Array<{ indexName: string; definition: string }>;
+    expect(optimizedIndexes.map(({ indexName }) => indexName)).toEqual([
+      'IDX_reservacion_vestidos_vestido_id',
+      'IDX_reservaciones_created_at_id',
+      'IDX_reservaciones_fechas',
+      'IDX_reservaciones_sucursal_created_at_id',
+    ]);
   });
 });
 

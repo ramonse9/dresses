@@ -491,7 +491,11 @@ describe('PostgreSQL authenticated empresa selection', () => {
     await request(app.getHttpServer())
       .get(`/api/reservaciones/${String(reservacionAResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
-      .expect(404);
+      .expect(404)
+      .expect((response) => {
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
+        expect(JSON.stringify(response.body)).not.toContain('schemaName');
+      });
     await request(app.getHttpServer())
       .patch(`/api/reservaciones/${String(reservacionBResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
@@ -740,6 +744,15 @@ describe('PostgreSQL authenticated empresa selection', () => {
       authService.selectEmpresa(payloadB, { empresaId: empresaA.id }),
     ).rejects.toThrow('No tienes acceso a esta empresa');
 
+    usuarioA.activo = false;
+    await usuariosRepository.save(usuarioA);
+    await request(app.getHttpServer())
+      .get('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(401);
+    usuarioA.activo = true;
+    await usuariosRepository.save(usuarioA);
+
     membresiaA.rol = EmpresaUsuarioRol.EMPLOYEE;
     await membresiasRepository.save(membresiaA);
     await request(app.getHttpServer())
@@ -891,6 +904,10 @@ describe('PostgreSQL authenticated empresa selection', () => {
     ).rejects.toThrow('No tienes acceso a esta empresa');
 
     await authService.logout(payloadA);
+    await request(app.getHttpServer())
+      .get('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(401);
     const guardRequest = {
       headers: { authorization: `Bearer ${selectedA.accessToken}` },
     };

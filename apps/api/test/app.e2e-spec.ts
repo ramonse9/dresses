@@ -735,6 +735,7 @@ describe('AppController (e2e)', () => {
       { importeRenta: '1.00' },
       { estado: 'CONFIRMADA' },
       { empresaId: selectedEmpresaId },
+      { empresaSlug: 'atelier-untrusted' },
       { schemaName: 'tenant_untrusted' },
     ]) {
       await request(app.getHttpServer())
@@ -832,6 +833,7 @@ describe('AppController (e2e)', () => {
       { importeRenta: '1.00' },
       { confirmadaAt: null },
       { empresaId: selectedEmpresaId },
+      { empresaSlug: 'atelier-untrusted' },
       { schemaName: 'tenant_untrusted' },
     ]) {
       await request(app.getHttpServer())

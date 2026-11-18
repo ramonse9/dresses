@@ -116,7 +116,7 @@ Las migrations de `public` se mantienen separadas de las migrations que se ejecu
 - El nombre se deriva internamente del UUID de `Empresa`; nunca se toma un nombre de schema, slug o identificador SQL enviado por el cliente.
 - PostgreSQL aplica además una restricción `CHECK` al campo `schema_name` y un índice único.
 
-La autenticación identifica al usuario, pero todavía no selecciona una empresa. El módulo `EmpresasModule` usa repositorios parametrizados de TypeORM y nunca acepta identificadores SQL desde el cliente.
+La autenticación identifica al usuario y permite seleccionar una empresa únicamente por `empresaId`; el backend valida la membresía y mantiene `schemaName` como información interna. El módulo `EmpresasModule` usa repositorios parametrizados de TypeORM y nunca acepta identificadores SQL desde el cliente.
 
 ## Usuarios y membresías
 
@@ -282,7 +282,7 @@ El backend genera el UUID y `schemaName`; el cliente no puede proporcionar el no
 }
 ```
 
-La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. Las migrations del tenant crean su tabla de control y las tablas `sucursales`, `vestidos` y `clientes`.
+La empresa, el schema y sus migrations se crean dentro de una sola transacción. Un fallo revierte todos los pasos y un slug repetido responde con HTTP `409`. Las migrations del tenant crean su tabla de control y las tablas `sucursales`, `vestidos`, `clientes`, `reservaciones` y `reservacion_vestidos`.
 
 Verifica el registro y el schema desde `psql`:
 
@@ -417,17 +417,17 @@ DEVUELTA
 CANCELADA
 ```
 
-El estado predeterminado es `BORRADOR`. Esta etapa solamente define los estados y sus columnas de seguimiento; todavía no implementa transiciones, entrega, devolución ni cancelación.
+El estado predeterminado es `BORRADOR`. Las transiciones se ejecutan únicamente mediante los endpoints explícitos de confirmar, entregar, devolver y cancelar descritos más adelante.
 
 ### Rangos de fechas
 
-`fecha_inicio` y `fecha_fin` usan `timestamptz` y forman un rango semiabierto `[fechaInicio, fechaFin)`: el inicio pertenece a la reservación y el instante final no. Por ello, una reservación puede terminar exactamente cuando comienza otra. PostgreSQL exige `fecha_fin > fecha_inicio`; las APIs posteriores deberán recibir fechas ISO 8601 con zona horaria explícita.
+`fecha_inicio` y `fecha_fin` usan `timestamptz` y forman un rango semiabierto `[fechaInicio, fechaFin)`: el inicio pertenece a la reservación y el instante final no. Por ello, una reservación puede terminar exactamente cuando comienza otra. PostgreSQL exige `fecha_fin > fecha_inicio`; las APIs reciben fechas ISO 8601 con zona horaria explícita.
 
-No existe una restricción de exclusión en la tabla. El flujo de creación confirmada comprueba los solapamientos de forma transaccional; una consulta independiente de disponibilidad se implementará posteriormente.
+No existe una restricción de exclusión en la tabla. La creación, confirmación y actualización de reservaciones confirmadas serializan por vestido mediante locks transaccionales y vuelven a comprobar solapamientos antes del commit. La disponibilidad se consulta mediante `GET /api/vestidos/disponibilidad`.
 
 Las llaves foráneas hacia cliente, sucursal y vestido apuntan a tablas del mismo schema tenant y usan `ON DELETE RESTRICT`. Una reservación no puede repetir el mismo vestido porque `reservacion_id + vestido_id` es único. Los índices cubren consultas por cliente, sucursal, estado, fechas, reservación y vestido.
 
-La migration tenant `CreateReservaciones1795215600000` se aplica automáticamente a empresas nuevas. Para aplicarla de forma idempotente a schemas existentes:
+La migration tenant `CreateReservaciones1795215600000` crea tablas, llaves, checks e índices iniciales. `OptimizeReservaciones1795302000000` añade índices que cubren el orden paginado `createdAt + id`, filtros por sucursal y fechas, búsqueda por cliente y el join de solapamientos `vestidoId + reservacionId`. Ambas se aplican automáticamente a empresas nuevas. Para aplicarlas de forma idempotente a schemas existentes:
 
 ```bash
 npm run tenant:migration:run
@@ -490,7 +490,7 @@ curl --request POST http://localhost:3000/api/reservaciones \
   }'
 ```
 
-La respuesta incluye cliente y sucursal básicos, vestidos con sus importes históricos, totales, fechas y estado. No incluye nombres de schemas. La cancelación, entrega y devolución se implementarán mediante operaciones de transición específicas; todavía no existen pagos ni imágenes.
+La respuesta incluye cliente y sucursal básicos, vestidos con sus importes históricos, totales, fechas y estado. No incluye nombres de schemas. Las transiciones se ejecutan mediante las operaciones específicas documentadas abajo; todavía no existen pagos ni imágenes.
 
 ### Consulta y actualización de reservaciones
 
@@ -606,6 +606,28 @@ curl --request POST http://localhost:3000/api/reservaciones/RESERVACION_UUID/dev
 ```
 
 Todas las transiciones usan `TenantContextService`, `SET LOCAL search_path` y un lock de escritura sobre la fila antes de evaluar el estado. Los UUID de otro tenant responden `404` y ninguna respuesta incluye nombres de schemas. Todavía no se gestionan pagos, reembolsos, daños, mantenimiento automático, imágenes ni auditoría completa.
+
+### Seguridad, integridad y concurrencia de reservaciones
+
+Todas las rutas de reservaciones y disponibilidad aplican `JwtAuthGuard`, `TenantAuthGuard` y `RolesGuard` mediante `@TenantAuthenticated()`. `TenantAuthGuard` toma `empresaId` exclusivamente del JWT verificado, consulta nuevamente usuario, membresía y empresa, resuelve el `TenantScope` con `TenantResolverService.resolveByEmpresaId()` y conserva el rol vigente de la membresía. Usuario o sesión inactivos reciben `401`; membresía o empresa inactivas reciben `403` inmediatamente.
+
+Los DTOs rechazan campos desconocidos y nunca aceptan `empresaId`, `empresaSlug`, `schemaName`, estados, importes, totales, timestamps o claves de lock controladas por el cliente. Los headers personalizados de empresa o schema no intervienen en la resolución. Todas las consultas tenant usan parámetros; la única interpolación SQL es el schema generado y validado internamente por el backend.
+
+| Operación                        | OWNER     | EMPLOYEE  |
+| -------------------------------- | --------- | --------- |
+| Consultar disponibilidad         | Permitido | Permitido |
+| Crear reservación                | Permitido | Permitido |
+| Listar reservaciones             | Permitido | Permitido |
+| Consultar reservación            | Permitido | Permitido |
+| Actualizar borrador o confirmada | Permitido | Permitido |
+| Confirmar                        | Permitido | Permitido |
+| Entregar                         | Permitido | Permitido |
+| Devolver                         | Permitido | Permitido |
+| Cancelar                         | Permitido | `403`     |
+
+La cabecera y sus detalles se escriben en una sola transacción. Las llaves foráneas impiden detalles huérfanos, la combinación reservación–vestido es única y los checks protegen rangos e importes. Los totales se calculan en el backend a partir de snapshots decimales; cambios posteriores del catálogo no alteran el histórico. Solamente `CONFIRMADA` y `ENTREGADA` bloquean el calendario.
+
+Las pruebas PostgreSQL ejecutan carreras reales para creación confirmada, confirmación de borradores, actualización de fechas, entrega duplicada y cancelación simultánea con confirmación. También comprueban orden estable de locks para varias piezas, rollback completo, totales, ausencia de huérfanos, aislamiento entre dos empresas y limpieza de `search_path` usando `DB_POOL_MAX=1`.
 
 ### Consulta de disponibilidad de vestidos
 
@@ -789,7 +811,7 @@ curl --request DELETE http://localhost:3000/api/vestidos/ID \
 | Activar    | Permitido | 403       |
 | Desactivar | Permitido | 403       |
 
-El historial de movimientos, la auditoría, las imágenes, las reservaciones y la disponibilidad por fechas quedan fuera de este alcance.
+El historial de movimientos, la auditoría completa y las imágenes quedan fuera de este alcance.
 
 ## Sucursales
 
@@ -839,7 +861,7 @@ No se aceptan `empresaSlug`, `empresaId` ni `schemaName` en rutas o DTOs de sucu
 
 ## Aislamiento de tenants
 
-Sucursales y vestidos utilizan el flujo reutilizable JWT → `TenantScope` → transacción. Los futuros módulos autenticados, como reservaciones, pueden aplicar la misma abstracción:
+Sucursales, clientes, vestidos, disponibilidad y reservaciones utilizan el flujo reutilizable JWT → `TenantScope` → transacción:
 
 1. `JwtAuthGuard` verifica firma, expiración, sesión y usuario, y deja los claims validados en la solicitud.
 2. `TenantAuthGuard` lee `empresaId` exclusivamente de esos claims. Ignora headers personalizados, parámetros, query strings y cuerpos HTTP.
@@ -868,7 +890,7 @@ No se utiliza `SET search_path` de sesión ni se aceptan nombres de schema en he
 
 ### Pruebas PostgreSQL de aislamiento
 
-Las suites crean empresas, sucursales y vestidos temporales, permiten los mismos nombres y códigos en tenants distintos y fuerzan `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión. `test:auth-database` recorre las rutas HTTP con access tokens OWNER y EMPLOYEE, comprueba las consultas del catálogo, los `403` por rol o membresía/empresa inactiva, los `404` cruzados, la baja lógica y que la ruta anterior por slug permanezca deshabilitada; `test:tenancy` verifica directamente en PostgreSQL la paginación, los filtros, la búsqueda, las migrations tenant y el aislamiento de persistencia.
+Las suites crean usuarios, empresas, sucursales, clientes, vestidos y reservaciones temporales, permiten los mismos códigos y rangos en tenants distintos y fuerzan `DB_POOL_MAX=1` para comprobar que `search_path` vuelve a `public` al reutilizar la conexión. `test:auth-database` recorre las rutas HTTP con access tokens OWNER y EMPLOYEE y comprueba revocación inmediata por usuario, sesión, membresía o empresa; `test:tenancy` verifica directamente en PostgreSQL migrations, paginación, snapshots, integridad, disponibilidad, concurrencia e aislamiento.
 
 ```bash
 NODE_ENV=test \
@@ -886,6 +908,12 @@ npm run test:auth-database
 ```
 
 Para la segunda suite, repite el mismo bloque sustituyendo la última línea por `npm run test:tenancy`.
+
+Para aplicar y comprobar migrations tenant pendientes sobre todas las empresas registradas:
+
+```bash
+npm run tenant:migration:run
+```
 
 La suite elimina en `afterAll` únicamente las empresas y schemas temporales que ella misma creó.
 
@@ -931,6 +959,7 @@ npm run lint
 npm run test:e2e --workspace=api
 npm run test:auth-database
 npm run test:tenancy
+npm run tenant:migration:run
 ```
 
 Los scripts se ejecutan desde la raíz y delegan a cada workspace cuando corresponde.

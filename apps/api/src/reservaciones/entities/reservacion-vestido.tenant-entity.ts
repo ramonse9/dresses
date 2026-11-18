@@ -19,7 +19,7 @@ import { Reservacion } from './reservacion.tenant-entity.js';
   'vestidoId',
 ])
 @Index('IDX_reservacion_vestidos_reservacion_id', ['reservacionId'])
-@Index('IDX_reservacion_vestidos_vestido_id', ['vestidoId'])
+@Index('IDX_reservacion_vestidos_vestido_id', ['vestidoId', 'reservacionId'])
 @Check('CHK_reservacion_vestidos_precio_renta', `"precio_renta" >= 0`)
 @Check('CHK_reservacion_vestidos_deposito', `"deposito" >= 0`)
 export class ReservacionVestido {

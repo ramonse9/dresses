@@ -135,7 +135,19 @@ describe('Reservaciones tenant entities', () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: 'IDX_reservaciones_cliente_created_at',
-          columns: ['clienteId', 'createdAt'],
+          columns: ['clienteId', 'createdAt', 'id'],
+        }),
+        expect.objectContaining({
+          name: 'IDX_reservaciones_sucursal_created_at_id',
+          columns: ['sucursalId', 'createdAt', 'id'],
+        }),
+        expect.objectContaining({
+          name: 'IDX_reservaciones_created_at_id',
+          columns: ['createdAt', 'id'],
+        }),
+        expect.objectContaining({
+          name: 'IDX_reservaciones_fechas',
+          columns: ['fechaInicio', 'fechaFin'],
         }),
         expect.objectContaining({
           name: 'IDX_reservaciones_sucursal_estado_fechas',
@@ -151,7 +163,7 @@ describe('Reservaciones tenant entities', () => {
         }),
         expect.objectContaining({
           name: 'IDX_reservacion_vestidos_vestido_id',
-          columns: ['vestidoId'],
+          columns: ['vestidoId', 'reservacionId'],
         }),
       ]),
     );

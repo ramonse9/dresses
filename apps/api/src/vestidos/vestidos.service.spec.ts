@@ -94,6 +94,7 @@ describe('VestidosService', () => {
     vestido?: Vestido | null;
   }) {
     const innerJoinAndSelect = vi.fn();
+    const select = vi.fn();
     const andWhere = vi.fn();
     const orderBy = vi.fn();
     const addOrderBy = vi.fn();
@@ -106,6 +107,7 @@ describe('VestidosService', () => {
     const getOne = vi.fn().mockResolvedValue(options?.vestido ?? null);
     const builder = {
       innerJoinAndSelect,
+      select,
       andWhere,
       orderBy,
       addOrderBy,
@@ -118,6 +120,7 @@ describe('VestidosService', () => {
 
     for (const method of [
       innerJoinAndSelect,
+      select,
       andWhere,
       orderBy,
       addOrderBy,
@@ -148,6 +151,7 @@ describe('VestidosService', () => {
     return {
       service,
       innerJoinAndSelect,
+      select,
       andWhere,
       orderBy,
       addOrderBy,
@@ -236,6 +240,7 @@ describe('VestidosService', () => {
           : { id: input.sucursalId, activo: true },
       );
     const innerJoinAndSelect = vi.fn();
+    const select = vi.fn();
     const where = vi.fn();
     const andWhere = vi.fn();
     const orderBy = vi.fn();
@@ -247,6 +252,7 @@ describe('VestidosService', () => {
       .mockResolvedValue([options?.vestidos ?? [], options?.total ?? 0]);
     const builder = {
       innerJoinAndSelect,
+      select,
       where,
       andWhere,
       orderBy,
@@ -258,6 +264,7 @@ describe('VestidosService', () => {
 
     for (const method of [
       innerJoinAndSelect,
+      select,
       where,
       andWhere,
       orderBy,
@@ -292,6 +299,7 @@ describe('VestidosService', () => {
       sucursalFindOne,
       createQueryBuilder,
       innerJoinAndSelect,
+      select,
       where,
       andWhere,
       orderBy,

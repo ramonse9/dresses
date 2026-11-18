@@ -408,6 +408,78 @@ describe('PostgreSQL reservation lifecycle', () => {
     });
   });
 
+  it('keeps cancellation and confirmation of the same draft consistent', async () => {
+    const vestido = await createDress(tenantA, sucursalA);
+    const draft = await createReservation(
+      tenantA,
+      clienteA,
+      sucursalA,
+      vestido,
+    );
+    const results = await Promise.allSettled([
+      reservacionesService.confirm(tenantA, draft.id),
+      reservacionesService.cancel(tenantA, draft.id, {
+        motivo: 'Cancelación concurrente',
+      }),
+    ]);
+
+    expect(results[1]).toMatchObject({ status: 'fulfilled' });
+    if (results[0]?.status === 'rejected') {
+      expect(results[0].reason).toBeInstanceOf(ConflictException);
+    }
+    await expect(
+      reservacionesService.findOne(tenantA, draft.id),
+    ).resolves.toMatchObject({
+      estado: ReservacionEstado.CANCELADA,
+      motivoCancelacion: 'Cancelación concurrente',
+    });
+    expect((await availability(tenantA, sucursalA)).data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: vestido.id })]),
+    );
+  });
+
+  it('orders locks for multiple dresses and leaves totals and details consistent', async () => {
+    const vestidoA = await createDress(tenantA, sucursalA);
+    const vestidoB = await createDress(tenantA, sucursalA);
+    const createDraft = (vestidoIds: string[]) =>
+      reservacionesService.create(tenantA, {
+        clienteId: clienteA.id,
+        sucursalId: sucursalA.id,
+        vestidoIds,
+        fechaInicio: new Date('2028-03-10T16:00:00.000Z'),
+        fechaFin: new Date('2028-03-12T16:00:00.000Z'),
+        confirmar: false,
+      });
+    const [draftA, draftB] = await Promise.all([
+      createDraft([vestidoA.id, vestidoB.id]),
+      createDraft([vestidoB.id, vestidoA.id]),
+    ]);
+    const results = await Promise.allSettled([
+      reservacionesService.confirm(tenantA, draftA.id),
+      reservacionesService.confirm(tenantA, draftB.id),
+    ]);
+
+    expect(results.filter(({ status }) => status === 'fulfilled')).toHaveLength(
+      1,
+    );
+    expect(results.find(({ status }) => status === 'rejected')).toMatchObject({
+      status: 'rejected',
+      reason: expect.any(ConflictException),
+    });
+
+    const schema = quoteTenantSchemaName(tenantA.schemaName);
+    const integrity = (await dataSource.query(
+      `SELECT COUNT(*) FILTER (WHERE "r"."id" IS NULL)::integer AS "orphans", COUNT(*) FILTER (WHERE "rv"."reservacion_id" IS NOT NULL)::integer AS "details" FROM ${schema}."reservacion_vestidos" "rv" LEFT JOIN ${schema}."reservaciones" "r" ON "r"."id" = "rv"."reservacion_id"`,
+    )) as Array<{ orphans: number; details: number }>;
+    expect(integrity[0]?.orphans).toBe(0);
+    expect(integrity[0]?.details).toBeGreaterThan(0);
+
+    const inconsistentTotals = (await dataSource.query(
+      `SELECT "r"."id" FROM ${schema}."reservaciones" "r" JOIN ${schema}."reservacion_vestidos" "rv" ON "rv"."reservacion_id" = "r"."id" GROUP BY "r"."id", "r"."importe_renta", "r"."deposito_requerido" HAVING "r"."importe_renta" <> SUM("rv"."precio_renta") OR "r"."deposito_requerido" <> SUM("rv"."deposito")`,
+    )) as Array<{ id: string }>;
+    expect(inconsistentTotals).toEqual([]);
+  });
+
   it('returns 404 across tenants and leaves pooled connections in public', async () => {
     const vestidoB = await createDress(tenantB, sucursalB);
     const reservationB = await createReservation(

@@ -166,7 +166,24 @@ export class ReservacionesService {
         .getRepository(Reservacion)
         .createQueryBuilder('reservacion')
         .innerJoinAndSelect('reservacion.cliente', 'cliente')
-        .innerJoinAndSelect('reservacion.sucursal', 'sucursal');
+        .innerJoinAndSelect('reservacion.sucursal', 'sucursal')
+        .select([
+          'reservacion.id',
+          'reservacion.fechaInicio',
+          'reservacion.fechaFin',
+          'reservacion.estado',
+          'reservacion.notas',
+          'reservacion.importeRenta',
+          'reservacion.depositoRequerido',
+          'reservacion.createdAt',
+          'reservacion.updatedAt',
+          'cliente.id',
+          'cliente.nombre',
+          'cliente.telefono',
+          'cliente.email',
+          'sucursal.id',
+          'sucursal.nombre',
+        ]);
 
       if (input.clienteId !== undefined) {
         query.andWhere('reservacion.clienteId = :clienteId', {
@@ -704,6 +721,37 @@ export class ReservacionesService {
       .innerJoinAndSelect('reservacion.sucursal', 'sucursal')
       .leftJoinAndSelect('reservacion.vestidos', 'detalle')
       .leftJoinAndSelect('detalle.vestido', 'vestido')
+      .select([
+        'reservacion.id',
+        'reservacion.fechaInicio',
+        'reservacion.fechaFin',
+        'reservacion.estado',
+        'reservacion.notas',
+        'reservacion.importeRenta',
+        'reservacion.depositoRequerido',
+        'reservacion.confirmadaAt',
+        'reservacion.entregadaAt',
+        'reservacion.devueltaAt',
+        'reservacion.canceladaAt',
+        'reservacion.motivoCancelacion',
+        'reservacion.createdAt',
+        'reservacion.updatedAt',
+        'cliente.id',
+        'cliente.nombre',
+        'cliente.telefono',
+        'cliente.email',
+        'sucursal.id',
+        'sucursal.nombre',
+        'detalle.id',
+        'detalle.precioRenta',
+        'detalle.deposito',
+        'detalle.createdAt',
+        'vestido.id',
+        'vestido.codigo',
+        'vestido.nombre',
+        'vestido.talla',
+        'vestido.color',
+      ])
       .where('reservacion.id = :id', { id })
       .orderBy('detalle.createdAt', 'ASC')
       .addOrderBy('detalle.id', 'ASC')

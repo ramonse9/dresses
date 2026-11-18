@@ -21,7 +21,7 @@ describe('TenantMigrationService', () => {
       'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
     );
 
-    expect(query).toHaveBeenCalledTimes(34);
+    expect(query).toHaveBeenCalledTimes(42);
     expect(query.mock.calls[0]?.[0]).toContain(
       '"tenant_019a6f3382b77a22971b6a8d7c5e4f30"."tenant_migrations"',
     );
@@ -57,6 +57,19 @@ describe('TenantMigrationService', () => {
     expect(query.mock.calls[33]).toEqual([
       expect.stringContaining('INSERT INTO'),
       ['CreateReservaciones1795215600000'],
+    ]);
+    expect(query.mock.calls[34]?.[0]).toContain(
+      '"IDX_reservaciones_cliente_created_at"',
+    );
+    expect(query.mock.calls[37]?.[0]).toContain(
+      '"IDX_reservaciones_created_at_id"',
+    );
+    expect(query.mock.calls[40]?.[0]).toContain(
+      '"vestido_id", "reservacion_id"',
+    );
+    expect(query.mock.calls[41]).toEqual([
+      expect.stringContaining('INSERT INTO'),
+      ['OptimizeReservaciones1795302000000'],
     ]);
   });
 

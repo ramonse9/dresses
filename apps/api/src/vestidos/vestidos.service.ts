@@ -140,6 +140,25 @@ export class VestidosService {
         .getRepository(Vestido)
         .createQueryBuilder('vestido')
         .innerJoinAndSelect('vestido.sucursal', 'sucursal')
+        .select([
+          'vestido.id',
+          'vestido.sucursalId',
+          'vestido.codigo',
+          'vestido.nombre',
+          'vestido.descripcion',
+          'vestido.talla',
+          'vestido.color',
+          'vestido.marca',
+          'vestido.precioRenta',
+          'vestido.deposito',
+          'vestido.estadoOperativo',
+          'vestido.activo',
+          'vestido.createdAt',
+          'vestido.updatedAt',
+          'sucursal.id',
+          'sucursal.nombre',
+          'sucursal.activo',
+        ])
         .where('vestido.sucursalId = :sucursalId', {
           sucursalId: input.sucursalId,
         })

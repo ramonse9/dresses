@@ -24,7 +24,14 @@ export enum ReservacionEstado {
 }
 
 @Entity({ name: 'reservaciones' })
-@Index('IDX_reservaciones_cliente_created_at', ['clienteId', 'createdAt'])
+@Index('IDX_reservaciones_cliente_created_at', ['clienteId', 'createdAt', 'id'])
+@Index('IDX_reservaciones_sucursal_created_at_id', [
+  'sucursalId',
+  'createdAt',
+  'id',
+])
+@Index('IDX_reservaciones_created_at_id', ['createdAt', 'id'])
+@Index('IDX_reservaciones_fechas', ['fechaInicio', 'fechaFin'])
 @Index('IDX_reservaciones_sucursal_estado_fechas', [
   'sucursalId',
   'estado',

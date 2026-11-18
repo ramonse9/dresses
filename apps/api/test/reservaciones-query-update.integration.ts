@@ -421,6 +421,50 @@ describe('PostgreSQL reservation queries and controlled updates', () => {
     });
   });
 
+  it('serializes concurrent date updates for two confirmed reservations', async () => {
+    const cliente = await createCliente(tenantA, 'Fechas concurrentes');
+    const sucursal = await createSucursal(tenantA, 'Fechas concurrentes');
+    const shared = await createDress(tenantA, sucursal);
+    const reservationA = await createReservation(
+      tenantA,
+      cliente,
+      sucursal,
+      [shared],
+      {
+        fechaInicio: new Date('2027-11-01T16:00:00.000Z'),
+        fechaFin: new Date('2027-11-02T16:00:00.000Z'),
+        confirmar: true,
+      },
+    );
+    const reservationB = await createReservation(
+      tenantA,
+      cliente,
+      sucursal,
+      [shared],
+      {
+        fechaInicio: new Date('2027-11-04T16:00:00.000Z'),
+        fechaFin: new Date('2027-11-05T16:00:00.000Z'),
+        confirmar: true,
+      },
+    );
+    const targetRange = {
+      fechaInicio: new Date('2027-11-10T16:00:00.000Z'),
+      fechaFin: new Date('2027-11-12T16:00:00.000Z'),
+    };
+    const results = await Promise.allSettled([
+      reservacionesService.update(tenantA, reservationA.id, targetRange),
+      reservacionesService.update(tenantA, reservationB.id, targetRange),
+    ]);
+
+    expect(results.filter(({ status }) => status === 'fulfilled')).toHaveLength(
+      1,
+    );
+    expect(results.find(({ status }) => status === 'rejected')).toMatchObject({
+      status: 'rejected',
+      reason: expect.any(ConflictException),
+    });
+  });
+
   it.each([
     ReservacionEstado.ENTREGADA,
     ReservacionEstado.DEVUELTA,
