@@ -157,9 +157,7 @@ describe('AuthService', () => {
   it('rotates the refresh token and issues a new access token', async () => {
     const { service, rotate, signAsync } = createService();
 
-    await expect(
-      service.refresh({ refreshToken: 'current-refresh-token' }),
-    ).resolves.toEqual({
+    await expect(service.refresh('current-refresh-token')).resolves.toEqual({
       accessToken: 'signed.jwt.token',
       refreshToken: 'rotated-refresh-token',
       tokenType: 'Bearer',

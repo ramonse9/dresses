@@ -67,6 +67,7 @@ ENABLE_DEV_TENANT_ADMIN=false
 JWT_ACCESS_SECRET=un_secreto_local_aleatorio_de_al_menos_32_bytes
 JWT_ACCESS_TTL_SECONDS=900
 AUTH_REFRESH_TTL_SECONDS=2592000
+CORS_ALLOWED_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
 ```
 
 El archivo `.env` está ignorado por Git. TypeORM tiene `synchronize: false`; los cambios de esquema se gestionan exclusivamente mediante migrations.
@@ -155,31 +156,33 @@ El login recibe únicamente `email` y `password`. El email se normaliza a minús
 ```bash
 curl --request POST http://localhost:3000/api/auth/login \
   --header 'Content-Type: application/json' \
+  --cookie-jar cookies.txt \
   --data '{"email":"owner@example.com","password":"tu-password"}'
 ```
 
-La respuesta contiene un access token de corta duración y un refresh token opaco:
+La respuesta JSON contiene únicamente el access token de corta duración:
 
 ```json
 {
   "accessToken": "eyJ...",
-  "refreshToken": "C0g...token_opaco...",
   "tokenType": "Bearer",
   "expiresIn": 900
 }
 ```
 
-El JWT inicial contiene `sub`, `email` y un `sessionId` aleatorio, además de los timestamps estándar del token. No contiene `schemaName`, empresa ni membresía. El refresh token contiene 256 bits aleatorios y no es un JWT. La base de datos guarda solamente su hash SHA-256; ni el token completo ni las contraseñas se registran.
+El JWT inicial contiene `sub`, `email` y un `sessionId` aleatorio, además de los timestamps estándar del token. No contiene `schemaName`, empresa ni membresía. El access token nunca se almacena en una cookie.
 
-Usa el refresh token para obtener un nuevo par de tokens:
+El refresh token contiene 256 bits aleatorios, no es un JWT y se entrega exclusivamente mediante la cookie `vestidos_refresh`. La cookie utiliza `HttpOnly`, `SameSite=Lax`, `Path=/api/auth`, un `Max-Age` igual a `AUTH_REFRESH_TTL_SECONDS` y `Secure` únicamente en producción. JavaScript no puede leerla y el navegador no la envía a las rutas de negocio. La base de datos guarda solamente su hash SHA-256; ni cookies, tokens completos ni contraseñas se registran.
+
+Usa el cookie jar para obtener un access token nuevo. El endpoint no acepta body ni un campo `refreshToken`:
 
 ```bash
 curl --request POST http://localhost:3000/api/auth/refresh \
-  --header 'Content-Type: application/json' \
-  --data '{"refreshToken":"TOKEN_ACTUAL"}'
+  --cookie cookies.txt \
+  --cookie-jar cookies.txt
 ```
 
-Cada refresh rota el token dentro de una transacción con bloqueo de fila. El hash anterior se reemplaza antes de confirmar la transacción, por lo que el token anterior deja de funcionar inmediatamente. La fecha de expiración absoluta de la sesión no se extiende al rotar.
+Cada refresh rota el token dentro de una transacción con bloqueo de fila, reemplaza la cookie y devuelve solamente el access token nuevo. El hash anterior se sustituye antes de confirmar la transacción, por lo que el token anterior deja de funcionar inmediatamente. La fecha de expiración absoluta de la sesión no se extiende al rotar.
 
 Verifica el token mediante el guard reutilizable en el endpoint protegido:
 
@@ -237,10 +240,12 @@ Revoca la sesión actual usando su access token:
 
 ```bash
 curl --request POST http://localhost:3000/api/auth/logout \
-  --header 'Authorization: Bearer eyJ...'
+  --header 'Authorization: Bearer eyJ...' \
+  --cookie cookies.txt \
+  --cookie-jar cookies.txt
 ```
 
-`logout` responde con HTTP `204`. El guard JWT consulta la sesión en `public` en cada petición protegida, por lo que una sesión revocada o expirada, o perteneciente a un usuario inactivo, deja de aceptar incluso access tokens que aún no hayan vencido. El endpoint de refresh aplica las mismas verificaciones.
+`logout` revoca la sesión, elimina la cookie y responde con HTTP `204` sin tokens. El guard JWT consulta la sesión en `public` en cada petición protegida, por lo que una sesión revocada o expirada, o perteneciente a un usuario inactivo, deja de aceptar incluso access tokens que aún no hayan vencido. El endpoint de refresh aplica las mismas verificaciones.
 
 Puedes inspeccionar las sesiones sin exponer tokens completos:
 
@@ -965,7 +970,7 @@ Con PostgreSQL conectado, el endpoint responde:
 
 La verificación ejecuta `SELECT 1` mediante `DatabaseHealthService`. Si se pierde una conexión ya inicializada, el estado cambia a `degraded` y la base de datos a `down`.
 
-El API acepta solicitudes CORS de `http://localhost:4200` y `http://127.0.0.1:4200` durante el desarrollo local.
+El API habilita credenciales CORS únicamente para los orígenes explícitos de `CORS_ALLOWED_ORIGINS`; en desarrollo, los valores predeterminados seguros son `http://localhost:4200` y `http://127.0.0.1:4200`. No se permite `*` y producción exige configurar la variable. Las rutas de autenticación permiten clientes sin header `Origin`, como `curl`, pero rechazan con `403` cualquier `Origin` de navegador que no esté autorizado.
 
 ## Validaciones
 

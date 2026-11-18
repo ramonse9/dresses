@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import {
   Controller,
   ExecutionContext,
@@ -11,13 +12,19 @@ import { App } from 'supertest/types.js';
 import { AppController } from './../src/app.controller.js';
 import { AppService } from './../src/app.service.js';
 import { AuthController } from './../src/auth/auth.controller.js';
+import { AuthOriginGuard } from './../src/auth/auth-origin.guard.js';
 import { AuthService } from './../src/auth/auth.service.js';
 import { CurrentTenant } from './../src/auth/current-tenant.decorator.js';
 import { JwtAuthGuard } from './../src/auth/jwt-auth.guard.js';
+import {
+  AUTH_REFRESH_COOKIE_NAME,
+  RefreshTokenCookieService,
+} from './../src/auth/refresh-token-cookie.service.js';
 import { TenantAuthGuard } from './../src/auth/tenant-auth.guard.js';
 import { TenantAuthenticated } from './../src/auth/tenant-authenticated.decorator.js';
 import { ClientesController } from './../src/clientes/clientes.controller.js';
 import { ClientesService } from './../src/clientes/clientes.service.js';
+import { createCorsOptions } from './../src/config/cors.config.js';
 import { DatabaseHealthService } from './../src/database/database-health.service.js';
 import { DevTenantAdminGuard } from './../src/empresas/dev-tenant-admin.guard.js';
 import { EmpresasController } from './../src/empresas/empresas.controller.js';
@@ -144,6 +151,16 @@ describe('AppController (e2e)', () => {
       ],
       providers: [
         AppService,
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            AUTH_REFRESH_TTL_SECONDS: '2592000',
+            CORS_ALLOWED_ORIGINS: 'http://localhost:4200,http://127.0.0.1:4200',
+            NODE_ENV: 'development',
+          }),
+        },
+        AuthOriginGuard,
+        RefreshTokenCookieService,
         {
           provide: AuthService,
           useValue: {
@@ -389,6 +406,7 @@ describe('AppController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
+    app.enableCors(createCorsOptions(moduleFixture.get(ConfigService)));
     await app.init();
   });
 
@@ -403,37 +421,90 @@ describe('AppController (e2e)', () => {
       });
   });
 
-  it('/api/auth/login (POST)', () => {
+  it('/api/auth/login (POST) sets the HttpOnly cookie without exposing it in JSON', () => {
     return request(app.getHttpServer())
       .post('/api/auth/login')
       .send({ email: 'Owner@Example.COM', password: 'correct-password' })
       .expect(201)
       .expect({
         accessToken: 'signed.jwt.token',
-        refreshToken,
         tokenType: 'Bearer',
         expiresIn: 900,
+      })
+      .expect((response) => {
+        const cookie = response.headers['set-cookie']?.[0];
+        expect(cookie).toContain(`${AUTH_REFRESH_COOKIE_NAME}=${refreshToken}`);
+        expect(cookie).toContain('HttpOnly');
+        expect(cookie).toContain('SameSite=Lax');
+        expect(cookie).toContain('Path=/api/auth');
+        expect(cookie).toContain('Max-Age=2592000');
+        expect(cookie).not.toContain('Secure');
+        expect(response.body).not.toHaveProperty('refreshToken');
       });
   });
 
-  it('/api/auth/refresh (POST)', () => {
+  it('/api/auth/refresh (POST) rotates the cookie and returns only an access token', () => {
     return request(app.getHttpServer())
       .post('/api/auth/refresh')
-      .send({ refreshToken })
+      .set('Cookie', `${AUTH_REFRESH_COOKIE_NAME}=${refreshToken}`)
       .expect(200)
       .expect({
         accessToken: 'rotated.jwt.token',
-        refreshToken: rotatedRefreshToken,
         tokenType: 'Bearer',
         expiresIn: 900,
+      })
+      .expect((response) => {
+        expect(response.headers['set-cookie']?.[0]).toContain(
+          `${AUTH_REFRESH_COOKIE_NAME}=${rotatedRefreshToken}`,
+        );
+        expect(response.body).not.toHaveProperty('refreshToken');
       });
+  });
+
+  it('/api/auth/refresh (POST) rejects missing cookies and body tokens', async () => {
+    await request(app.getHttpServer()).post('/api/auth/refresh').expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', `${AUTH_REFRESH_COOKIE_NAME}=${refreshToken}`)
+      .send({ refreshToken })
+      .expect(400);
   });
 
   it('/api/auth/logout (POST)', () => {
     return request(app.getHttpServer())
       .post('/api/auth/logout')
       .set('Authorization', 'Bearer signed.jwt.token')
-      .expect(204);
+      .set('Cookie', `${AUTH_REFRESH_COOKIE_NAME}=${rotatedRefreshToken}`)
+      .expect(204)
+      .expect((response) => {
+        const cookie = response.headers['set-cookie']?.[0];
+        expect(cookie).toContain(`${AUTH_REFRESH_COOKIE_NAME}=`);
+        expect(cookie).toContain('Path=/api/auth');
+        expect(cookie).toContain('Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+      });
+  });
+
+  it('allows configured and absent Origins but rejects untrusted auth Origins', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .set('Origin', 'http://localhost:4200')
+      .send({ email: 'Owner@Example.COM', password: 'correct-password' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .set('Origin', 'https://evil.example')
+      .send({ email: 'Owner@Example.COM', password: 'correct-password' })
+      .expect(403);
+  });
+
+  it('configures credentialed CORS with an explicit origin', () => {
+    return request(app.getHttpServer())
+      .options('/api/auth/login')
+      .set('Origin', 'http://localhost:4200')
+      .set('Access-Control-Request-Method', 'POST')
+      .expect(204)
+      .expect('Access-Control-Allow-Origin', 'http://localhost:4200')
+      .expect('Access-Control-Allow-Credentials', 'true');
   });
 
   it('/api/auth/empresas (GET)', () => {

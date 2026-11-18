@@ -12,7 +12,6 @@ import { AuthSessionsService } from './auth-sessions.service.js';
 import { getJwtAccessTtlSeconds } from './auth.config.js';
 import type { EmpresaAccessDto } from './dto/empresa-access.dto.js';
 import type { LoginDto } from './dto/login.dto.js';
-import type { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import type { SelectEmpresaDto } from './dto/select-empresa.dto.js';
 import { PasswordHashService } from './password-hash.service.js';
 import type {
@@ -26,7 +25,7 @@ export interface AccessTokenResponse {
   expiresIn: number;
 }
 
-export interface LoginResponse extends AccessTokenResponse {
+export interface IssuedAuthTokens extends AccessTokenResponse {
   refreshToken: string;
 }
 
@@ -42,7 +41,7 @@ export class AuthService {
     private readonly tenantResolverService: TenantResolverService,
   ) {}
 
-  async login(input: LoginDto): Promise<LoginResponse> {
+  async login(input: LoginDto): Promise<IssuedAuthTokens> {
     const usuario = await this.usuariosService.findByEmailForAuthentication(
       input.email,
     );
@@ -65,10 +64,8 @@ export class AuthService {
     );
   }
 
-  async refresh(input: RefreshTokenDto): Promise<LoginResponse> {
-    const issuedSession = await this.authSessionsService.rotate(
-      input.refreshToken,
-    );
+  async refresh(refreshToken: string): Promise<IssuedAuthTokens> {
+    const issuedSession = await this.authSessionsService.rotate(refreshToken);
 
     return this.issueTokens(
       issuedSession.usuario.id,
@@ -130,7 +127,7 @@ export class AuthService {
     email: string,
     sessionId: string,
     refreshToken: string,
-  ): Promise<LoginResponse> {
+  ): Promise<IssuedAuthTokens> {
     const payload: AccessTokenPayload = {
       sub: usuarioId,
       email,

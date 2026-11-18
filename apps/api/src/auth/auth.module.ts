@@ -5,12 +5,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { TenancyModule } from '../tenancy/tenancy.module.js';
 import { UsuariosModule } from '../usuarios/usuarios.module.js';
 import { AuthController } from './auth.controller.js';
+import { AuthOriginGuard } from './auth-origin.guard.js';
 import { AuthSessionsService } from './auth-sessions.service.js';
 import { getJwtAccessTtlSeconds } from './auth.config.js';
 import { AuthService } from './auth.service.js';
 import { AuthSession } from './entities/auth-session.entity.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { PasswordHashService } from './password-hash.service.js';
+import { RefreshTokenCookieService } from './refresh-token-cookie.service.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 import { RolesGuard } from './roles.guard.js';
 import { TenantAuthGuard } from './tenant-auth.guard.js';
@@ -40,8 +42,10 @@ import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.intercepto
   controllers: [AuthController],
   providers: [
     AuthService,
+    AuthOriginGuard,
     AuthSessionsService,
     PasswordHashService,
+    RefreshTokenCookieService,
     RefreshTokenService,
     JwtAuthGuard,
     TenantAuthGuard,

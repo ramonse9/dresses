@@ -73,8 +73,8 @@ describe('PostgreSQL auth sessions', () => {
     expect(storedSession.refreshTokenHash).not.toContain(login.refreshToken);
 
     const rotations = await Promise.allSettled([
-      authService.refresh({ refreshToken: login.refreshToken }),
-      authService.refresh({ refreshToken: login.refreshToken }),
+      authService.refresh(login.refreshToken),
+      authService.refresh(login.refreshToken),
     ]);
     const successfulRotations = rotations.filter(
       (result) => result.status === 'fulfilled',
@@ -100,7 +100,7 @@ describe('PostgreSQL auth sessions', () => {
     await authService.logout(rotatedPayload);
 
     await expect(
-      authService.refresh({ refreshToken: rotated.value.refreshToken }),
+      authService.refresh(rotated.value.refreshToken),
     ).rejects.toThrow('Refresh token inválido');
     await expect(
       authSessionsService.assertActive(rotatedPayload.sessionId, usuario.id),
@@ -112,8 +112,8 @@ describe('PostgreSQL auth sessions', () => {
     usuario.activo = false;
     await usuariosRepository.save(usuario);
 
-    await expect(
-      authService.refresh({ refreshToken: login.refreshToken }),
-    ).rejects.toThrow('Refresh token inválido');
+    await expect(authService.refresh(login.refreshToken)).rejects.toThrow(
+      'Refresh token inválido',
+    );
   });
 });
