@@ -3,14 +3,14 @@ import { inject } from '@angular/core';
 import { catchError, switchMap, throwError } from 'rxjs';
 import { API_BASE_URL } from '../config/api-config';
 import { AccessTokenStore } from './access-token.store';
-import { AuthStateService } from './auth-state.service';
+import { AuthStore } from './auth.store';
 
 const nonRefreshablePaths = ['/auth/login', '/auth/refresh', '/auth/me'] as const;
 
 export const authInterceptor: HttpInterceptorFn = (request, next) => {
   const baseUrl = inject(API_BASE_URL).trim().replace(/\/+$/g, '');
   const accessTokens = inject(AccessTokenStore);
-  const authState = inject(AuthStateService);
+  const authStore = inject(AuthStore);
 
   if (!isApiRequest(request.url, baseUrl)) {
     return next(request);
@@ -32,7 +32,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
         return throwError(() => error);
       }
 
-      return authState.refreshAccessToken().pipe(
+      return authStore.refreshAccessToken().pipe(
         switchMap((newAccessToken) =>
           next(
             request.clone({

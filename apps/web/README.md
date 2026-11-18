@@ -46,11 +46,13 @@ Los errores HTTP se convierten al contrato `ApiError`, formado por `status`, `me
 
 - `AuthApiService` consume login, refresh, logout y perfil;
 - `AccessTokenStore` conserva el access token en una signal en memoria;
-- `AuthStateService` expone `status`, `user`, `error`, `isChecking` e `isAuthenticated` como signals de solo lectura;
+- `AuthStore` expone `status`, `user`, `accessTokenExpiresAt`, `initializationError`, `isInitializing` e `isAuthenticated` como signals de solo lectura;
 - `authInterceptor` agrega Bearer únicamente a solicitudes del API configurado;
 - el inicializador de la aplicación intenta restaurar la sesión mediante la cookie HttpOnly antes de completar el arranque.
 
 Login, refresh y logout utilizan `withCredentials=true`. El refresh token nunca está disponible para Angular. No se utilizan `localStorage`, `sessionStorage`, IndexedDB ni cookies accesibles desde JavaScript para persistir tokens.
+
+El ciclo inicial comienza en `initializing`, ejecuta un único refresh compartido y después consulta `/auth/me`. Una sesión válida pasa a `authenticated`; una respuesta `401` pasa a `anonymous` sin mostrarse como error de inicialización. Los errores de red se normalizan en `initializationError`, y un timeout de 10 segundos evita bloquear indefinidamente el renderizado. Los tokens obtenidos por refresh se consideran globales, sin tenant ni rol seleccionados.
 
 Ante un `401` de una solicitud protegida, el interceptor comparte una sola rotación entre consumidores concurrentes y reintenta una vez con el access token nuevo. Login, refresh y perfil están excluidos del reintento para evitar ciclos. Un refresh rechazado limpia inmediatamente la identidad y el access token locales.
 
@@ -61,7 +63,7 @@ Ante un `401` de una solicitud protegida, el interceptor comparte una sola rotac
 - Usar signals para estado local y derivado.
 - Reutilizar `ApiClient`, `ApiError` y los componentes de `shared/ui`.
 - No enviar `schemaName` ni construir rutas con nombres de schemas; el tenant se resolverá mediante la autenticación.
-- No leer ni persistir manualmente tokens; consumir `AuthStateService` y dejar el header Bearer al interceptor.
+- No leer ni persistir manualmente tokens; consumir `AuthStore` y dejar el header Bearer al interceptor.
 - Agregar la ruta con carga diferida y sus pruebas.
 
 ## Ejecución y validación

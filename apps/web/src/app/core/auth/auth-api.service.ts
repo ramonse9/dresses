@@ -26,6 +26,6 @@ export class AuthApiService {
   }
 
   me(): Observable<AuthenticatedUser> {
-    return this.api.get<AuthenticatedUser>('auth/me');
+    return this.api.get<AuthenticatedUser>('auth/me', cookieRequest);
   }
 }

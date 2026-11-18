@@ -36,6 +36,8 @@ describe('AuthApiService', () => {
     expect(api.post).toHaveBeenNthCalledWith(3, 'auth/logout', null, {
       withCredentials: true,
     });
-    expect(api.get).toHaveBeenCalledWith('auth/me');
+    expect(api.get).toHaveBeenCalledWith('auth/me', {
+      withCredentials: true,
+    });
   });
 });

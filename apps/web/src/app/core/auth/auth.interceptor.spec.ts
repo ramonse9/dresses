@@ -10,10 +10,10 @@ import { firstValueFrom, of } from 'rxjs';
 import { API_BASE_URL } from '../config/api-config';
 import { AccessTokenStore } from './access-token.store';
 import { authInterceptor } from './auth.interceptor';
-import { AuthStateService } from './auth-state.service';
+import { AuthStore } from './auth.store';
 
 describe('authInterceptor', () => {
-  const authState = {
+  const authStore = {
     refreshAccessToken: vi.fn(),
   };
   let http: HttpClient;
@@ -22,13 +22,13 @@ describe('authInterceptor', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    authState.refreshAccessToken.mockReturnValue(of('new.jwt.token'));
+    authStore.refreshAccessToken.mockReturnValue(of('new.jwt.token'));
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([authInterceptor])),
         provideHttpClientTesting(),
         { provide: API_BASE_URL, useValue: 'http://localhost:3000/api' },
-        { provide: AuthStateService, useValue: authState },
+        { provide: AuthStore, useValue: authStore },
       ],
     });
     http = TestBed.inject(HttpClient);
@@ -66,7 +66,7 @@ describe('authInterceptor', () => {
     retriedRequest.flush({ data: 'ok' });
 
     await expect(response).resolves.toEqual({ data: 'ok' });
-    expect(authState.refreshAccessToken).toHaveBeenCalledOnce();
+    expect(authStore.refreshAccessToken).toHaveBeenCalledOnce();
   });
 
   it('does not refresh recursively for authentication endpoints', async () => {
@@ -76,6 +76,6 @@ describe('authInterceptor', () => {
     request.flush(null, { status: 401, statusText: 'Unauthorized' });
 
     await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
-    expect(authState.refreshAccessToken).not.toHaveBeenCalled();
+    expect(authStore.refreshAccessToken).not.toHaveBeenCalled();
   });
 });
