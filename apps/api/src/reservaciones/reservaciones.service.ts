@@ -14,7 +14,13 @@ import {
   VestidoEstadoOperativo,
 } from '../vestidos/entities/vestido.tenant-entity.js';
 import type { CreateReservacionDto } from './dto/create-reservacion.dto.js';
-import type { ReservacionResponseDto } from './dto/reservacion-response.dto.js';
+import type { ListReservacionesQueryDto } from './dto/list-reservaciones-query.dto.js';
+import type {
+  PaginatedReservacionesResponseDto,
+  ReservacionListItemDto,
+  ReservacionResponseDto,
+} from './dto/reservacion-response.dto.js';
+import type { UpdateReservacionDto } from './dto/update-reservacion.dto.js';
 import { ReservacionVestido } from './entities/reservacion-vestido.tenant-entity.js';
 import {
   Reservacion,
@@ -22,6 +28,15 @@ import {
 } from './entities/reservacion.tenant-entity.js';
 
 const maximumMoneyMinorUnits = 999_999_999_999n;
+type ReservationSelection = {
+  sucursalId: string;
+  vestidoIds: string[];
+};
+type ReservationRange = {
+  vestidoIds: string[];
+  fechaInicio: Date;
+  fechaFin: Date;
+};
 
 @Injectable()
 export class ReservacionesService {
@@ -131,9 +146,242 @@ export class ReservacionesService {
         importeRenta: reservacion.importeRenta,
         depositoRequerido: reservacion.depositoRequerido,
         confirmadaAt: reservacion.confirmadaAt,
+        entregadaAt: reservacion.entregadaAt,
+        devueltaAt: reservacion.devueltaAt,
+        canceladaAt: reservacion.canceladaAt,
+        motivoCancelacion: reservacion.motivoCancelacion,
         createdAt: reservacion.createdAt,
         updatedAt: reservacion.updatedAt,
       };
+    });
+  }
+
+  findAll(
+    tenant: TenantScope,
+    input: ListReservacionesQueryDto,
+  ): Promise<PaginatedReservacionesResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const query = manager
+        .getRepository(Reservacion)
+        .createQueryBuilder('reservacion')
+        .innerJoinAndSelect('reservacion.cliente', 'cliente')
+        .innerJoinAndSelect('reservacion.sucursal', 'sucursal');
+
+      if (input.clienteId !== undefined) {
+        query.andWhere('reservacion.clienteId = :clienteId', {
+          clienteId: input.clienteId,
+        });
+      }
+      if (input.sucursalId !== undefined) {
+        query.andWhere('reservacion.sucursalId = :sucursalId', {
+          sucursalId: input.sucursalId,
+        });
+      }
+      if (input.estado !== undefined) {
+        query.andWhere('reservacion.estado = :estado', {
+          estado: input.estado,
+        });
+      }
+      if (input.fechaDesde !== undefined) {
+        query.andWhere('reservacion.fechaFin > :fechaDesde', {
+          fechaDesde: input.fechaDesde,
+        });
+      }
+      if (input.fechaHasta !== undefined) {
+        query.andWhere('reservacion.fechaInicio < :fechaHasta', {
+          fechaHasta: input.fechaHasta,
+        });
+      }
+      if (input.q !== undefined) {
+        query.andWhere(
+          `(cliente.nombre ILIKE :search ESCAPE '\\' OR cliente.email ILIKE :search ESCAPE '\\' OR cliente.telefono ILIKE :search ESCAPE '\\')`,
+          { search: `%${this.escapeLikePattern(input.q)}%` },
+        );
+      }
+
+      const total = await query.getCount();
+      const { entities, raw } = await query
+        .addSelect(
+          `(SELECT COUNT(*)::integer FROM "reservacion_vestidos" "detalle_count" WHERE "detalle_count"."reservacion_id" = "reservacion"."id")`,
+          'vestidosCount',
+        )
+        .orderBy('reservacion.createdAt', 'DESC')
+        .addOrderBy('reservacion.id', 'DESC')
+        .skip((input.page - 1) * input.limit)
+        .take(input.limit)
+        .getRawAndEntities();
+
+      return {
+        data: entities.map((reservacion, index) =>
+          this.toListResponse(
+            reservacion,
+            Number((raw[index] as { vestidosCount?: unknown }).vestidosCount),
+          ),
+        ),
+        pagination: {
+          page: input.page,
+          limit: input.limit,
+          total,
+          totalPages: Math.ceil(total / input.limit),
+        },
+      };
+    });
+  }
+
+  findOne(tenant: TenantScope, id: string): Promise<ReservacionResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const reservacion = await this.loadReservationDetail(manager, id);
+
+      if (!reservacion) {
+        throw new NotFoundException('Reservación no encontrada');
+      }
+
+      return this.toDetailResponse(reservacion);
+    });
+  }
+
+  update(
+    tenant: TenantScope,
+    id: string,
+    input: UpdateReservacionDto,
+  ): Promise<ReservacionResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      const repository = manager.getRepository(Reservacion);
+      const reservacion = await repository
+        .createQueryBuilder('reservacion')
+        .where('reservacion.id = :id', { id })
+        .setLock('pessimistic_write')
+        .getOne();
+
+      if (!reservacion) {
+        throw new NotFoundException('Reservación no encontrada');
+      }
+      if (
+        reservacion.estado !== ReservacionEstado.BORRADOR &&
+        reservacion.estado !== ReservacionEstado.CONFIRMADA
+      ) {
+        throw new ConflictException(
+          'La reservación no puede editarse en su estado actual',
+        );
+      }
+
+      const detailRepository = manager.getRepository(ReservacionVestido);
+      const existingDetails = await detailRepository
+        .createQueryBuilder('detalle')
+        .innerJoinAndSelect('detalle.vestido', 'vestido')
+        .where('detalle.reservacionId = :id', { id })
+        .orderBy('detalle.createdAt', 'ASC')
+        .addOrderBy('detalle.id', 'ASC')
+        .getMany();
+      const finalClienteId = input.clienteId ?? reservacion.clienteId;
+      const finalSucursalId = input.sucursalId ?? reservacion.sucursalId;
+      const finalVestidoIds =
+        input.vestidoIds ?? existingDetails.map((detail) => detail.vestidoId);
+      const finalFechaInicio = input.fechaInicio ?? reservacion.fechaInicio;
+      const finalFechaFin = input.fechaFin ?? reservacion.fechaFin;
+
+      if (finalFechaFin.getTime() <= finalFechaInicio.getTime()) {
+        throw new BadRequestException(
+          'fechaFin debe ser posterior a fechaInicio',
+        );
+      }
+
+      const structuralChange =
+        input.clienteId !== undefined ||
+        input.sucursalId !== undefined ||
+        input.vestidoIds !== undefined ||
+        input.fechaInicio !== undefined ||
+        input.fechaFin !== undefined;
+
+      if (structuralChange) {
+        await this.requireActiveCliente(manager, finalClienteId);
+        await this.requireActiveSucursal(manager, finalSucursalId);
+
+        if (reservacion.estado === ReservacionEstado.CONFIRMADA) {
+          const lockOrder = [
+            ...new Set([
+              ...existingDetails.map((detail) => detail.vestidoId),
+              ...finalVestidoIds,
+            ]),
+          ].sort();
+          await this.acquireDressLocks(manager, tenant, lockOrder);
+        }
+
+        const catalogDresses = await this.requireAvailableCatalogDresses(
+          manager,
+          { sucursalId: finalSucursalId, vestidoIds: finalVestidoIds },
+          [...finalVestidoIds].sort(),
+        );
+
+        if (reservacion.estado === ReservacionEstado.CONFIRMADA) {
+          await this.ensureNoBlockingOverlap(
+            manager,
+            {
+              vestidoIds: finalVestidoIds,
+              fechaInicio: finalFechaInicio,
+              fechaFin: finalFechaFin,
+            },
+            reservacion.id,
+          );
+        }
+
+        const existingByVestidoId = new Map(
+          existingDetails.map((detail) => [detail.vestidoId, detail]),
+        );
+        const catalogById = new Map(
+          catalogDresses.map((vestido) => [vestido.id, vestido]),
+        );
+        const finalSnapshots = finalVestidoIds.map((vestidoId) => {
+          const existing = existingByVestidoId.get(vestidoId);
+          const catalog = catalogById.get(vestidoId);
+
+          if (!catalog) {
+            throw new NotFoundException('Vestido no encontrado');
+          }
+
+          return {
+            vestidoId,
+            precioRenta: existing?.precioRenta ?? catalog.precioRenta,
+            deposito: existing?.deposito ?? catalog.deposito ?? '0.00',
+          };
+        });
+
+        reservacion.clienteId = finalClienteId;
+        reservacion.sucursalId = finalSucursalId;
+        reservacion.fechaInicio = finalFechaInicio;
+        reservacion.fechaFin = finalFechaFin;
+        reservacion.importeRenta = this.sumMoney(
+          finalSnapshots.map((snapshot) => snapshot.precioRenta),
+        );
+        reservacion.depositoRequerido = this.sumMoney(
+          finalSnapshots.map((snapshot) => snapshot.deposito),
+        );
+
+        if (input.vestidoIds !== undefined) {
+          await detailRepository.delete({ reservacionId: reservacion.id });
+          await detailRepository.save(
+            finalSnapshots.map((snapshot) =>
+              detailRepository.create({
+                reservacionId: reservacion.id,
+                ...snapshot,
+              }),
+            ),
+          );
+        }
+      }
+
+      if (input.notas !== undefined) {
+        reservacion.notas = input.notas;
+      }
+
+      await repository.save(reservacion);
+      const updated = await this.loadReservationDetail(manager, reservacion.id);
+
+      if (!updated) {
+        throw new NotFoundException('Reservación no encontrada');
+      }
+
+      return this.toDetailResponse(updated);
     });
   }
 
@@ -190,7 +438,7 @@ export class ReservacionesService {
 
   private async requireAvailableCatalogDresses(
     manager: EntityManager,
-    input: CreateReservacionDto,
+    input: ReservationSelection,
     vestidoIds: string[],
   ): Promise<Vestido[]> {
     const vestidos = await manager
@@ -230,9 +478,10 @@ export class ReservacionesService {
 
   private async ensureNoBlockingOverlap(
     manager: EntityManager,
-    input: CreateReservacionDto,
+    input: ReservationRange,
+    excludedReservationId?: string,
   ): Promise<void> {
-    const conflict = await manager
+    const query = manager
       .getRepository(ReservacionVestido)
       .createQueryBuilder('detalle')
       .innerJoin('detalle.reservacion', 'reservacion')
@@ -250,9 +499,15 @@ export class ReservacionesService {
       })
       .andWhere('reservacion.fechaFin > :fechaInicio', {
         fechaInicio: input.fechaInicio,
-      })
-      .limit(1)
-      .getOne();
+      });
+
+    if (excludedReservationId !== undefined) {
+      query.andWhere('reservacion.id != :excludedReservationId', {
+        excludedReservationId,
+      });
+    }
+
+    const conflict = await query.limit(1).getOne();
 
     if (conflict) {
       throw new ConflictException(
@@ -284,5 +539,95 @@ export class ReservacionesService {
     }
 
     return BigInt(match[1]) * 100n + BigInt((match[2] ?? '').padEnd(2, '0'));
+  }
+
+  private async loadReservationDetail(
+    manager: EntityManager,
+    id: string,
+  ): Promise<Reservacion | null> {
+    return manager
+      .getRepository(Reservacion)
+      .createQueryBuilder('reservacion')
+      .innerJoinAndSelect('reservacion.cliente', 'cliente')
+      .innerJoinAndSelect('reservacion.sucursal', 'sucursal')
+      .leftJoinAndSelect('reservacion.vestidos', 'detalle')
+      .leftJoinAndSelect('detalle.vestido', 'vestido')
+      .where('reservacion.id = :id', { id })
+      .orderBy('detalle.createdAt', 'ASC')
+      .addOrderBy('detalle.id', 'ASC')
+      .getOne();
+  }
+
+  private toListResponse(
+    reservacion: Reservacion,
+    vestidosCount: number,
+  ): ReservacionListItemDto {
+    return {
+      id: reservacion.id,
+      cliente: {
+        id: reservacion.cliente.id,
+        nombre: reservacion.cliente.nombre,
+        telefono: reservacion.cliente.telefono,
+        email: reservacion.cliente.email,
+      },
+      sucursal: {
+        id: reservacion.sucursal.id,
+        nombre: reservacion.sucursal.nombre,
+      },
+      fechaInicio: reservacion.fechaInicio,
+      fechaFin: reservacion.fechaFin,
+      estado: reservacion.estado,
+      notas: reservacion.notas,
+      importeRenta: reservacion.importeRenta,
+      depositoRequerido: reservacion.depositoRequerido,
+      createdAt: reservacion.createdAt,
+      updatedAt: reservacion.updatedAt,
+      vestidosCount,
+    };
+  }
+
+  private toDetailResponse(reservacion: Reservacion): ReservacionResponseDto {
+    return {
+      id: reservacion.id,
+      cliente: {
+        id: reservacion.cliente.id,
+        nombre: reservacion.cliente.nombre,
+        telefono: reservacion.cliente.telefono,
+        email: reservacion.cliente.email,
+      },
+      sucursal: {
+        id: reservacion.sucursal.id,
+        nombre: reservacion.sucursal.nombre,
+      },
+      vestidos: reservacion.vestidos.map((detail) => ({
+        id: detail.vestido.id,
+        codigo: detail.vestido.codigo,
+        nombre: detail.vestido.nombre,
+        talla: detail.vestido.talla,
+        color: detail.vestido.color,
+        precioRenta: detail.precioRenta,
+        deposito: detail.deposito,
+      })),
+      fechaInicio: reservacion.fechaInicio,
+      fechaFin: reservacion.fechaFin,
+      estado: reservacion.estado,
+      notas: reservacion.notas,
+      importeRenta: reservacion.importeRenta,
+      depositoRequerido: reservacion.depositoRequerido,
+      confirmadaAt: reservacion.confirmadaAt,
+      entregadaAt: reservacion.entregadaAt,
+      devueltaAt: reservacion.devueltaAt,
+      canceladaAt: reservacion.canceladaAt,
+      motivoCancelacion: reservacion.motivoCancelacion,
+      createdAt: reservacion.createdAt,
+      updatedAt: reservacion.updatedAt,
+    };
+  }
+
+  private escapeLikePattern(value: string): string {
+    return value
+      .replaceAll('\\', '\\\\')
+      .replaceAll('%', '\\%')
+      .replaceAll('_', '\\_');
   }
 }

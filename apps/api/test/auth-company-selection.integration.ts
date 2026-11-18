@@ -411,6 +411,66 @@ describe('PostgreSQL authenticated empresa selection', () => {
       JSON.stringify([vestidoAResponse.body, vestidoBResponse.body]),
     ).not.toContain('tenant_');
 
+    const reservacionAResponse = await request(app.getHttpServer())
+      .post('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({
+        clienteId: clienteAResponse.body.id,
+        sucursalId: sucursalAResponse.body.id,
+        vestidoIds: [vestidoAResponse.body.id],
+        fechaInicio: '2027-11-10T16:00:00-07:00',
+        fechaFin: '2027-11-12T16:00:00-07:00',
+      })
+      .expect(201);
+    const reservacionBResponse = await request(app.getHttpServer())
+      .post('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({
+        clienteId: clienteBResponse.body.id,
+        sucursalId: sucursalBResponse.body.id,
+        vestidoIds: [vestidoBResponse.body.id],
+        fechaInicio: '2027-11-10T16:00:00-07:00',
+        fechaFin: '2027-11-12T16:00:00-07:00',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .get('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .set('x-empresa-id', empresaA.id)
+      .set('x-schema-name', empresaA.schemaName)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          data: [
+            expect.objectContaining({
+              id: reservacionBResponse.body.id,
+              vestidosCount: 1,
+            }),
+          ],
+          pagination: { total: 1 },
+        });
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
+      });
+    await request(app.getHttpServer())
+      .get(`/api/reservaciones/${String(reservacionBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/reservaciones/${String(reservacionAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(404);
+    await request(app.getHttpServer())
+      .patch(`/api/reservaciones/${String(reservacionBResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({ notas: 'Actualizada por empleado' })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: reservacionBResponse.body.id,
+          notas: 'Actualizada por empleado',
+        });
+      });
+
     await request(app.getHttpServer())
       .post('/api/vestidos')
       .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
@@ -680,6 +740,15 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
       .expect(200);
     await request(app.getHttpServer())
+      .get('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/reservaciones/${String(reservacionAResponse.body.id)}`)
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({ notas: 'Actualizada con membresía EMPLOYEE vigente' })
+      .expect(200);
+    await request(app.getHttpServer())
       .post('/api/vestidos')
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
       .send({
@@ -720,6 +789,10 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .get('/api/clientes')
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
       .expect(403);
+    await request(app.getHttpServer())
+      .get('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(403);
     await expect(
       authService.selectEmpresa(payloadA, { empresaId: empresaA.id }),
     ).rejects.toThrow('No tienes acceso a esta empresa');
@@ -736,6 +809,10 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .expect(403);
     await request(app.getHttpServer())
       .get('/api/clientes')
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/api/reservaciones')
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .expect(403);
     await expect(authService.listEmpresas(payloadA)).resolves.toEqual([]);

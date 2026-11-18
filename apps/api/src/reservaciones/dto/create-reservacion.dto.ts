@@ -34,7 +34,7 @@ function requireObject(body: unknown): Record<string, unknown> {
   return body as Record<string, unknown>;
 }
 
-function parseUuid(value: unknown, field: string): string {
+export function parseReservacionUuid(value: unknown, field: string): string {
   if (typeof value !== 'string' || !uuidV4Pattern.test(value)) {
     throw new BadRequestException(`${field} debe ser un UUID válido`);
   }
@@ -42,7 +42,7 @@ function parseUuid(value: unknown, field: string): string {
   return value.toLowerCase();
 }
 
-function parseDate(value: unknown, field: string): Date {
+export function parseReservacionDate(value: unknown, field: string): Date {
   const rawValue = typeof value === 'string' ? value : null;
   const match = rawValue ? isoDateTimeWithTimezonePattern.exec(rawValue) : null;
 
@@ -82,6 +82,41 @@ function parseDate(value: unknown, field: string): Date {
   return parsed;
 }
 
+export function parseReservacionVestidoIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new BadRequestException('vestidoIds debe ser una lista');
+  }
+  if (value.length < 1 || value.length > 50) {
+    throw new BadRequestException(
+      'vestidoIds debe contener entre 1 y 50 elementos',
+    );
+  }
+
+  const vestidoIds = value.map((id, index) =>
+    parseReservacionUuid(id, `vestidoIds[${index}]`),
+  );
+
+  if (new Set(vestidoIds).size !== vestidoIds.length) {
+    throw new BadRequestException('vestidoIds no puede contener duplicados');
+  }
+
+  return vestidoIds;
+}
+
+export function parseReservacionNotas(value: unknown): string | null {
+  if (value !== null && typeof value !== 'string') {
+    throw new BadRequestException('notas debe ser texto o null');
+  }
+
+  const normalized = typeof value === 'string' ? value.trim() : null;
+
+  if (normalized !== null && normalized.length > 2_000) {
+    throw new BadRequestException('notas no puede exceder 2000 caracteres');
+  }
+
+  return normalized?.length ? normalized : null;
+}
+
 export function parseCreateReservacionBody(
   body: unknown,
 ): CreateReservacionDto {
@@ -93,25 +128,10 @@ export function parseCreateReservacionBody(
   if (unexpected) {
     throw new BadRequestException(`Campo no permitido: ${unexpected}`);
   }
-  if (!Array.isArray(input.vestidoIds)) {
-    throw new BadRequestException('vestidoIds debe ser una lista');
-  }
-  if (input.vestidoIds.length < 1 || input.vestidoIds.length > 50) {
-    throw new BadRequestException(
-      'vestidoIds debe contener entre 1 y 50 elementos',
-    );
-  }
+  const vestidoIds = parseReservacionVestidoIds(input.vestidoIds);
 
-  const vestidoIds = input.vestidoIds.map((id, index) =>
-    parseUuid(id, `vestidoIds[${index}]`),
-  );
-
-  if (new Set(vestidoIds).size !== vestidoIds.length) {
-    throw new BadRequestException('vestidoIds no puede contener duplicados');
-  }
-
-  const fechaInicio = parseDate(input.fechaInicio, 'fechaInicio');
-  const fechaFin = parseDate(input.fechaFin, 'fechaFin');
+  const fechaInicio = parseReservacionDate(input.fechaInicio, 'fechaInicio');
+  const fechaFin = parseReservacionDate(input.fechaFin, 'fechaFin');
 
   if (fechaFin.getTime() <= fechaInicio.getTime()) {
     throw new BadRequestException('fechaFin debe ser posterior a fechaInicio');
@@ -120,17 +140,7 @@ export function parseCreateReservacionBody(
   let notas: string | null | undefined;
 
   if ('notas' in input) {
-    if (input.notas !== null && typeof input.notas !== 'string') {
-      throw new BadRequestException('notas debe ser texto o null');
-    }
-
-    const normalized =
-      typeof input.notas === 'string' ? input.notas.trim() : null;
-
-    if (normalized !== null && normalized.length > 2_000) {
-      throw new BadRequestException('notas no puede exceder 2000 caracteres');
-    }
-    notas = normalized?.length ? normalized : null;
+    notas = parseReservacionNotas(input.notas);
   }
 
   if ('confirmar' in input && typeof input.confirmar !== 'boolean') {
@@ -138,8 +148,8 @@ export function parseCreateReservacionBody(
   }
 
   return {
-    clienteId: parseUuid(input.clienteId, 'clienteId'),
-    sucursalId: parseUuid(input.sucursalId, 'sucursalId'),
+    clienteId: parseReservacionUuid(input.clienteId, 'clienteId'),
+    sucursalId: parseReservacionUuid(input.sucursalId, 'sucursalId'),
     vestidoIds,
     fechaInicio,
     fechaFin,

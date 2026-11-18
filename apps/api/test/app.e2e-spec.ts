@@ -116,6 +116,10 @@ describe('AppController (e2e)', () => {
     importeRenta: '1250.50',
     depositoRequerido: '0.00',
     confirmadaAt: new Date('2026-11-17T20:00:00.000Z'),
+    entregadaAt: null,
+    devueltaAt: null,
+    canceladaAt: null,
+    motivoCancelacion: null,
     createdAt: new Date('2026-11-17T20:00:00.000Z'),
     updatedAt: new Date('2026-11-17T20:00:00.000Z'),
   };
@@ -222,6 +226,26 @@ describe('AppController (e2e)', () => {
           provide: ReservacionesService,
           useValue: {
             create: vi.fn().mockResolvedValue(reservacionResponse),
+            findAll: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  ...reservacionResponse,
+                  vestidos: undefined,
+                  vestidosCount: 1,
+                },
+              ],
+              pagination: {
+                page: 1,
+                limit: 20,
+                total: 1,
+                totalPages: 1,
+              },
+            }),
+            findOne: vi.fn().mockResolvedValue(reservacionResponse),
+            update: vi.fn().mockResolvedValue({
+              ...reservacionResponse,
+              notas: 'Actualizada',
+            }),
           },
         },
         {
@@ -712,6 +736,96 @@ describe('AppController (e2e)', () => {
 
   it('/api/reservaciones rejects requests without JWT', () => {
     return request(app.getHttpServer()).post('/api/reservaciones').expect(401);
+  });
+
+  it.each(['selected.jwt.token', 'employee.jwt.token'])(
+    '/api/reservaciones (GET) allows tenant role with %s',
+    (token) =>
+      request(app.getHttpServer())
+        .get('/api/reservaciones')
+        .query({
+          page: '1',
+          limit: '20',
+          estado: ReservacionEstado.CONFIRMADA,
+          fechaDesde: '2026-12-10T16:00:00-07:00',
+          fechaHasta: '2026-12-12T16:00:00-07:00',
+          q: 'ana',
+        })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            data: [
+              expect.objectContaining({
+                id: reservacionId,
+                vestidosCount: 1,
+              }),
+            ],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          });
+          expect(JSON.stringify(response.body)).not.toContain('schemaName');
+          expect(JSON.stringify(response.body)).not.toContain('tenant_');
+        }),
+  );
+
+  it('/api/reservaciones/:id returns complete detail for EMPLOYEE', () => {
+    return request(app.getHttpServer())
+      .get(`/api/reservaciones/${reservacionId}`)
+      .set('Authorization', 'Bearer employee.jwt.token')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: reservacionId,
+          cliente: { id: clienteId },
+          sucursal: { id: sucursalId },
+          vestidos: [
+            expect.objectContaining({
+              id: vestidoId,
+              precioRenta: '1250.50',
+            }),
+          ],
+          entregadaAt: null,
+          devueltaAt: null,
+          canceladaAt: null,
+        });
+      });
+  });
+
+  it.each(['selected.jwt.token', 'employee.jwt.token'])(
+    '/api/reservaciones/:id (PATCH) allows editable fields with %s',
+    (token) =>
+      request(app.getHttpServer())
+        .patch(`/api/reservaciones/${reservacionId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ notas: ' Actualizada ' })
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            id: reservacionId,
+            notas: 'Actualizada',
+            estado: ReservacionEstado.CONFIRMADA,
+          });
+        }),
+  );
+
+  it('/api/reservaciones rejects protected fields and tenant selectors on list and update', async () => {
+    for (const body of [
+      { estado: ReservacionEstado.CANCELADA },
+      { importeRenta: '1.00' },
+      { confirmadaAt: null },
+      { empresaId: selectedEmpresaId },
+      { schemaName: 'tenant_untrusted' },
+    ]) {
+      await request(app.getHttpServer())
+        .patch(`/api/reservaciones/${reservacionId}`)
+        .set('Authorization', 'Bearer selected.jwt.token')
+        .send(body)
+        .expect(400);
+    }
+    await request(app.getHttpServer())
+      .get(`/api/reservaciones?empresaId=${selectedEmpresaId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(400);
   });
 
   it('/api/vestidos (POST) creates a dress for OWNER', () => {

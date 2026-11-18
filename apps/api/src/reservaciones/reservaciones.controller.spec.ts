@@ -40,4 +40,62 @@ describe('ReservacionesController', () => {
       confirmar: true,
     });
   });
+
+  it('forwards parsed listing filters', async () => {
+    const response = {
+      data: [],
+      pagination: { page: 2, limit: 10, total: 0, totalPages: 0 },
+    };
+    const findAll = vi.fn().mockResolvedValue(response);
+    const controller = new ReservacionesController({
+      findAll,
+    } as unknown as ReservacionesService);
+
+    await expect(
+      controller.findAll(tenant, {
+        page: '2',
+        limit: '10',
+        estado: ReservacionEstado.CONFIRMADA,
+        q: ' Ana ',
+      }),
+    ).resolves.toBe(response);
+    expect(findAll).toHaveBeenCalledWith(tenant, {
+      page: 2,
+      limit: 10,
+      estado: ReservacionEstado.CONFIRMADA,
+      q: 'Ana',
+    });
+  });
+
+  it('forwards detail ids with only the authenticated tenant', async () => {
+    const response = { id: 'reservation-id' };
+    const findOne = vi.fn().mockResolvedValue(response);
+    const controller = new ReservacionesController({
+      findOne,
+    } as unknown as ReservacionesService);
+
+    await expect(controller.findOne(tenant, 'reservation-id')).resolves.toBe(
+      response,
+    );
+    expect(findOne).toHaveBeenCalledWith(tenant, 'reservation-id');
+  });
+
+  it('forwards normalized editable fields without state', async () => {
+    const response = { id: 'reservation-id' };
+    const update = vi.fn().mockResolvedValue(response);
+    const controller = new ReservacionesController({
+      update,
+    } as unknown as ReservacionesService);
+
+    await expect(
+      controller.update(tenant, 'reservation-id', {
+        vestidoIds: ['C18C2A56-D33F-4D88-A8E7-42931121E295'],
+        notas: '  Cambio  ',
+      }),
+    ).resolves.toBe(response);
+    expect(update).toHaveBeenCalledWith(tenant, 'reservation-id', {
+      vestidoIds: ['c18c2a56-d33f-4d88-a8e7-42931121e295'],
+      notas: 'Cambio',
+    });
+  });
 });

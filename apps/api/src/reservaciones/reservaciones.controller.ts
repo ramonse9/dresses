@@ -1,11 +1,25 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { CurrentTenant } from '../auth/current-tenant.decorator.js';
 import { Roles } from '../auth/roles.decorator.js';
 import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { parseCreateReservacionBody } from './dto/create-reservacion.dto.js';
-import type { ReservacionResponseDto } from './dto/reservacion-response.dto.js';
+import { parseListReservacionesQuery } from './dto/list-reservaciones-query.dto.js';
+import type {
+  PaginatedReservacionesResponseDto,
+  ReservacionResponseDto,
+} from './dto/reservacion-response.dto.js';
+import { parseUpdateReservacionBody } from './dto/update-reservacion.dto.js';
 import { ReservacionesService } from './reservaciones.service.js';
 
 @Controller('reservaciones')
@@ -22,6 +36,41 @@ export class ReservacionesController {
     return this.reservacionesService.create(
       tenant,
       parseCreateReservacionBody(body),
+    );
+  }
+
+  @Get()
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  findAll(
+    @CurrentTenant() tenant: TenantScope,
+    @Query() query: unknown,
+  ): Promise<PaginatedReservacionesResponseDto> {
+    return this.reservacionesService.findAll(
+      tenant,
+      parseListReservacionesQuery(query),
+    );
+  }
+
+  @Get(':id')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  findOne(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ReservacionResponseDto> {
+    return this.reservacionesService.findOne(tenant, id);
+  }
+
+  @Patch(':id')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  update(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: unknown,
+  ): Promise<ReservacionResponseDto> {
+    return this.reservacionesService.update(
+      tenant,
+      id,
+      parseUpdateReservacionBody(body),
     );
   }
 }

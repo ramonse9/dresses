@@ -28,6 +28,32 @@ export type ReservacionResponseDto = {
   importeRenta: string;
   depositoRequerido: string;
   confirmadaAt: Date | null;
+  entregadaAt: Date | null;
+  devueltaAt: Date | null;
+  canceladaAt: Date | null;
+  motivoCancelacion: string | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+export type ReservacionListItemDto = Omit<
+  ReservacionResponseDto,
+  | 'vestidos'
+  | 'confirmadaAt'
+  | 'entregadaAt'
+  | 'devueltaAt'
+  | 'canceladaAt'
+  | 'motivoCancelacion'
+> & {
+  vestidosCount: number;
+};
+
+export type PaginatedReservacionesResponseDto = {
+  data: ReservacionListItemDto[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 };

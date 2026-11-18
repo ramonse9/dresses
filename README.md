@@ -1,6 +1,6 @@
 # Dresses SaaS
 
-Base de un SaaS multi-tenant para negocios de renta de vestidos. El proyecto contiene una aplicación web, un API con autenticación JWT y la infraestructura local de PostgreSQL con TypeORM. El módulo de vestidos permite crear y consultar el catálogo; reservaciones todavía no está implementado.
+Base de un SaaS multi-tenant para negocios de renta de vestidos. El proyecto contiene una aplicación web, un API con autenticación JWT y la infraestructura local de PostgreSQL con TypeORM. Incluye clientes, catálogo, disponibilidad y creación y consulta de reservaciones aisladas por tenant.
 
 ## Tecnologías
 
@@ -327,7 +327,7 @@ Los tenants nuevos reciben la tabla durante su creación. Para aplicarla a schem
 npm run tenant:migration:run
 ```
 
-El UUID de `clientes` queda preparado para la futura relación `clienteId` de reservaciones. Todavía no existen reservaciones, historial de rentas, documentos, imágenes ni deduplicación automática de clientes.
+El UUID de `clientes` se utiliza como `clienteId` de reservaciones. Todavía no existen historial de rentas, documentos, imágenes ni deduplicación automática de clientes.
 
 ### CRUD de clientes
 
@@ -490,7 +490,64 @@ curl --request POST http://localhost:3000/api/reservaciones \
   }'
 ```
 
-La respuesta incluye cliente y sucursal básicos, vestidos con sus importes históricos, totales, fechas y estado. No incluye nombres de schemas. Todavía no existen actualización, cancelación, entrega, devolución, pagos ni imágenes.
+La respuesta incluye cliente y sucursal básicos, vestidos con sus importes históricos, totales, fechas y estado. No incluye nombres de schemas. La cancelación, entrega y devolución se implementarán mediante operaciones de transición específicas; todavía no existen pagos ni imágenes.
+
+### Consulta y actualización de reservaciones
+
+`OWNER` y `EMPLOYEE` pueden utilizar:
+
+```text
+GET   /api/reservaciones
+GET   /api/reservaciones/:id
+PATCH /api/reservaciones/:id
+```
+
+El listado acepta `page`, `limit`, `clienteId`, `sucursalId`, `estado`, `fechaDesde`, `fechaHasta` y `q`. `q` busca sin distinguir mayúsculas por nombre, email o teléfono del cliente. Si se proporciona un rango, se devuelven las reservaciones que se solapan mediante `fechaInicio < fechaHasta AND fechaFin > fechaDesde`. También se admiten límites abiertos proporcionando solamente una de las dos fechas.
+
+```bash
+curl --get http://localhost:3000/api/reservaciones \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --data-urlencode 'estado=CONFIRMADA' \
+  --data-urlencode 'fechaDesde=2026-12-10T16:00:00-07:00' \
+  --data-urlencode 'fechaHasta=2026-12-12T16:00:00-07:00' \
+  --data-urlencode 'q=ana' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'limit=20'
+```
+
+El orden es `createdAt DESC, id DESC`. Cada elemento incluye cliente y sucursal básicos, fechas, estado, notas, totales y `vestidosCount`; el conteo se obtiene sin consultas N+1. El formato paginado es:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 0,
+    "totalPages": 0
+  }
+}
+```
+
+El detalle carga en una sola consulta el cliente, la sucursal y todos los vestidos. Para cada vestido devuelve el precio y depósito históricos, además de totales, notas y los timestamps `confirmadaAt`, `entregadaAt`, `devueltaAt` y `canceladaAt`.
+
+`PATCH /api/reservaciones/:id` acepta exclusivamente `clienteId`, `sucursalId`, `vestidoIds`, `fechaInicio`, `fechaFin` y `notas`, y exige al menos un campo. No permite modificar estado, importes ni timestamps del ciclo de vida.
+
+```bash
+curl --request PATCH http://localhost:3000/api/reservaciones/RESERVACION_UUID \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "vestidoIds":["c18c2a56-d33f-4d88-a8e7-42931121e295"],
+    "fechaInicio":"2026-12-11T16:00:00-07:00",
+    "fechaFin":"2026-12-13T16:00:00-07:00",
+    "notas":"Ajuste solicitado por la clienta"
+  }'
+```
+
+Solamente `BORRADOR` y `CONFIRMADA` son editables. Para cambios estructurales se vuelven a validar referencias activas, sucursal y rango. Los vestidos existentes conservan sus snapshots; las piezas agregadas toman los importes actuales y los totales se recalculan con aritmética decimal exacta.
+
+Las confirmadas bloquean la fila de reservación y la unión ordenada de vestidos anteriores y nuevos, excluyen su propio UUID al buscar solapamientos y responden `409` ante conflictos. Los borradores pueden solaparse. Todo se ejecuta en una única transacción tenant. `ENTREGADA`, `DEVUELTA` y `CANCELADA` responden `409`; sus transiciones de estado no forman parte de este `PATCH`.
 
 ### Consulta de disponibilidad de vestidos
 
@@ -559,7 +616,7 @@ Cada fila de `vestidos` representa una pieza física individual y pertenece a un
 | `activo`                   | `boolean`       | `true` por defecto                           |
 | `created_at`, `updated_at` | `timestamptz`   | Fechas administradas por TypeORM             |
 
-`estado_operativo=DISPONIBLE` indica que la pieza puede operar normalmente; no garantiza que esté libre para un rango de fechas. Esa disponibilidad se calculará posteriormente a partir de reservaciones.
+`estado_operativo=DISPONIBLE` indica que la pieza puede operar normalmente; la disponibilidad para un rango se consulta mediante `GET /api/vestidos/disponibilidad` a partir de reservaciones bloqueantes.
 
 La migration `CreateVestidos1794697200000` crea la tabla, la relación con sucursales, las restricciones monetarias y de estado y el índice único normalizado de código. `OptimizeVestidosCatalog1794783600000` añade índices compuestos para el orden paginado estable y los filtros por sucursal, activo y estado operativo. Ambas se aplican automáticamente a tenants nuevos; para schemas existentes se utiliza `npm run tenant:migration:run`.
 
