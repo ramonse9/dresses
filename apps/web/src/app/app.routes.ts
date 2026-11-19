@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard, guestGuard } from './core/auth/auth.guards';
+import { tenantGuard } from './core/tenant/tenant.guard';
 
 export const routes: Routes = [
   {
@@ -29,15 +30,15 @@ export const routes: Routes = [
         path: 'seleccionar-empresa',
         canActivate: [authGuard],
         loadComponent: () =>
-          import('./features/tenancy/select-company/select-company-placeholder.component').then(
-            ({ SelectCompanyPlaceholderComponent }) => SelectCompanyPlaceholderComponent,
+          import('./features/tenancy/select-company/select-company-page.component').then(
+            ({ SelectCompanyPageComponent }) => SelectCompanyPageComponent,
           ),
       },
     ],
   },
   {
     path: 'app',
-    canActivate: [authGuard],
+    canActivate: [authGuard, tenantGuard],
     loadComponent: () =>
       import('./layouts/app-layout/app-layout.component').then(
         ({ AppLayoutComponent }) => AppLayoutComponent,

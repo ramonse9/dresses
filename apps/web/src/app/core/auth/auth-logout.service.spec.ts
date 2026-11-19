@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { firstValueFrom, of, throwError } from 'rxjs';
 import { AuthLogoutService } from './auth-logout.service';
 import { AuthStore } from './auth.store';
+import { TenantStore } from '../tenant/tenant.store';
 
 describe('AuthLogoutService', () => {
   const authStore = {
@@ -11,6 +12,9 @@ describe('AuthLogoutService', () => {
   };
   const router = {
     navigateByUrl: vi.fn(),
+  };
+  const tenantStore = {
+    clearTenant: vi.fn(),
   };
 
   beforeEach(() => {
@@ -21,6 +25,7 @@ describe('AuthLogoutService', () => {
       providers: [
         AuthLogoutService,
         { provide: AuthStore, useValue: authStore },
+        { provide: TenantStore, useValue: tenantStore },
         { provide: Router, useValue: router },
       ],
     });
@@ -30,6 +35,7 @@ describe('AuthLogoutService', () => {
     await firstValueFrom(TestBed.inject(AuthLogoutService).logout());
 
     expect(authStore.logout).toHaveBeenCalledOnce();
+    expect(tenantStore.clearTenant).toHaveBeenCalledOnce();
     expect(authStore.clearSession).toHaveBeenCalledOnce();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/login');
   });
@@ -39,6 +45,7 @@ describe('AuthLogoutService', () => {
 
     await firstValueFrom(TestBed.inject(AuthLogoutService).logout());
 
+    expect(tenantStore.clearTenant).toHaveBeenCalledOnce();
     expect(authStore.clearSession).toHaveBeenCalledOnce();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/login');
   });

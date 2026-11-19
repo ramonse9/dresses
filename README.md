@@ -935,13 +935,24 @@ layouts/    contenedores de rutas
 features/   funcionalidades por dominio
 ```
 
-Las rutas base son `/`, `/login`, `/seleccionar-empresa` y `/app`. Login es funcional; selección de empresa continúa como placeholder autenticado y `/app` es el contenedor protegido para los siguientes módulos.
+Las rutas base son `/`, `/login`, `/seleccionar-empresa` y `/app`. Login y selección de empresa son funcionales; `/app` exige una sesión autenticada y un tenant seleccionado mediante `authGuard` y `tenantGuard`.
 
 La URL del API se inyecta mediante `API_BASE_URL`: desarrollo usa `http://localhost:3000/api` y producción usa `/api`. Los servicios futuros deben consumir el `ApiClient` genérico con rutas relativas; no deben duplicar URLs absolutas ni aceptar nombres de schemas. Los errores se normalizan como `ApiError` y los estados comunes de carga, error, vacío y envío están disponibles en `shared/ui`.
 
 El estado de autenticación frontend vive en `core/auth` y utiliza un `AuthStore` basado en signals. Al arrancar, Angular intenta rotar la cookie HttpOnly y consulta `/auth/me`; si la sesión es válida mantiene únicamente el access token y su expiración en memoria. La inicialización está deduplicada y limitada a 10 segundos. El interceptor agrega Bearer solo a solicitudes dirigidas al API configurado, comparte un único refresh ante solicitudes `401` concurrentes y nunca persiste tokens en almacenamiento del navegador. Un token obtenido por refresh se considera global, sin tenant seleccionado.
 
 El formulario `/login` usa Reactive Forms y mensajes accesibles. `guestGuard` y `authGuard` separan rutas invitadas y autenticadas, conservando únicamente `returnUrl` internas. Login y refresh nunca reciben el header Bearer. El logout revoca la sesión, limpia siempre el estado local y navega de regreso a `/login`, aun si la llamada remota falla.
+
+La selección tenant vive en `core/tenant` y utiliza un `TenantStore` basado en signals. Después de restaurar la sesión global, Angular consulta `GET /auth/empresas` y selecciona mediante `POST /auth/select-empresa` enviando exclusivamente `empresaId`. Una sola empresa se selecciona automáticamente; con varias, `/seleccionar-empresa` muestra únicamente las opciones devueltas por el backend. La respuesta reemplaza en memoria el access token global por el token tenant y conserva el rol validado de la membresía.
+
+Como preferencia se puede guardar únicamente `empresaId` en `localStorage`; nunca se persisten tokens, roles, datos de empresa ni nombres de schemas. En cada recarga la preferencia se contrasta con la lista actual del backend y vuelve a seleccionarse, por lo que una membresía revocada no restaura acceso. `TenantResetRegistry` permite que los próximos stores de negocio registren su limpieza; se ejecuta antes de cambiar de empresa y al cerrar sesión para impedir reutilizar datos del tenant anterior.
+
+El flujo de arranque es:
+
+```text
+cookie HttpOnly → refresh global → /auth/me → /auth/empresas
+  → selección automática o manual → access token tenant → /app
+```
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

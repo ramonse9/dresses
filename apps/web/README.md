@@ -14,14 +14,14 @@ src/app
 
 Las rutas se cargan de forma diferida y actualmente preparan estos puntos de entrada:
 
-| Ruta                   | Propósito                                     |
-| ---------------------- | --------------------------------------------- |
-| `/`                    | Página pública existente                      |
-| `/login`               | Formulario de acceso para invitados           |
-| `/seleccionar-empresa` | Próximo paso autenticado, todavía placeholder |
-| `/app`                 | Área privada protegida                        |
+| Ruta                   | Propósito                                           |
+| ---------------------- | --------------------------------------------------- |
+| `/`                    | Página pública                                      |
+| `/login`               | Formulario de acceso para invitados                 |
+| `/seleccionar-empresa` | Selección entre membresías vigentes                 |
+| `/app`                 | Área privada con autenticación y tenant verificados |
 
-La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. El login, logout y los guards ya están activos; la selección real de empresa todavía no está implementada.
+La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. Login, logout, selección de empresa y los guards están activos.
 
 ## Configuración del API
 
@@ -64,14 +64,35 @@ Ante un `401` de una solicitud protegida, el interceptor comparte una sola rotac
 
 El logout está disponible desde las superficies autenticadas. Siempre llama al API, limpia el estado aunque la solicitud falle y termina en `/login`.
 
+## Estado tenant y selección de empresa
+
+`core/tenant` mantiene la selección sin aceptar información interna de PostgreSQL:
+
+- `TenantApiService` consulta `GET /auth/empresas` y selecciona con `POST /auth/select-empresa`;
+- `TenantStore` expone como signals la lista disponible, empresa seleccionada, `empresaId`, rol y estado de carga;
+- `tenantGuard` exige una selección verificada para entrar a `/app`;
+- `TenantPreferenceService` guarda opcionalmente solo `empresaId`;
+- `TenantResetRegistry` permite limpiar stores y cachés de features antes de cambiar de tenant.
+
+Al arrancar, primero se restaura la autenticación global. Si continúa autenticada, la aplicación obtiene del backend las membresías vigentes. Una única empresa se selecciona automáticamente; con varias, la persona elige en `/seleccionar-empresa`. El access token devuelto por la selección sustituye al token global en memoria y contiene el contexto tenant validado por el backend.
+
+En una recarga, el `empresaId` recordado nunca se considera autoridad: debe aparecer nuevamente en `GET /auth/empresas` y `POST /auth/select-empresa` debe aceptarlo. Si la membresía fue revocada, la opción se descarta y se muestra la selección actualizada. Un usuario sin empresas ve un estado informativo.
+
+```text
+sesión global → empresas vigentes → empresa seleccionada → sesión tenant → /app
+```
+
+No existen modelos, propiedades, headers, query strings ni cuerpos para `schemaName`. El listado de la pantalla proviene exclusivamente del backend. Para cambiar de empresa se solicita un token nuevo y se ejecutan primero los callbacks registrados en `TenantResetRegistry`, evitando reutilizar datos del tenant anterior.
+
 ## Convenciones para features
 
 - Crear componentes standalone dentro de `features/<dominio>`.
 - Mantener acceso HTTP y estado de dominio en servicios del feature; los componentes coordinan la vista.
 - Usar signals para estado local y derivado.
 - Reutilizar `ApiClient`, `ApiError` y los componentes de `shared/ui`.
-- No enviar `schemaName` ni construir rutas con nombres de schemas; el tenant se resolverá mediante la autenticación.
+- No enviar `schemaName` ni construir rutas con nombres de schemas; el tenant se resuelve mediante la autenticación.
 - No leer ni persistir manualmente tokens; consumir `AuthStore` y dejar el header Bearer al interceptor.
+- Registrar en `TenantResetRegistry` la limpieza de cualquier store o caché que contenga datos tenant.
 - Agregar la ruta con carga diferida y sus pruebas.
 
 ## Ejecución y validación
