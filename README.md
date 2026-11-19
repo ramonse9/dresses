@@ -954,7 +954,7 @@ cookie HttpOnly → refresh global → /auth/me → /auth/empresas
   → selección automática o manual → access token tenant → /app
 ```
 
-El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. En esta etapa son placeholders sin consultas de negocio.
+El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. Sucursales y clientes ya consumen datos reales; las demás secciones continúan como placeholders.
 
 `APP_NAVIGATION` es la fuente única de enlaces para escritorio y móvil. Sus políticas se filtran con `navigationForRole()` y `hasAnyRole()`; actualmente `OWNER` y `EMPLOYEE` pueden consultar todas las secciones. Esta visibilidad solo mejora la interfaz: los guards y permisos del API siguen siendo la autoridad. El shell muestra alertas claras si desaparece la sesión o el tenant seleccionado.
 
@@ -963,6 +963,10 @@ Los stores de futuros features que contengan información tenant deben registrar
 La consulta Angular de sucursales está disponible para `OWNER` y `EMPLOYEE` en `/app/sucursales`, con detalle en `/app/sucursales/:id`. Presenta nombre, dirección, teléfono y estado, y contempla carga, vacío, error, `403`, `404` y fallos de red.
 
 `OWNER` también puede crear en `/app/sucursales/nueva`, editar en `/app/sucursales/:id/editar`, desactivar mediante baja lógica y reactivar. Los formularios usan Reactive Forms, normalizan espacios, respetan las longitudes del API, evitan doble envío y presentan conflictos `409`. Las acciones no se muestran a `EMPLOYEE`; cualquier `403` del backend deja intacto el estado local. El store incorpora mutaciones exitosas solo mientras continúa vigente la misma generación tenant y cancela todas las operaciones pendientes mediante `TenantResetRegistry` al cambiar de empresa.
+
+La consulta Angular de clientes está disponible para `OWNER` y `EMPLOYEE` en `/app/clientes`, con detalle en `/app/clientes/:id`. El listado conserva `page`, `limit`, `activo` y `q` en query parameters, normaliza la búsqueda y aplica un debounce de 350 ms. Presenta el formato paginado estándar y muestra nombre, teléfono, email, dirección, notas y estado.
+
+Las búsquedas nuevas cancelan su suscripción anterior y el store ignora cualquier respuesta obsoleta. `TenantResetRegistry` vacía listado y detalle y cancela solicitudes pendientes al cambiar de empresa. Un UUID ajeno al tenant se presenta como `404` sin revelar información interna. El frontend no construye ni envía `empresaId`, `empresaSlug` o `schemaName`; este paso no añade creación, edición ni historial de rentas de clientes.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

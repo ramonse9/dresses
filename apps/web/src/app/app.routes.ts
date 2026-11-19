@@ -65,9 +65,9 @@ export const routes: Routes = [
       },
       {
         path: 'clientes',
-        loadComponent: () =>
-          import('./features/customers/customers-placeholder.component').then(
-            ({ CustomersPlaceholderComponent }) => CustomersPlaceholderComponent,
+        loadChildren: () =>
+          import('./features/customers/customers.routes').then(
+            ({ CUSTOMERS_ROUTES }) => CUSTOMERS_ROUTES,
           ),
       },
       {

@@ -25,7 +25,8 @@ Las rutas se cargan de forma diferida y actualmente preparan estos puntos de ent
 | `/app/sucursales/nueva`      | Creación de sucursal para OWNER      |
 | `/app/sucursales/:id`        | Detalle de una sucursal              |
 | `/app/sucursales/:id/editar` | Edición de sucursal para OWNER       |
-| `/app/clientes`              | Punto de entrada para clientes       |
+| `/app/clientes`              | Consulta paginada de clientes        |
+| `/app/clientes/:id`          | Detalle de un cliente                |
 | `/app/vestidos`              | Punto de entrada para catálogo       |
 | `/app/disponibilidad`        | Punto de entrada para disponibilidad |
 | `/app/reservaciones`         | Punto de entrada para reservaciones  |
@@ -109,7 +110,7 @@ No existen modelos, propiedades, headers, query strings ni cuerpos para `schemaN
 
 `hasAnyRole()` y `navigationForRole()` permiten definir visibilidad por rol para acciones futuras. Ocultar una ruta, enlace o botón nunca reemplaza la autorización del backend; el API continúa verificando la membresía vigente y sus permisos.
 
-Los componentes de dashboard, clientes, vestidos, disponibilidad y reservaciones son standalone y se importan de forma diferida. En este paso continúan como placeholders; sucursales ya consume datos reales de consulta.
+Los componentes de dashboard, vestidos, disponibilidad y reservaciones son standalone y se importan de forma diferida como placeholders. Sucursales y clientes ya consumen datos reales del API.
 
 ## Consulta de sucursales
 
@@ -150,6 +151,27 @@ El formulario reutilizable usa Reactive Forms y replica el contrato del API: nom
 Crear utiliza `POST /api/sucursales`, editar utiliza `PATCH /api/sucursales/:id`, reactivar envía exclusivamente `{ "activo": true }` mediante `PATCH` y desactivar utiliza `DELETE`. La desactivación requiere un diálogo de confirmación que aclara que se trata de una baja lógica recuperable. Todas las acciones bloquean envíos duplicados.
 
 El store incorpora la respuesta exitosa al listado y detalle únicamente si la generación tenant sigue vigente. Una respuesta `403`, `409` o una mutación cancelada por cambio de empresa no altera el estado local.
+
+## Consulta de clientes
+
+El feature `features/customers` se carga con rutas hijas diferidas y está disponible para `OWNER` y `EMPLOYEE`:
+
+```text
+GET /api/clientes       → /app/clientes
+GET /api/clientes/:id   → /app/clientes/:id
+```
+
+El listado utiliza el formato paginado estándar del API y conserva sus filtros en la URL:
+
+```text
+/app/clientes?page=2&limit=20&activo=true&q=ana
+```
+
+`page` comienza en `1`, `limit` en `20` y no supera `100`; `activo` admite `true` o `false`, y `q` busca por nombre, email o teléfono. La búsqueda recorta extremos, colapsa espacios consecutivos y espera 350 ms antes de actualizar la URL. Cada cambio vuelve a la primera página.
+
+`CustomersStore` representa los estados `idle`, `loading`, `loaded`, `empty` y `error`. Las suscripciones del componente usan `switchMap` y el store identifica cada solicitud, de modo que una respuesta anterior nunca sobrescribe una búsqueda nueva. El registro en `TenantResetRegistry` cancela solicitudes pendientes y vacía listado y detalle al cambiar de empresa.
+
+Las respuestas muestran nombre, teléfono, email, dirección, notas y estado. Un `404` de detalle se presenta sin revelar si el UUID pertenece a otro tenant; un `403` se trata como acceso perdido y los fallos de red permiten reintentar. El feature no envía selectores tenant ni expone nombres de schemas. En esta etapa no incluye creación, edición ni historial de rentas.
 
 ## Convenciones para features
 

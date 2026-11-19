@@ -8,6 +8,7 @@ import { AuthStore } from './core/auth/auth.store';
 import { API_BASE_URL } from './core/config/api-config';
 import { TenantStore } from './core/tenant/tenant.store';
 import { BranchesStore } from './features/branches/branches.store';
+import { CustomersStore } from './features/customers/customers.store';
 
 describe('application routes', () => {
   const authenticated = signal(false);
@@ -23,6 +24,17 @@ describe('application routes', () => {
     nombre: 'Sucursal Centro',
     direccion: 'Av. Principal 123',
     telefono: '555-0100',
+    activo: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const customer = {
+    id: '22222222-2222-4222-8222-222222222222',
+    nombre: 'Ana López',
+    telefono: '555-0200',
+    email: 'ana@example.com',
+    direccion: 'Calle Rosa 25',
+    notas: 'Cliente frecuente',
     activo: true,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -68,6 +80,25 @@ describe('application routes', () => {
             reactivate: () => of(branch),
           },
         },
+        {
+          provide: CustomersStore,
+          useValue: {
+            listState: signal({
+              status: 'loaded',
+              data: [customer],
+              pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+              filters: { page: 1, limit: 20 },
+              error: null,
+            }).asReadonly(),
+            detailState: signal({
+              status: 'loaded',
+              data: customer,
+              error: null,
+            }).asReadonly(),
+            loadList: () => of(undefined),
+            loadDetail: () => of(undefined),
+          },
+        },
       ],
     });
   });
@@ -83,6 +114,7 @@ describe('application routes', () => {
     [`/app/sucursales/${branch.id}`, 'Sucursal Centro'],
     [`/app/sucursales/${branch.id}/editar`, 'Sucursal Centro'],
     ['/app/clientes', 'Clientes'],
+    [`/app/clientes/${customer.id}`, 'Ana López'],
     ['/app/vestidos', 'Vestidos'],
     ['/app/disponibilidad', 'Disponibilidad'],
     ['/app/reservaciones', 'Reservaciones'],
