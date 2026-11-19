@@ -7,6 +7,7 @@ import { routes } from './app.routes';
 import { AuthStore } from './core/auth/auth.store';
 import { API_BASE_URL } from './core/config/api-config';
 import { TenantStore } from './core/tenant/tenant.store';
+import { BranchesStore } from './features/branches/branches.store';
 
 describe('application routes', () => {
   const authenticated = signal(false);
@@ -16,6 +17,15 @@ describe('application routes', () => {
     nombre: 'Atelier Norte',
     slug: 'atelier-norte',
     rol: 'OWNER' as const,
+  };
+  const branch = {
+    id: '11111111-1111-4111-8111-111111111111',
+    nombre: 'Sucursal Centro',
+    direccion: 'Av. Principal 123',
+    telefono: '555-0100',
+    activo: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
   };
 
   beforeEach(() => {
@@ -45,6 +55,15 @@ describe('application routes', () => {
             selectCompany: () => of(undefined),
           },
         },
+        {
+          provide: BranchesStore,
+          useValue: {
+            listState: signal({ status: 'loaded', data: [branch], error: null }).asReadonly(),
+            detailState: signal({ status: 'loaded', data: branch, error: null }).asReadonly(),
+            loadList: () => of(undefined),
+            loadDetail: () => of(undefined),
+          },
+        },
       ],
     });
   });
@@ -56,6 +75,7 @@ describe('application routes', () => {
     ['/app', 'Panel de operación'],
     ['/app/dashboard', 'Panel de operación'],
     ['/app/sucursales', 'Sucursales'],
+    [`/app/sucursales/${branch.id}`, 'Sucursal Centro'],
     ['/app/clientes', 'Clientes'],
     ['/app/vestidos', 'Vestidos'],
     ['/app/disponibilidad', 'Disponibilidad'],

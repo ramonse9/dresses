@@ -22,6 +22,7 @@ Las rutas se cargan de forma diferida y actualmente preparan estos puntos de ent
 | `/app`                 | Redirección al dashboard autenticado |
 | `/app/dashboard`       | Resumen de operación                 |
 | `/app/sucursales`      | Punto de entrada para sucursales     |
+| `/app/sucursales/:id`  | Detalle de una sucursal              |
 | `/app/clientes`        | Punto de entrada para clientes       |
 | `/app/vestidos`        | Punto de entrada para catálogo       |
 | `/app/disponibilidad`  | Punto de entrada para disponibilidad |
@@ -106,7 +107,22 @@ No existen modelos, propiedades, headers, query strings ni cuerpos para `schemaN
 
 `hasAnyRole()` y `navigationForRole()` permiten definir visibilidad por rol para acciones futuras. Ocultar una ruta, enlace o botón nunca reemplaza la autorización del backend; el API continúa verificando la membresía vigente y sus permisos.
 
-Los componentes de dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones son standalone y se importan de forma diferida. En este paso muestran únicamente estados placeholder y no solicitan datos reales.
+Los componentes de dashboard, clientes, vestidos, disponibilidad y reservaciones son standalone y se importan de forma diferida. En este paso continúan como placeholders; sucursales ya consume datos reales de consulta.
+
+## Consulta de sucursales
+
+El feature `features/branches` se carga mediante `loadChildren`. Sus rutas hijas importan de forma diferida el listado y el detalle:
+
+```text
+GET /api/sucursales       → /app/sucursales
+GET /api/sucursales/:id   → /app/sucursales/:id
+```
+
+`BranchesApiService` utiliza exclusivamente rutas relativas del tenant autenticado. No recibe ni construye `empresaId`, `empresaSlug` o `schemaName`. `BranchesStore` expone signals independientes para listado y detalle con estados `idle`, `loading`, `loaded`, `empty` y `error`.
+
+El interceptor global sigue resolviendo respuestas `401`. El feature presenta `403` como pérdida de acceso a la empresa, `404` como sucursal inexistente o ajena al tenant y los fallos de red con una acción de reintento. La respuesta visible incluye nombre, dirección, teléfono y estado activo/inactivo; no existen acciones de creación, edición o desactivación.
+
+`BranchesStore` registra su limpieza en `TenantResetRegistry`. Un cambio de empresa vacía listado y detalle, y cancela las solicitudes pendientes para impedir que una respuesta tardía restaure información del tenant anterior.
 
 ## Convenciones para features
 

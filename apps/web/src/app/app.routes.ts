@@ -58,9 +58,9 @@ export const routes: Routes = [
       },
       {
         path: 'sucursales',
-        loadComponent: () =>
-          import('./features/branches/branches-placeholder.component').then(
-            ({ BranchesPlaceholderComponent }) => BranchesPlaceholderComponent,
+        loadChildren: () =>
+          import('./features/branches/branches.routes').then(
+            ({ BRANCHES_ROUTES }) => BRANCHES_ROUTES,
           ),
       },
       {
