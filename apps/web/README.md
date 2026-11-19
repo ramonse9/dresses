@@ -14,12 +14,18 @@ src/app
 
 Las rutas se cargan de forma diferida y actualmente preparan estos puntos de entrada:
 
-| Ruta                   | Propósito                                           |
-| ---------------------- | --------------------------------------------------- |
-| `/`                    | Página pública                                      |
-| `/login`               | Formulario de acceso para invitados                 |
-| `/seleccionar-empresa` | Selección entre membresías vigentes                 |
-| `/app`                 | Área privada con autenticación y tenant verificados |
+| Ruta                   | Propósito                            |
+| ---------------------- | ------------------------------------ |
+| `/`                    | Página pública                       |
+| `/login`               | Formulario de acceso para invitados  |
+| `/seleccionar-empresa` | Selección entre membresías vigentes  |
+| `/app`                 | Redirección al dashboard autenticado |
+| `/app/dashboard`       | Resumen de operación                 |
+| `/app/sucursales`      | Punto de entrada para sucursales     |
+| `/app/clientes`        | Punto de entrada para clientes       |
+| `/app/vestidos`        | Punto de entrada para catálogo       |
+| `/app/disponibilidad`  | Punto de entrada para disponibilidad |
+| `/app/reservaciones`   | Punto de entrada para reservaciones  |
 
 La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. Login, logout, selección de empresa y los guards están activos.
 
@@ -83,6 +89,24 @@ sesión global → empresas vigentes → empresa seleccionada → sesión tenant
 ```
 
 No existen modelos, propiedades, headers, query strings ni cuerpos para `schemaName`. El listado de la pantalla proviene exclusivamente del backend. Para cambiar de empresa se solicita un token nuevo y se ejecutan primero los callbacks registrados en `TenantResetRegistry`, evitando reutilizar datos del tenant anterior.
+
+## Shell autenticado y navegación
+
+`layouts/app-layout` contiene el shell de `/app`:
+
+- sidebar persistente desde el breakpoint de escritorio;
+- menú móvil con foco inicial, ciclo de foco, cierre con `Escape` y atributos accesibles;
+- encabezado con empresa, rol vigente y menú de usuario;
+- cambio de empresa y logout;
+- aviso de sesión o empresa expirada;
+- enlace para saltar directamente al contenido;
+- `router-outlet` para los módulos lazy-loaded.
+
+`core/navigation/app-navigation.ts` es la única configuración de enlaces. `AppNavigationComponent` la representa tanto en el sidebar como en el panel móvil, evitando mantener dos menús manuales. Todas las rutas actuales son de consulta y están habilitadas para `OWNER` y `EMPLOYEE`.
+
+`hasAnyRole()` y `navigationForRole()` permiten definir visibilidad por rol para acciones futuras. Ocultar una ruta, enlace o botón nunca reemplaza la autorización del backend; el API continúa verificando la membresía vigente y sus permisos.
+
+Los componentes de dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones son standalone y se importan de forma diferida. En este paso muestran únicamente estados placeholder y no solicitan datos reales.
 
 ## Convenciones para features
 

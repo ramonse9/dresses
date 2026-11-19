@@ -954,6 +954,12 @@ cookie HttpOnly → refresh global → /auth/me → /auth/empresas
   → selección automática o manual → access token tenant → /app
 ```
 
+El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. En esta etapa son placeholders sin consultas de negocio.
+
+`APP_NAVIGATION` es la fuente única de enlaces para escritorio y móvil. Sus políticas se filtran con `navigationForRole()` y `hasAnyRole()`; actualmente `OWNER` y `EMPLOYEE` pueden consultar todas las secciones. Esta visibilidad solo mejora la interfaz: los guards y permisos del API siguen siendo la autoridad. El shell muestra alertas claras si desaparece la sesión o el tenant seleccionado.
+
+Los stores de futuros features que contengan información tenant deben registrar su limpieza en `TenantResetRegistry`. El registro se ejecuta al cambiar empresa y al cerrar sesión, antes de reutilizar el shell con otro tenant.
+
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 
 Para iniciar el API y la aplicación web al mismo tiempo:

@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { of } from 'rxjs';
 import { routes } from './app.routes';
@@ -54,13 +54,29 @@ describe('application routes', () => {
     ['/login', 'Inicia sesión'],
     ['/seleccionar-empresa', 'Seleccionar empresa'],
     ['/app', 'Panel de operación'],
+    ['/app/dashboard', 'Panel de operación'],
+    ['/app/sucursales', 'Sucursales'],
+    ['/app/clientes', 'Clientes'],
+    ['/app/vestidos', 'Vestidos'],
+    ['/app/disponibilidad', 'Disponibilidad'],
+    ['/app/reservaciones', 'Reservaciones'],
   ])('renders %s', async (url, expectedText) => {
-    authenticated.set(['/seleccionar-empresa', '/app'].includes(url));
-    selectedTenant.set(url === '/app');
+    authenticated.set(url === '/seleccionar-empresa' || url.startsWith('/app'));
+    selectedTenant.set(url.startsWith('/app'));
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(url);
 
     expect(harness.routeNativeElement?.textContent).toContain(expectedText);
+  });
+
+  it('redirects the app root to the dashboard child route', async () => {
+    authenticated.set(true);
+    selectedTenant.set(true);
+    const harness = await RouterTestingHarness.create();
+
+    await harness.navigateByUrl('/app');
+
+    expect(TestBed.inject(Router).url).toBe('/app/dashboard');
   });
 
   it('redirects unknown routes to the public home', async () => {

@@ -47,9 +47,48 @@ export const routes: Routes = [
       {
         path: '',
         pathMatch: 'full',
+        redirectTo: 'dashboard',
+      },
+      {
+        path: 'dashboard',
         loadComponent: () =>
           import('./features/dashboard/dashboard-placeholder.component').then(
             ({ DashboardPlaceholderComponent }) => DashboardPlaceholderComponent,
+          ),
+      },
+      {
+        path: 'sucursales',
+        loadComponent: () =>
+          import('./features/branches/branches-placeholder.component').then(
+            ({ BranchesPlaceholderComponent }) => BranchesPlaceholderComponent,
+          ),
+      },
+      {
+        path: 'clientes',
+        loadComponent: () =>
+          import('./features/customers/customers-placeholder.component').then(
+            ({ CustomersPlaceholderComponent }) => CustomersPlaceholderComponent,
+          ),
+      },
+      {
+        path: 'vestidos',
+        loadComponent: () =>
+          import('./features/dresses/dresses-placeholder.component').then(
+            ({ DressesPlaceholderComponent }) => DressesPlaceholderComponent,
+          ),
+      },
+      {
+        path: 'disponibilidad',
+        loadComponent: () =>
+          import('./features/availability/availability-placeholder.component').then(
+            ({ AvailabilityPlaceholderComponent }) => AvailabilityPlaceholderComponent,
+          ),
+      },
+      {
+        path: 'reservaciones',
+        loadComponent: () =>
+          import('./features/reservations/reservations-placeholder.component').then(
+            ({ ReservationsPlaceholderComponent }) => ReservationsPlaceholderComponent,
           ),
       },
     ],

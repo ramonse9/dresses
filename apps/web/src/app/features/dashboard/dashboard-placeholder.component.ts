@@ -1,16 +1,16 @@
 import { Component } from '@angular/core';
+import { FeaturePlaceholderComponent } from '../../shared/ui/feature-placeholder/feature-placeholder.component';
 
 @Component({
   selector: 'app-dashboard-placeholder',
   standalone: true,
+  imports: [FeaturePlaceholderComponent],
   template: `
-    <section class="mx-auto max-w-6xl px-6 py-16">
-      <p class="text-sm font-semibold uppercase tracking-[0.2em] text-rose-700">Área privada</p>
-      <h1 class="mt-3 font-serif text-4xl">Panel de operación</h1>
-      <p class="mt-4 max-w-2xl text-base leading-7 text-stone-600">
-        Este espacio queda preparado para los futuros módulos autenticados.
-      </p>
-    </section>
+    <app-feature-placeholder
+      eyebrow="Resumen"
+      title="Panel de operación"
+      description="Consulta aquí la actividad principal de tu boutique cuando los módulos de negocio estén conectados."
+    />
   `,
 })
 export class DashboardPlaceholderComponent {}
