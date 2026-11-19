@@ -1,5 +1,9 @@
 import { convertToParamMap } from '@angular/router';
-import { customerFiltersFromParamMap, normalizeCustomerSearch } from './customer-filters';
+import {
+  customerFiltersFromParamMap,
+  customerFiltersToQueryParams,
+  normalizeCustomerSearch,
+} from './customer-filters';
 
 describe('customer filters', () => {
   it('uses the API pagination defaults', () => {
@@ -25,5 +29,14 @@ describe('customer filters', () => {
   it('normalizes and bounds searches', () => {
     expect(normalizeCustomerSearch(`  Ana   ${'x'.repeat(300)}  `)).toHaveLength(254);
     expect(normalizeCustomerSearch('  Ana   María  ')).toBe('Ana María');
+  });
+
+  it('serializes only supported filters for return navigation', () => {
+    expect(customerFiltersToQueryParams({ page: 3, limit: 50, activo: false, q: 'Ana' })).toEqual({
+      page: 3,
+      limit: 50,
+      activo: 'false',
+      q: 'Ana',
+    });
   });
 });

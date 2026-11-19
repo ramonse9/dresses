@@ -31,6 +31,16 @@ export interface CustomerListFilters {
   readonly q?: string;
 }
 
+export interface CreateCustomerInput {
+  readonly nombre: string;
+  readonly telefono: string | null;
+  readonly email: string | null;
+  readonly direccion: string | null;
+  readonly notas: string | null;
+}
+
+export type UpdateCustomerInput = CreateCustomerInput;
+
 export const CUSTOMER_LOAD_STATES = ['idle', 'loading', 'loaded', 'empty', 'error'] as const;
 
 export type CustomerLoadState = (typeof CUSTOMER_LOAD_STATES)[number];

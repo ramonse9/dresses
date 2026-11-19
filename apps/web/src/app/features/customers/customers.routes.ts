@@ -10,6 +10,20 @@ export const CUSTOMERS_ROUTES: Routes = [
       ),
   },
   {
+    path: 'nuevo',
+    loadComponent: () =>
+      import('./customer-create-page.component').then(
+        ({ CustomerCreatePageComponent }) => CustomerCreatePageComponent,
+      ),
+  },
+  {
+    path: ':id/editar',
+    loadComponent: () =>
+      import('./customer-edit-page.component').then(
+        ({ CustomerEditPageComponent }) => CustomerEditPageComponent,
+      ),
+  },
+  {
     path: ':id',
     loadComponent: () =>
       import('./customer-detail-page.component').then(

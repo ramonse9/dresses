@@ -966,7 +966,11 @@ La consulta Angular de sucursales está disponible para `OWNER` y `EMPLOYEE` en 
 
 La consulta Angular de clientes está disponible para `OWNER` y `EMPLOYEE` en `/app/clientes`, con detalle en `/app/clientes/:id`. El listado conserva `page`, `limit`, `activo` y `q` en query parameters, normaliza la búsqueda y aplica un debounce de 350 ms. Presenta el formato paginado estándar y muestra nombre, teléfono, email, dirección, notas y estado.
 
-Las búsquedas nuevas cancelan su suscripción anterior y el store ignora cualquier respuesta obsoleta. `TenantResetRegistry` vacía listado y detalle y cancela solicitudes pendientes al cambiar de empresa. Un UUID ajeno al tenant se presenta como `404` sin revelar información interna. El frontend no construye ni envía `empresaId`, `empresaSlug` o `schemaName`; este paso no añade creación, edición ni historial de rentas de clientes.
+Las búsquedas nuevas cancelan su suscripción anterior y el store ignora cualquier respuesta obsoleta. `TenantResetRegistry` vacía listado y detalle y cancela solicitudes pendientes al cambiar de empresa. Un UUID ajeno al tenant se presenta como `404` sin revelar información interna. El frontend no construye ni envía `empresaId`, `empresaSlug` o `schemaName`.
+
+`OWNER` y `EMPLOYEE` pueden crear clientes en `/app/clientes/nuevo` y editar datos en `/app/clientes/:id/editar`. El formulario compartido exige nombre y teléfono o email, normaliza texto, convierte el email a minúsculas y envía opcionales vacíos como `null`; nunca incluye `activo` en el `PATCH` general. Los filtros válidos del listado se conservan al navegar y regresar.
+
+Solamente `OWNER` puede desactivar mediante `DELETE /api/clientes/:id` o reactivar mediante `PATCH /api/clientes/:id/estado`. La desactivación requiere confirmación y es una baja lógica. `EMPLOYEE` no ve acciones de estado y un `403` forzado no modifica el store. Las operaciones pendientes se cancelan al cambiar de tenant. Las pantallas no incluyen reservaciones ni historial de rentas.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

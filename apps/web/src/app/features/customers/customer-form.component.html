@@ -1,0 +1,160 @@
+<form class="space-y-6" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+  <div>
+    <label class="text-sm font-semibold text-stone-800" for="customer-name">Nombre</label>
+    <input
+      id="customer-name"
+      type="text"
+      formControlName="nombre"
+      autocomplete="name"
+      maxlength="160"
+      class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      placeholder="Ej. Ana López"
+      [attr.aria-invalid]="form.controls.nombre.touched && form.controls.nombre.invalid"
+      [attr.aria-describedby]="
+        form.controls.nombre.touched && form.controls.nombre.invalid ? 'customer-name-error' : null
+      "
+    />
+    @if (form.controls.nombre.touched && form.controls.nombre.hasError('required')) {
+      <p id="customer-name-error" class="mt-2 text-sm text-red-700" role="alert">
+        El nombre es obligatorio.
+      </p>
+    } @else if (form.controls.nombre.touched && form.controls.nombre.hasError('maxlength')) {
+      <p id="customer-name-error" class="mt-2 text-sm text-red-700" role="alert">
+        El nombre no puede exceder 160 caracteres.
+      </p>
+    }
+  </div>
+
+  <fieldset class="grid gap-5 rounded-2xl border border-stone-200 p-5 sm:grid-cols-2">
+    <legend class="px-2 text-sm font-semibold text-stone-800">
+      Contacto <span class="font-normal text-stone-500">(al menos uno)</span>
+    </legend>
+    <div>
+      <label class="text-sm font-semibold text-stone-800" for="customer-phone">Teléfono</label>
+      <input
+        id="customer-phone"
+        type="tel"
+        formControlName="telefono"
+        autocomplete="tel"
+        maxlength="40"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+        placeholder="Ej. 669 123 4567"
+        [attr.aria-invalid]="
+          form.controls.telefono.touched &&
+          (form.controls.telefono.invalid || form.hasError('contactRequired'))
+        "
+        [attr.aria-describedby]="
+          form.controls.telefono.touched && form.controls.telefono.invalid
+            ? 'customer-phone-error'
+            : form.hasError('contactRequired') && form.controls.telefono.touched
+              ? 'customer-contact-error'
+              : null
+        "
+      />
+      @if (form.controls.telefono.touched && form.controls.telefono.hasError('maxlength')) {
+        <p id="customer-phone-error" class="mt-2 text-sm text-red-700" role="alert">
+          El teléfono no puede exceder 40 caracteres.
+        </p>
+      }
+    </div>
+    <div>
+      <label class="text-sm font-semibold text-stone-800" for="customer-email">Email</label>
+      <input
+        id="customer-email"
+        type="email"
+        formControlName="email"
+        autocomplete="email"
+        maxlength="254"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+        placeholder="ana@example.com"
+        [attr.aria-invalid]="
+          form.controls.email.touched &&
+          (form.controls.email.invalid || form.hasError('contactRequired'))
+        "
+        [attr.aria-describedby]="
+          form.controls.email.touched && form.controls.email.invalid
+            ? 'customer-email-error'
+            : form.hasError('contactRequired') && form.controls.email.touched
+              ? 'customer-contact-error'
+              : null
+        "
+      />
+      @if (form.controls.email.touched && form.controls.email.hasError('email')) {
+        <p id="customer-email-error" class="mt-2 text-sm text-red-700" role="alert">
+          Escribe un email válido.
+        </p>
+      } @else if (form.controls.email.touched && form.controls.email.hasError('maxlength')) {
+        <p id="customer-email-error" class="mt-2 text-sm text-red-700" role="alert">
+          El email no puede exceder 254 caracteres.
+        </p>
+      }
+    </div>
+    @if (form.touched && form.hasError('contactRequired')) {
+      <p id="customer-contact-error" class="text-sm text-red-700 sm:col-span-2" role="alert">
+        Registra al menos un teléfono o un email.
+      </p>
+    }
+  </fieldset>
+
+  <div>
+    <label class="text-sm font-semibold text-stone-800" for="customer-address">
+      Dirección <span class="font-normal text-stone-500">(opcional)</span>
+    </label>
+    <input
+      id="customer-address"
+      type="text"
+      formControlName="direccion"
+      autocomplete="street-address"
+      maxlength="255"
+      class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      placeholder="Calle, número y colonia"
+      [attr.aria-invalid]="form.controls.direccion.touched && form.controls.direccion.invalid"
+      [attr.aria-describedby]="
+        form.controls.direccion.touched && form.controls.direccion.invalid
+          ? 'customer-address-error'
+          : null
+      "
+    />
+    @if (form.controls.direccion.touched && form.controls.direccion.hasError('maxlength')) {
+      <p id="customer-address-error" class="mt-2 text-sm text-red-700" role="alert">
+        La dirección no puede exceder 255 caracteres.
+      </p>
+    }
+  </div>
+
+  <div>
+    <label class="text-sm font-semibold text-stone-800" for="customer-notes">
+      Notas <span class="font-normal text-stone-500">(opcional)</span>
+    </label>
+    <textarea
+      id="customer-notes"
+      formControlName="notas"
+      rows="5"
+      maxlength="2000"
+      class="mt-2 w-full rounded-2xl border border-stone-300 bg-white px-4 py-3 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      placeholder="Preferencias o información útil para la atención"
+      [attr.aria-invalid]="form.controls.notas.touched && form.controls.notas.invalid"
+      [attr.aria-describedby]="
+        form.controls.notas.touched && form.controls.notas.invalid ? 'customer-notes-error' : null
+      "
+    ></textarea>
+    <p class="mt-1 text-sm text-stone-500">Hasta 2,000 caracteres.</p>
+    @if (form.controls.notas.touched && form.controls.notas.hasError('maxlength')) {
+      <p id="customer-notes-error" class="mt-2 text-sm text-red-700" role="alert">
+        Las notas no pueden exceder 2,000 caracteres.
+      </p>
+    }
+  </div>
+
+  @if (serverError()) {
+    <app-error-message [error]="serverError()" />
+  }
+
+  <app-submit-button
+    class="block [&>button]:w-full sm:[&>button]:w-auto"
+    [label]="submitLabel()"
+    [loadingLabel]="submittingLabel()"
+    [loading]="submitting()"
+    [disabled]="submitting()"
+  />
+</form>

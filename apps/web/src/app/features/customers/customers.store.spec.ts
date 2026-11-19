@@ -30,12 +30,23 @@ function response(
 }
 
 describe('CustomersStore', () => {
-  const api = { list: vi.fn(), getById: vi.fn() };
+  const api = {
+    list: vi.fn(),
+    getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateStatus: vi.fn(),
+    deactivate: vi.fn(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     api.list.mockReturnValue(of(response()));
     api.getById.mockReturnValue(of(customer));
+    api.create.mockReturnValue(of(customer));
+    api.update.mockReturnValue(of(customer));
+    api.updateStatus.mockReturnValue(of(customer));
+    api.deactivate.mockReturnValue(of({ ...customer, activo: false }));
     TestBed.configureTestingModule({
       providers: [
         CustomersStore,
@@ -133,5 +144,95 @@ describe('CustomersStore', () => {
 
     expect(store.listState().error?.status).toBe(0);
     expect(JSON.stringify(store.listState())).not.toMatch(/schemaName|empresaSlug/);
+  });
+
+  it('creates and updates customers without adding activo to general data', async () => {
+    const input = {
+      nombre: 'Ana López',
+      telefono: '555-0100',
+      email: null,
+      direccion: null,
+      notas: null,
+    };
+    const updated = { ...customer, nombre: 'Ana María' };
+    api.update.mockReturnValueOnce(of(updated));
+    const store = TestBed.inject(CustomersStore);
+    await firstValueFrom(store.loadList({ page: 1, limit: 20 }));
+    await firstValueFrom(store.loadDetail(customer.id));
+
+    await firstValueFrom(store.create(input));
+    await firstValueFrom(store.update(customer.id, { ...input, nombre: updated.nombre }));
+
+    expect(api.create).toHaveBeenCalledWith(input);
+    expect(api.update).toHaveBeenCalledWith(customer.id, { ...input, nombre: updated.nombre });
+    expect(store.detailState().data).toEqual(updated);
+  });
+
+  it('applies deactivation and reactivation only after successful responses', async () => {
+    const inactive = { ...customer, activo: false };
+    api.deactivate.mockReturnValueOnce(of(inactive));
+    api.updateStatus.mockReturnValueOnce(of(customer));
+    const store = TestBed.inject(CustomersStore);
+    await firstValueFrom(store.loadList({ page: 1, limit: 20 }));
+    await firstValueFrom(store.loadDetail(customer.id));
+
+    await firstValueFrom(store.deactivate(customer.id));
+    expect(store.detailState().data?.activo).toBe(false);
+    await firstValueFrom(store.reactivate(customer.id));
+
+    expect(api.updateStatus).toHaveBeenCalledWith(customer.id, true);
+    expect(store.detailState().data?.activo).toBe(true);
+  });
+
+  it.each([400, 403, 404])(
+    'does not alter local state when a mutation responds %s',
+    async (status) => {
+      api.update.mockReturnValueOnce(
+        throwError(() => new HttpErrorResponse({ status, statusText: 'Rejected' })),
+      );
+      const store = TestBed.inject(CustomersStore);
+      await firstValueFrom(store.loadList({ page: 1, limit: 20 }));
+      await firstValueFrom(store.loadDetail(customer.id));
+      const listBefore = store.listState();
+      const detailBefore = store.detailState();
+
+      await expect(
+        firstValueFrom(
+          store.update(customer.id, {
+            nombre: 'Otro',
+            telefono: null,
+            email: 'otro@example.com',
+            direccion: null,
+            notas: null,
+          }),
+        ),
+      ).rejects.toBeInstanceOf(HttpErrorResponse);
+
+      expect(store.listState()).toBe(listBefore);
+      expect(store.detailState()).toBe(detailBefore);
+    },
+  );
+
+  it('cancels a pending mutation when the tenant changes', () => {
+    const pending = new Subject<Customer>();
+    api.create.mockReturnValueOnce(pending.asObservable());
+    const store = TestBed.inject(CustomersStore);
+    const registry = TestBed.inject(TenantResetRegistry);
+    const received = vi.fn();
+    store
+      .create({
+        nombre: 'Nueva',
+        telefono: null,
+        email: 'nueva@example.com',
+        direccion: null,
+        notas: null,
+      })
+      .subscribe(received);
+
+    registry.resetAll();
+    pending.next(customer);
+
+    expect(received).not.toHaveBeenCalled();
+    expect(store.listState().status).toBe('idle');
   });
 });

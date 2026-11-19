@@ -4,9 +4,12 @@ import { normalizeApiError } from '../../core/http/api-error';
 import { TenantResetRegistry } from '../../core/tenant/tenant-reset-registry.service';
 import { DEFAULT_CUSTOMER_LIMIT, DEFAULT_CUSTOMER_PAGE } from './customer-filters';
 import type {
+  CreateCustomerInput,
+  Customer,
   CustomerDetailState,
   CustomerListFilters,
   CustomerListState,
+  UpdateCustomerInput,
 } from './customer.models';
 import { CustomersApiService } from './customers-api.service';
 
@@ -38,6 +41,7 @@ export class CustomersStore {
   private readonly detailStateValue = signal(initialDetailState);
   private listRequestId = 0;
   private detailRequestId = 0;
+  private tenantGeneration = 0;
 
   readonly listState = this.listStateValue.asReadonly();
   readonly detailState = this.detailStateValue.asReadonly();
@@ -110,11 +114,55 @@ export class CustomersStore {
     );
   }
 
+  create(input: CreateCustomerInput): Observable<Customer> {
+    return this.runMutation(this.api.create(input));
+  }
+
+  update(id: string, input: UpdateCustomerInput): Observable<Customer> {
+    return this.runMutation(this.api.update(id, input));
+  }
+
+  deactivate(id: string): Observable<Customer> {
+    return this.runMutation(this.api.deactivate(id));
+  }
+
+  reactivate(id: string): Observable<Customer> {
+    return this.runMutation(this.api.updateStatus(id, true));
+  }
+
   reset(): void {
+    this.tenantGeneration += 1;
     this.listRequestId += 1;
     this.detailRequestId += 1;
     this.resetRequests.next();
     this.listStateValue.set(initialListState);
     this.detailStateValue.set(initialDetailState);
+  }
+
+  private runMutation(request: Observable<Customer>): Observable<Customer> {
+    const generation = this.tenantGeneration;
+    return request.pipe(
+      takeUntil(this.resetRequests),
+      tap((customer) => {
+        if (generation === this.tenantGeneration) {
+          this.applyMutation(customer);
+        }
+      }),
+    );
+  }
+
+  private applyMutation(customer: Customer): void {
+    const listState = this.listStateValue();
+    const exists = listState.data.some(({ id }) => id === customer.id);
+    if ((listState.status === 'loaded' || listState.status === 'empty') && exists) {
+      this.listStateValue.set({
+        ...listState,
+        data: listState.data.map((current) => (current.id === customer.id ? customer : current)),
+      });
+    }
+
+    if (this.detailStateValue().data?.id === customer.id) {
+      this.detailStateValue.set({ status: 'loaded', data: customer, error: null });
+    }
   }
 }

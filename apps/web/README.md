@@ -26,7 +26,9 @@ Las rutas se cargan de forma diferida y actualmente preparan estos puntos de ent
 | `/app/sucursales/:id`        | Detalle de una sucursal              |
 | `/app/sucursales/:id/editar` | Edición de sucursal para OWNER       |
 | `/app/clientes`              | Consulta paginada de clientes        |
+| `/app/clientes/nuevo`        | Creación de cliente                  |
 | `/app/clientes/:id`          | Detalle de un cliente                |
+| `/app/clientes/:id/editar`   | Edición de datos del cliente         |
 | `/app/vestidos`              | Punto de entrada para catálogo       |
 | `/app/disponibilidad`        | Punto de entrada para disponibilidad |
 | `/app/reservaciones`         | Punto de entrada para reservaciones  |
@@ -171,7 +173,22 @@ El listado utiliza el formato paginado estándar del API y conserva sus filtros 
 
 `CustomersStore` representa los estados `idle`, `loading`, `loaded`, `empty` y `error`. Las suscripciones del componente usan `switchMap` y el store identifica cada solicitud, de modo que una respuesta anterior nunca sobrescribe una búsqueda nueva. El registro en `TenantResetRegistry` cancela solicitudes pendientes y vacía listado y detalle al cambiar de empresa.
 
-Las respuestas muestran nombre, teléfono, email, dirección, notas y estado. Un `404` de detalle se presenta sin revelar si el UUID pertenece a otro tenant; un `403` se trata como acceso perdido y los fallos de red permiten reintentar. El feature no envía selectores tenant ni expone nombres de schemas. En esta etapa no incluye creación, edición ni historial de rentas.
+Las respuestas muestran nombre, teléfono, email, dirección, notas y estado. Un `404` de detalle se presenta sin revelar si el UUID pertenece a otro tenant; un `403` se trata como acceso perdido y los fallos de red permiten reintentar. El feature no envía selectores tenant ni expone nombres de schemas.
+
+### Mutaciones de clientes
+
+`OWNER` y `EMPLOYEE` pueden crear en `/app/clientes/nuevo` y editar en `/app/clientes/:id/editar`. Un formulario Reactive Forms reutilizable exige nombre y al menos uno entre teléfono o email. Antes de enviar recorta espacios, convierte el email a minúsculas y transforma campos opcionales vacíos en `null`; el `PATCH` general nunca incluye `activo`.
+
+| Operación  | OWNER | EMPLOYEE |
+| ---------- | ----- | -------- |
+| Crear      | Sí    | Sí       |
+| Editar     | Sí    | Sí       |
+| Desactivar | Sí    | No       |
+| Reactivar  | Sí    | No       |
+
+Crear utiliza `POST /api/clientes`, editar `PATCH /api/clientes/:id`, reactivar `PATCH /api/clientes/:id/estado` con `{ "activo": true }` y desactivar `DELETE /api/clientes/:id`. La baja lógica requiere confirmación y no elimina físicamente el registro. Las acciones de estado no se muestran a `EMPLOYEE`; el API continúa siendo la autoridad ante peticiones forzadas.
+
+Los enlaces conservan solamente `page`, `limit`, `activo` y `q`, por lo que regresar desde alta, edición o detalle restaura la vista previa sin propagar parámetros desconocidos. Las mutaciones pendientes se cancelan al cambiar de tenant y una respuesta `400`, `403`, `404` o de red no altera los datos locales. No se implementan reservaciones ni historial de rentas en este feature.
 
 ## Convenciones para features
 

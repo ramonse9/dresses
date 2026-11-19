@@ -9,6 +9,7 @@ import { LoadingIndicatorComponent } from '../../shared/ui/loading-indicator/loa
 import { customerErrorMessage } from './customer-error-message';
 import {
   customerFiltersFromParamMap,
+  customerFiltersToQueryParams,
   MAXIMUM_CUSTOMER_SEARCH_LENGTH,
   normalizeCustomerSearch,
 } from './customer-filters';
@@ -47,6 +48,9 @@ export class CustomersListPageComponent implements OnInit {
     const filters = this.store.listState().filters;
     return filters.q !== undefined || filters.activo !== undefined;
   });
+  readonly returnQueryParams = computed(() =>
+    customerFiltersToQueryParams(this.store.listState().filters),
+  );
 
   ngOnInit(): void {
     this.filtersForm.controls.q.valueChanges

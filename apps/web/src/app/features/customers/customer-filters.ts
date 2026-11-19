@@ -30,6 +30,17 @@ export function customerFiltersFromParamMap(params: ParamMap): CustomerListFilte
   };
 }
 
+export function customerFiltersToQueryParams(
+  filters: CustomerListFilters,
+): Record<string, string | number> {
+  return {
+    page: filters.page,
+    limit: filters.limit,
+    ...(filters.activo === undefined ? {} : { activo: String(filters.activo) }),
+    ...(filters.q ? { q: filters.q } : {}),
+  };
+}
+
 function parsePositiveInteger(value: string | null, fallback: number, maximum?: number): number {
   if (!value || !/^[1-9]\d*$/.test(value)) {
     return fallback;
