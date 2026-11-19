@@ -10,6 +10,14 @@ export interface Branch {
   readonly updatedAt: string;
 }
 
+export interface CreateBranchInput {
+  readonly nombre: string;
+  readonly direccion: string | null;
+  readonly telefono: string | null;
+}
+
+export type UpdateBranchInput = CreateBranchInput;
+
 export const BRANCH_LOAD_STATES = ['idle', 'loading', 'loaded', 'empty', 'error'] as const;
 
 export type BranchLoadState = (typeof BRANCH_LOAD_STATES)[number];

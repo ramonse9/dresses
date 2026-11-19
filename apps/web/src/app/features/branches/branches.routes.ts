@@ -10,6 +10,20 @@ export const BRANCHES_ROUTES: Routes = [
       ),
   },
   {
+    path: 'nueva',
+    loadComponent: () =>
+      import('./branch-create-page.component').then(
+        ({ BranchCreatePageComponent }) => BranchCreatePageComponent,
+      ),
+  },
+  {
+    path: ':id/editar',
+    loadComponent: () =>
+      import('./branch-edit-page.component').then(
+        ({ BranchEditPageComponent }) => BranchEditPageComponent,
+      ),
+  },
+  {
     path: ':id',
     loadComponent: () =>
       import('./branch-detail-page.component').then(

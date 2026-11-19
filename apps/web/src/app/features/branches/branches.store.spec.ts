@@ -20,12 +20,18 @@ describe('BranchesStore', () => {
   const api = {
     list: vi.fn(),
     getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    deactivate: vi.fn(),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     api.list.mockReturnValue(of([branch]));
     api.getById.mockReturnValue(of(branch));
+    api.create.mockReturnValue(of(branch));
+    api.update.mockReturnValue(of(branch));
+    api.deactivate.mockReturnValue(of({ ...branch, activo: false }));
     TestBed.configureTestingModule({
       providers: [
         BranchesStore,
@@ -107,6 +113,84 @@ describe('BranchesStore', () => {
 
     expect(store.listState()).toEqual({ status: 'idle', data: [], error: null });
     expect(store.detailState()).toEqual({ status: 'idle', data: null, error: null });
+  });
+
+  it('adds a created branch to an already loaded list', async () => {
+    const created = { ...branch, id: 'branch-2', nombre: 'Norte' };
+    api.create.mockReturnValueOnce(of(created));
+    const store = TestBed.inject(BranchesStore);
+    await firstValueFrom(store.loadList());
+
+    await firstValueFrom(
+      store.create({ nombre: created.nombre, direccion: created.direccion, telefono: null }),
+    );
+
+    expect(store.listState().data).toEqual([created, branch]);
+  });
+
+  it('updates branch data only after a successful response', async () => {
+    const updated = { ...branch, nombre: 'Centro Histórico' };
+    api.update.mockReturnValueOnce(of(updated));
+    const store = TestBed.inject(BranchesStore);
+    await firstValueFrom(store.loadList());
+    await firstValueFrom(store.loadDetail(branch.id));
+
+    await firstValueFrom(
+      store.update(branch.id, { nombre: updated.nombre, direccion: null, telefono: null }),
+    );
+
+    expect(store.listState().data[0]).toEqual(updated);
+    expect(store.detailState().data).toEqual(updated);
+  });
+
+  it('applies logical deactivation and reactivation responses', async () => {
+    const inactive = { ...branch, activo: false };
+    api.deactivate.mockReturnValueOnce(of(inactive));
+    api.update.mockReturnValueOnce(of(branch));
+    const store = TestBed.inject(BranchesStore);
+    await firstValueFrom(store.loadList());
+    await firstValueFrom(store.loadDetail(branch.id));
+
+    await firstValueFrom(store.deactivate(branch.id));
+    expect(store.detailState().data?.activo).toBe(false);
+    await firstValueFrom(store.reactivate(branch.id));
+    expect(api.update).toHaveBeenCalledWith(branch.id, { activo: true });
+    expect(store.detailState().data?.activo).toBe(true);
+  });
+
+  it.each([403, 409])('does not alter local state when a mutation responds %s', async (status) => {
+    api.update.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status, statusText: 'Rejected' })),
+    );
+    const store = TestBed.inject(BranchesStore);
+    await firstValueFrom(store.loadList());
+    await firstValueFrom(store.loadDetail(branch.id));
+    const listBefore = store.listState();
+    const detailBefore = store.detailState();
+
+    await expect(
+      firstValueFrom(
+        store.update(branch.id, { nombre: 'Duplicada', direccion: null, telefono: null }),
+      ),
+    ).rejects.toBeInstanceOf(HttpErrorResponse);
+
+    expect(store.listState()).toBe(listBefore);
+    expect(store.detailState()).toBe(detailBefore);
+  });
+
+  it('cancels a pending mutation when the tenant changes', () => {
+    const response = new Subject<Branch>();
+    api.create.mockReturnValueOnce(response.asObservable());
+    const store = TestBed.inject(BranchesStore);
+    const registry = TestBed.inject(TenantResetRegistry);
+    const received = vi.fn();
+    store.create({ nombre: 'Norte', direccion: null, telefono: null }).subscribe(received);
+
+    registry.resetAll();
+    response.next({ ...branch, id: 'branch-2' });
+
+    expect(received).not.toHaveBeenCalled();
+    expect(store.listState()).toEqual({ status: 'idle', data: [], error: null });
   });
 
   it('does not expose schema information in branch state', async () => {

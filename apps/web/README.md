@@ -14,19 +14,21 @@ src/app
 
 Las rutas se cargan de forma diferida y actualmente preparan estos puntos de entrada:
 
-| Ruta                   | Propósito                            |
-| ---------------------- | ------------------------------------ |
-| `/`                    | Página pública                       |
-| `/login`               | Formulario de acceso para invitados  |
-| `/seleccionar-empresa` | Selección entre membresías vigentes  |
-| `/app`                 | Redirección al dashboard autenticado |
-| `/app/dashboard`       | Resumen de operación                 |
-| `/app/sucursales`      | Punto de entrada para sucursales     |
-| `/app/sucursales/:id`  | Detalle de una sucursal              |
-| `/app/clientes`        | Punto de entrada para clientes       |
-| `/app/vestidos`        | Punto de entrada para catálogo       |
-| `/app/disponibilidad`  | Punto de entrada para disponibilidad |
-| `/app/reservaciones`   | Punto de entrada para reservaciones  |
+| Ruta                         | Propósito                            |
+| ---------------------------- | ------------------------------------ |
+| `/`                          | Página pública                       |
+| `/login`                     | Formulario de acceso para invitados  |
+| `/seleccionar-empresa`       | Selección entre membresías vigentes  |
+| `/app`                       | Redirección al dashboard autenticado |
+| `/app/dashboard`             | Resumen de operación                 |
+| `/app/sucursales`            | Punto de entrada para sucursales     |
+| `/app/sucursales/nueva`      | Creación de sucursal para OWNER      |
+| `/app/sucursales/:id`        | Detalle de una sucursal              |
+| `/app/sucursales/:id/editar` | Edición de sucursal para OWNER       |
+| `/app/clientes`              | Punto de entrada para clientes       |
+| `/app/vestidos`              | Punto de entrada para catálogo       |
+| `/app/disponibilidad`        | Punto de entrada para disponibilidad |
+| `/app/reservaciones`         | Punto de entrada para reservaciones  |
 
 La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. Login, logout, selección de empresa y los guards están activos.
 
@@ -120,9 +122,34 @@ GET /api/sucursales/:id   → /app/sucursales/:id
 
 `BranchesApiService` utiliza exclusivamente rutas relativas del tenant autenticado. No recibe ni construye `empresaId`, `empresaSlug` o `schemaName`. `BranchesStore` expone signals independientes para listado y detalle con estados `idle`, `loading`, `loaded`, `empty` y `error`.
 
-El interceptor global sigue resolviendo respuestas `401`. El feature presenta `403` como pérdida de acceso a la empresa, `404` como sucursal inexistente o ajena al tenant y los fallos de red con una acción de reintento. La respuesta visible incluye nombre, dirección, teléfono y estado activo/inactivo; no existen acciones de creación, edición o desactivación.
+El interceptor global sigue resolviendo respuestas `401`. El feature presenta `403` como pérdida de acceso o falta de autorización, `404` como sucursal inexistente o ajena al tenant, `409` como conflicto de nombre y los fallos de red con una acción de reintento. La respuesta visible incluye nombre, dirección, teléfono y estado activo/inactivo.
 
 `BranchesStore` registra su limpieza en `TenantResetRegistry`. Un cambio de empresa vacía listado y detalle, y cancela las solicitudes pendientes para impedir que una respuesta tardía restaure información del tenant anterior.
+
+### Mutaciones de sucursales
+
+Las rutas de formulario también son lazy-loaded:
+
+```text
+/app/sucursales/nueva
+/app/sucursales/:id/editar
+```
+
+| Operación  | OWNER | EMPLOYEE |
+| ---------- | ----- | -------- |
+| Consultar  | Sí    | Sí       |
+| Crear      | Sí    | No       |
+| Editar     | Sí    | No       |
+| Desactivar | Sí    | No       |
+| Reactivar  | Sí    | No       |
+
+La interfaz oculta las acciones de escritura a `EMPLOYEE`, pero el API continúa siendo la autoridad. Si una membresía cambia mientras el formulario está abierto, un `403` se muestra como error de autorización y la lista y el detalle locales permanecen sin cambios.
+
+El formulario reutilizable usa Reactive Forms y replica el contrato del API: nombre obligatorio de 2 a 160 caracteres, dirección opcional hasta 255 y teléfono opcional hasta 40. Antes de enviar recorta espacios y convierte opcionales vacíos a `null`. El estado `activo` nunca forma parte del formulario de datos.
+
+Crear utiliza `POST /api/sucursales`, editar utiliza `PATCH /api/sucursales/:id`, reactivar envía exclusivamente `{ "activo": true }` mediante `PATCH` y desactivar utiliza `DELETE`. La desactivación requiere un diálogo de confirmación que aclara que se trata de una baja lógica recuperable. Todas las acciones bloquean envíos duplicados.
+
+El store incorpora la respuesta exitosa al listado y detalle únicamente si la generación tenant sigue vigente. Una respuesta `403`, `409` o una mutación cancelada por cambio de empresa no altera el estado local.
 
 ## Convenciones para features
 

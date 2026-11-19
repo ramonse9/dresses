@@ -1,0 +1,95 @@
+<form class="space-y-6" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+  <div>
+    <label class="text-sm font-semibold text-stone-800" for="branch-name">Nombre</label>
+    <input
+      id="branch-name"
+      type="text"
+      formControlName="nombre"
+      autocomplete="organization"
+      maxlength="160"
+      class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      placeholder="Ej. Centro"
+      [attr.aria-invalid]="form.controls.nombre.touched && form.controls.nombre.invalid"
+      [attr.aria-describedby]="
+        form.controls.nombre.touched && form.controls.nombre.invalid ? 'branch-name-error' : null
+      "
+    />
+    @if (form.controls.nombre.touched && form.controls.nombre.hasError('required')) {
+      <p id="branch-name-error" class="mt-2 text-sm text-red-700" role="alert">
+        El nombre es obligatorio.
+      </p>
+    } @else if (form.controls.nombre.touched && form.controls.nombre.hasError('minlength')) {
+      <p id="branch-name-error" class="mt-2 text-sm text-red-700" role="alert">
+        El nombre debe tener al menos 2 caracteres.
+      </p>
+    } @else if (form.controls.nombre.touched && form.controls.nombre.hasError('maxlength')) {
+      <p id="branch-name-error" class="mt-2 text-sm text-red-700" role="alert">
+        El nombre no puede exceder 160 caracteres.
+      </p>
+    }
+  </div>
+
+  <div>
+    <label class="text-sm font-semibold text-stone-800" for="branch-address">
+      Dirección <span class="font-normal text-stone-500">(opcional)</span>
+    </label>
+    <input
+      id="branch-address"
+      type="text"
+      formControlName="direccion"
+      autocomplete="street-address"
+      maxlength="255"
+      class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      placeholder="Calle, número y colonia"
+      [attr.aria-invalid]="form.controls.direccion.touched && form.controls.direccion.invalid"
+      [attr.aria-describedby]="
+        form.controls.direccion.touched && form.controls.direccion.invalid
+          ? 'branch-address-error'
+          : null
+      "
+    />
+    @if (form.controls.direccion.touched && form.controls.direccion.hasError('maxlength')) {
+      <p id="branch-address-error" class="mt-2 text-sm text-red-700" role="alert">
+        La dirección no puede exceder 255 caracteres.
+      </p>
+    }
+  </div>
+
+  <div>
+    <label class="text-sm font-semibold text-stone-800" for="branch-phone">
+      Teléfono <span class="font-normal text-stone-500">(opcional)</span>
+    </label>
+    <input
+      id="branch-phone"
+      type="tel"
+      formControlName="telefono"
+      autocomplete="tel"
+      maxlength="40"
+      class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 text-base text-stone-950 outline-none transition placeholder:text-stone-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      placeholder="Ej. 555-0100"
+      [attr.aria-invalid]="form.controls.telefono.touched && form.controls.telefono.invalid"
+      [attr.aria-describedby]="
+        form.controls.telefono.touched && form.controls.telefono.invalid
+          ? 'branch-phone-error'
+          : null
+      "
+    />
+    @if (form.controls.telefono.touched && form.controls.telefono.hasError('maxlength')) {
+      <p id="branch-phone-error" class="mt-2 text-sm text-red-700" role="alert">
+        El teléfono no puede exceder 40 caracteres.
+      </p>
+    }
+  </div>
+
+  @if (serverError()) {
+    <app-error-message [error]="serverError()" />
+  }
+
+  <app-submit-button
+    class="block [&>button]:w-full sm:[&>button]:w-auto"
+    [label]="submitLabel()"
+    [loadingLabel]="submittingLabel()"
+    [loading]="submitting()"
+    [disabled]="submitting()"
+  />
+</form>

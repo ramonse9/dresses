@@ -12,12 +12,22 @@
         Consulta los puntos de operación disponibles en la empresa seleccionada.
       </p>
     </div>
-    @if (store.listState().status === 'loaded') {
-      <p class="rounded-full bg-stone-200 px-4 py-2 text-sm font-semibold text-stone-700">
-        {{ store.listState().data.length }}
-        {{ store.listState().data.length === 1 ? 'sucursal' : 'sucursales' }}
-      </p>
-    }
+    <div class="flex flex-wrap items-center gap-3">
+      @if (store.listState().status === 'loaded') {
+        <p class="rounded-full bg-stone-200 px-4 py-2 text-sm font-semibold text-stone-700">
+          {{ store.listState().data.length }}
+          {{ store.listState().data.length === 1 ? 'sucursal' : 'sucursales' }}
+        </p>
+      }
+      @if (isOwner()) {
+        <a
+          routerLink="/app/sucursales/nueva"
+          class="inline-flex min-h-11 items-center rounded-full bg-stone-950 px-5 py-2 text-sm font-semibold text-white transition hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2"
+        >
+          Nueva sucursal
+        </a>
+      }
+    </div>
   </header>
 
   <div class="mt-8" aria-live="polite">

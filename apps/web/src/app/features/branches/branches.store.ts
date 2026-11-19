@@ -12,7 +12,12 @@ import {
 } from 'rxjs';
 import { normalizeApiError } from '../../core/http/api-error';
 import { TenantResetRegistry } from '../../core/tenant/tenant-reset-registry.service';
-import type { Branch, BranchResourceState } from './branch.models';
+import type {
+  Branch,
+  BranchResourceState,
+  CreateBranchInput,
+  UpdateBranchInput,
+} from './branch.models';
 import { BranchesApiService } from './branches-api.service';
 
 const initialListState: BranchResourceState<readonly Branch[]> = {
@@ -36,6 +41,7 @@ export class BranchesStore {
   private readonly detailStateValue = signal(initialDetailState);
   private listInFlight: Observable<void> | null = null;
   private detailRequestId = 0;
+  private tenantGeneration = 0;
 
   readonly listState = this.listStateValue.asReadonly();
   readonly detailState = this.detailStateValue.asReadonly();
@@ -98,11 +104,55 @@ export class BranchesStore {
     );
   }
 
+  create(input: CreateBranchInput): Observable<Branch> {
+    return this.runMutation(this.api.create(input));
+  }
+
+  update(id: string, input: UpdateBranchInput): Observable<Branch> {
+    return this.runMutation(this.api.update(id, input));
+  }
+
+  deactivate(id: string): Observable<Branch> {
+    return this.runMutation(this.api.deactivate(id));
+  }
+
+  reactivate(id: string): Observable<Branch> {
+    return this.runMutation(this.api.update(id, { activo: true }));
+  }
+
   reset(): void {
+    this.tenantGeneration += 1;
     this.detailRequestId += 1;
     this.resetRequests.next();
     this.listInFlight = null;
     this.listStateValue.set(initialListState);
     this.detailStateValue.set(initialDetailState);
+  }
+
+  private runMutation(request: Observable<Branch>): Observable<Branch> {
+    const generation = this.tenantGeneration;
+    return request.pipe(
+      takeUntil(this.resetRequests),
+      tap((branch) => {
+        if (generation === this.tenantGeneration) {
+          this.applyMutation(branch);
+        }
+      }),
+    );
+  }
+
+  private applyMutation(branch: Branch): void {
+    const listState = this.listStateValue();
+    if (listState.status === 'loaded' || listState.status === 'empty') {
+      const exists = listState.data.some(({ id }) => id === branch.id);
+      const data = exists
+        ? listState.data.map((current) => (current.id === branch.id ? branch : current))
+        : [branch, ...listState.data];
+      this.listStateValue.set({ status: 'loaded', data, error: null });
+    }
+
+    if (this.detailStateValue().data?.id === branch.id) {
+      this.detailStateValue.set({ status: 'loaded', data: branch, error: null });
+    }
   }
 }

@@ -960,7 +960,9 @@ El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móv
 
 Los stores de futuros features que contengan información tenant deben registrar su limpieza en `TenantResetRegistry`. El registro se ejecuta al cambiar empresa y al cerrar sesión, antes de reutilizar el shell con otro tenant.
 
-La consulta Angular de sucursales está disponible para `OWNER` y `EMPLOYEE` en `/app/sucursales`, con detalle en `/app/sucursales/:id`. Consume únicamente `GET /api/sucursales` y `GET /api/sucursales/:id`, presenta nombre, dirección, teléfono y estado, y contempla carga, vacío, error, `403`, `404` y fallos de red. El store del feature se limpia y cancela solicitudes pendientes mediante `TenantResetRegistry` al cambiar de empresa. No incluye todavía operaciones de escritura.
+La consulta Angular de sucursales está disponible para `OWNER` y `EMPLOYEE` en `/app/sucursales`, con detalle en `/app/sucursales/:id`. Presenta nombre, dirección, teléfono y estado, y contempla carga, vacío, error, `403`, `404` y fallos de red.
+
+`OWNER` también puede crear en `/app/sucursales/nueva`, editar en `/app/sucursales/:id/editar`, desactivar mediante baja lógica y reactivar. Los formularios usan Reactive Forms, normalizan espacios, respetan las longitudes del API, evitan doble envío y presentan conflictos `409`. Las acciones no se muestran a `EMPLOYEE`; cualquier `403` del backend deja intacto el estado local. El store incorpora mutaciones exitosas solo mientras continúa vigente la misma generación tenant y cancela todas las operaciones pendientes mediante `TenantResetRegistry` al cambiar de empresa.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

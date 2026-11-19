@@ -1,5 +1,6 @@
 import { Component, computed, inject, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { TenantStore } from '../../core/tenant/tenant.store';
 import { EmptyStateComponent } from '../../shared/ui/empty-state/empty-state.component';
 import { ErrorMessageComponent } from '../../shared/ui/error-message/error-message.component';
 import { LoadingIndicatorComponent } from '../../shared/ui/loading-indicator/loading-indicator.component';
@@ -14,6 +15,8 @@ import { BranchesStore } from './branches.store';
 })
 export class BranchesListPageComponent implements OnInit {
   readonly store = inject(BranchesStore);
+  private readonly tenantStore = inject(TenantStore);
+  readonly isOwner = computed(() => this.tenantStore.role() === 'OWNER');
   readonly errorMessage = computed(() => branchErrorMessage(this.store.listState().error));
 
   ngOnInit(): void {

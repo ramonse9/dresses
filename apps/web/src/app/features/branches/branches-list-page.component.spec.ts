@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
+import { TenantStore } from '../../core/tenant/tenant.store';
 import type { Branch, BranchResourceState } from './branch.models';
 import { BranchesListPageComponent } from './branches-list-page.component';
 import { BranchesStore } from './branches.store';
@@ -17,6 +18,7 @@ const branch: Branch = {
 };
 
 describe('BranchesListPageComponent', () => {
+  const role = signal<'OWNER' | 'EMPLOYEE'>('OWNER');
   const listState = signal<BranchResourceState<readonly Branch[]>>({
     status: 'loaded',
     data: [branch],
@@ -27,10 +29,15 @@ describe('BranchesListPageComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    role.set('OWNER');
     listState.set({ status: 'loaded', data: [branch], error: null });
     TestBed.configureTestingModule({
       imports: [BranchesListPageComponent],
-      providers: [provideRouter([]), { provide: BranchesStore, useValue: store }],
+      providers: [
+        provideRouter([]),
+        { provide: BranchesStore, useValue: store },
+        { provide: TenantStore, useValue: { role: role.asReadonly() } },
+      ],
     });
     await TestBed.compileComponents();
     fixture = TestBed.createComponent(BranchesListPageComponent);
@@ -64,5 +71,14 @@ describe('BranchesListPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Ya no tienes acceso');
     expect(fixture.nativeElement.textContent).toContain('Seleccionar otra empresa');
     expect(fixture.nativeElement.textContent).not.toContain('schemaName');
+  });
+
+  it('shows creation only to OWNER', () => {
+    expect(fixture.nativeElement.textContent).toContain('Nueva sucursal');
+
+    role.set('EMPLOYEE');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Nueva sucursal');
   });
 });
