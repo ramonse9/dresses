@@ -34,7 +34,8 @@ Las rutas se cargan de forma diferida y actualmente preparan estos puntos de ent
 | `/app/vestidos/:id`          | Detalle de una pieza física           |
 | `/app/vestidos/:id/editar`   | Edición y traslado para OWNER         |
 | `/app/disponibilidad`        | Consulta de disponibilidad por fechas |
-| `/app/reservaciones`         | Punto de entrada para reservaciones   |
+| `/app/reservaciones`         | Listado paginado de reservaciones     |
+| `/app/reservaciones/:id`     | Detalle e importes históricos         |
 
 La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. Login, logout, selección de empresa y los guards están activos.
 
@@ -115,7 +116,7 @@ No existen modelos, propiedades, headers, query strings ni cuerpos para `schemaN
 
 `hasAnyRole()` y `navigationForRole()` permiten definir visibilidad por rol para acciones futuras. Ocultar una ruta, enlace o botón nunca reemplaza la autorización del backend; el API continúa verificando la membresía vigente y sus permisos.
 
-Los componentes de dashboard y reservaciones son standalone y se importan de forma diferida como placeholders. Sucursales, clientes, vestidos y disponibilidad ya consumen datos reales del API.
+El dashboard continúa como placeholder standalone. Sucursales, clientes, vestidos, disponibilidad y reservaciones ya consumen datos reales del API mediante rutas diferidas.
 
 ## Consulta de sucursales
 
@@ -246,6 +247,25 @@ La pantalla distingue dos conceptos:
 Una búsqueda explícita de `MANTENIMIENTO` puede mostrar piezas libres por calendario, siempre con la etiqueta “No rentable · mantenimiento”. Los importes se conservan como strings decimales y se presentan con el mismo formateador seguro del catálogo. La pantalla solamente consulta: no crea reservaciones ni cambia estados.
 
 `AvailabilityStore` registra su limpieza en `TenantResetRegistry`, cancela respuestas pendientes al cambiar de empresa y mantiene estados `idle`, `loading`, `loaded`, `empty` y `error`. Un `404` de sucursal se presenta sin revelar si el UUID existe en otro tenant.
+
+## Consulta de reservaciones
+
+`features/reservations` se carga mediante rutas hijas lazy y permite consultar a `OWNER` y `EMPLOYEE`:
+
+```text
+GET /api/reservaciones       → /app/reservaciones
+GET /api/reservaciones/:id   → /app/reservaciones/:id
+```
+
+El listado conserva `clienteId`, `sucursalId`, `estado`, `fechaDesde`, `fechaHasta`, `q`, `page` y `limit` en query parameters. `q` busca por nombre, email o teléfono del cliente; las fechas locales se convierten a ISO 8601 con zona explícita antes de enviarse. Si se indican ambos límites, la interfaz exige que `fechaHasta` sea posterior a `fechaDesde`.
+
+Cada tarjeta muestra cliente, sucursal, rango, estado, renta total, depósito requerido y `vestidosCount`. El rango se explica como semiabierto `[fechaInicio, fechaFin)`: la hora final no forma parte del periodo ocupado. Los cinco estados visibles son `BORRADOR`, `CONFIRMADA`, `ENTREGADA`, `DEVUELTA` y `CANCELADA`.
+
+El detalle presenta contacto del cliente, sucursal, notas, motivo de cancelación, timestamps del ciclo y cada vestido relacionado. `precioRenta` y `deposito` de cada pieza se etiquetan como snapshots históricos capturados por la reservación; la pantalla no consulta ni presenta precios actuales del catálogo como sustitutos. Todos los importes permanecen como strings decimales.
+
+`ReservationsStore` separa estado de listado y detalle, ignora respuestas obsoletas y cancela solicitudes pendientes mediante `TenantResetRegistry`. Los filtros válidos se conservan al abrir y cerrar un detalle. Un UUID inexistente o de otro tenant muestra un `404` seguro sin información del schema.
+
+Este paso es exclusivamente de consulta: no incluye creación, edición ni transiciones del ciclo de renta.
 
 ## Convenciones para features
 

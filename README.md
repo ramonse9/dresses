@@ -954,7 +954,7 @@ cookie HttpOnly → refresh global → /auth/me → /auth/empresas
   → selección automática o manual → access token tenant → /app
 ```
 
-El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. Sucursales, clientes, vestidos y disponibilidad ya consumen datos reales; dashboard y reservaciones continúan como placeholders.
+El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. Sucursales, clientes, vestidos, disponibilidad y reservaciones ya consumen datos reales; el dashboard continúa como placeholder.
 
 `APP_NAVIGATION` es la fuente única de enlaces para escritorio y móvil. Sus políticas se filtran con `navigationForRole()` y `hasAnyRole()`; actualmente `OWNER` y `EMPLOYEE` pueden consultar todas las secciones. Esta visibilidad solo mejora la interfaz: los guards y permisos del API siguen siendo la autoridad. El shell muestra alertas claras si desaparece la sesión o el tenant seleccionado.
 
@@ -983,6 +983,10 @@ Cada pieza muestra código, nombre, sucursal, talla, color, marca, precio, depó
 La consulta Angular de disponibilidad se encuentra en `/app/disponibilidad`. `OWNER` y `EMPLOYEE` pueden seleccionar una sucursal activa, un rango local y filtros por talla, color o estado operativo. La zona IANA y su offset se muestran de forma explícita; las fechas se envían como ISO 8601 UTC y se conservan, junto con la paginación, en query parameters permitidos.
 
 Los resultados distinguen piezas libres por calendario de su aptitud operativa. Una pieza en `MANTENIMIENTO` puede aparecer al solicitar ese filtro, pero se identifica como no rentable. `AvailabilityStore` cancela consultas y limpia resultados al cambiar de tenant. La pantalla no crea reservaciones ni modifica vestidos.
+
+El listado Angular de reservaciones se encuentra en `/app/reservaciones` y conserva filtros por cliente, sucursal, estado, rango, búsqueda y paginación en la URL. El detalle `/app/reservaciones/:id` muestra vestidos, snapshots históricos de precio y depósito, totales, notas, timestamps del ciclo y motivo de cancelación. La interfaz explica el rango semiabierto y nunca sustituye snapshots con precios actuales del catálogo.
+
+`ReservationsStore` mantiene separados listado y detalle, cancela respuestas pendientes al cambiar de tenant y presenta un `404` seguro para UUIDs ajenos. Estas pantallas permiten consulta a `OWNER` y `EMPLOYEE`; todavía no incorporan creación, edición ni transiciones.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

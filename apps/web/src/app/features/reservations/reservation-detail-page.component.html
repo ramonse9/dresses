@@ -1,0 +1,204 @@
+<section
+  class="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10"
+  aria-labelledby="reservation-title"
+>
+  <a
+    routerLink="/app/reservaciones"
+    [queryParams]="returnQueryParams"
+    class="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-stone-600 hover:bg-white"
+    >Volver a reservaciones</a
+  >
+  <div class="mt-5" aria-live="polite">
+    @switch (store.detailState().status) {
+      @case ('idle') {
+        <div class="rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
+          <app-loading-indicator label="Preparando reservación…" />
+        </div>
+      }
+      @case ('loading') {
+        <div class="rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
+          <app-loading-indicator label="Cargando reservación…" />
+        </div>
+      }
+      @case ('error') {
+        <div class="space-y-4 rounded-3xl border border-stone-200 bg-white p-7 shadow-sm">
+          <app-error-message [error]="errorMessage()" />
+          @if (store.detailState().error?.status === 403) {
+            <a
+              routerLink="/seleccionar-empresa"
+              [queryParams]="{ change: true }"
+              class="inline-flex min-h-11 items-center rounded-full bg-stone-950 px-5 text-sm font-semibold text-white"
+              >Seleccionar otra empresa</a
+            >
+          } @else if (store.detailState().error?.status !== 404) {
+            <button
+              type="button"
+              class="min-h-11 rounded-full bg-stone-950 px-5 text-sm font-semibold text-white"
+              (click)="retry()"
+            >
+              Reintentar
+            </button>
+          }
+        </div>
+      }
+      @case ('loaded') {
+        @if (store.detailState().data; as reservation) {
+          <article class="overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
+            <header class="border-b border-stone-200 p-7 sm:p-10">
+              <div class="flex flex-wrap items-start justify-between gap-5">
+                <div>
+                  <p class="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">
+                    Reservación
+                  </p>
+                  <h1
+                    id="reservation-title"
+                    class="mt-2 font-serif text-3xl text-stone-950 sm:text-4xl"
+                  >
+                    {{ reservation.cliente.nombre }}
+                  </h1>
+                  <p class="mt-2 font-semibold text-stone-500">{{ reservation.sucursal.nombre }}</p>
+                </div>
+                <span
+                  class="rounded-full bg-stone-900 px-4 py-2 text-sm font-semibold text-white"
+                  >{{ statusLabel(reservation.estado) }}</span
+                >
+              </div>
+              <div class="mt-6 rounded-2xl bg-sky-50 px-5 py-4 text-sky-950">
+                <p class="text-sm font-semibold">Rango semiabierto [inicio, fin)</p>
+                <p class="mt-1 text-base">
+                  {{ formatDate(reservation.fechaInicio) }} — {{ formatDate(reservation.fechaFin) }}
+                </p>
+                <p class="mt-2 text-sm leading-6">
+                  La hora final no forma parte del periodo ocupado.
+                </p>
+              </div>
+            </header>
+
+            <div class="grid gap-px bg-stone-200 md:grid-cols-2">
+              <section class="bg-white p-7 sm:p-10">
+                <h2 class="font-serif text-2xl text-stone-950">Cliente</h2>
+                <dl class="mt-5 space-y-4 text-base">
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Teléfono</dt>
+                    <dd class="mt-1 text-stone-900">
+                      {{ reservation.cliente.telefono || 'No registrado' }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Email</dt>
+                    <dd class="mt-1 break-all text-stone-900">
+                      {{ reservation.cliente.email || 'No registrado' }}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+              <section class="bg-white p-7 sm:p-10">
+                <h2 class="font-serif text-2xl text-stone-950">Totales históricos</h2>
+                <dl class="mt-5 grid grid-cols-2 gap-5">
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Renta</dt>
+                    <dd class="mt-2 font-serif text-2xl text-stone-950">
+                      {{ formatMoney(reservation.importeRenta) }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Depósito</dt>
+                    <dd class="mt-2 font-serif text-2xl text-stone-950">
+                      {{ formatMoney(reservation.depositoRequerido) }}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
+
+            <section class="border-t border-stone-200 p-7 sm:p-10">
+              <div class="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p class="text-sm font-semibold uppercase tracking-[0.14em] text-stone-500">
+                    Snapshots de la reservación
+                  </p>
+                  <h2 class="mt-1 font-serif text-2xl text-stone-950">
+                    Vestidos e importes históricos
+                  </h2>
+                </div>
+                <p class="max-w-xl text-sm leading-6 text-stone-600">
+                  Estos precios y depósitos se capturaron al agregar cada pieza. No son los precios
+                  actuales del catálogo.
+                </p>
+              </div>
+              <ul class="mt-6 grid gap-4 md:grid-cols-2">
+                @for (dress of reservation.vestidos; track dress.id) {
+                  <li class="rounded-2xl border border-stone-200 p-5">
+                    <p class="text-sm font-semibold uppercase tracking-[0.14em] text-rose-700">
+                      {{ dress.codigo }}
+                    </p>
+                    <h3 class="mt-1 font-serif text-xl text-stone-950">{{ dress.nombre }}</h3>
+                    <p class="mt-1 text-sm text-stone-600">
+                      Talla {{ dress.talla }} · {{ dress.color }}
+                    </p>
+                    <dl class="mt-4 grid grid-cols-2 gap-4 border-t border-stone-200 pt-4">
+                      <div>
+                        <dt class="text-sm font-semibold text-stone-500">Precio histórico</dt>
+                        <dd class="mt-1 text-stone-950">{{ formatMoney(dress.precioRenta) }}</dd>
+                      </div>
+                      <div>
+                        <dt class="text-sm font-semibold text-stone-500">Depósito histórico</dt>
+                        <dd class="mt-1 text-stone-950">{{ formatMoney(dress.deposito) }}</dd>
+                      </div>
+                    </dl>
+                  </li>
+                }
+              </ul>
+            </section>
+
+            <div class="grid gap-px border-t border-stone-200 bg-stone-200 md:grid-cols-2">
+              <section class="bg-white p-7 sm:p-10">
+                <h2 class="font-serif text-2xl text-stone-950">Notas</h2>
+                <p class="mt-4 whitespace-pre-line leading-7 text-stone-700">
+                  {{ reservation.notas || 'Sin notas' }}
+                </p>
+                @if (reservation.estado === 'CANCELADA') {
+                  <div class="mt-6 rounded-2xl bg-red-50 p-4">
+                    <p class="text-sm font-semibold text-red-800">Motivo de cancelación</p>
+                    <p class="mt-2 leading-7 text-red-950">
+                      {{ reservation.motivoCancelacion || 'Sin motivo registrado' }}
+                    </p>
+                  </div>
+                }
+              </section>
+              <section class="bg-white p-7 sm:p-10">
+                <h2 class="font-serif text-2xl text-stone-950">Ciclo de vida</h2>
+                <dl class="mt-5 space-y-4 text-base">
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Creada</dt>
+                    <dd class="mt-1 text-stone-900">{{ formatDate(reservation.createdAt) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Confirmada</dt>
+                    <dd class="mt-1 text-stone-900">{{ formatDate(reservation.confirmadaAt) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Entregada</dt>
+                    <dd class="mt-1 text-stone-900">{{ formatDate(reservation.entregadaAt) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Devuelta</dt>
+                    <dd class="mt-1 text-stone-900">{{ formatDate(reservation.devueltaAt) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Cancelada</dt>
+                    <dd class="mt-1 text-stone-900">{{ formatDate(reservation.canceladaAt) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-semibold text-stone-500">Última actualización</dt>
+                    <dd class="mt-1 text-stone-900">{{ formatDate(reservation.updatedAt) }}</dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
+          </article>
+        }
+      }
+    }
+  </div>
+</section>

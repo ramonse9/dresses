@@ -10,6 +10,7 @@ import { TenantStore } from './core/tenant/tenant.store';
 import { BranchesStore } from './features/branches/branches.store';
 import { CustomersStore } from './features/customers/customers.store';
 import { DressesStore } from './features/dresses/dresses.store';
+import { ReservationsStore } from './features/reservations/reservations.store';
 
 describe('application routes', () => {
   const authenticated = signal(false);
@@ -56,6 +57,40 @@ describe('application routes', () => {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     sucursal: { id: branch.id, nombre: branch.nombre, activo: true },
+  };
+  const reservation = {
+    id: '44444444-4444-4444-8444-444444444444',
+    cliente: {
+      id: customer.id,
+      nombre: customer.nombre,
+      telefono: customer.telefono,
+      email: customer.email,
+    },
+    sucursal: { id: branch.id, nombre: branch.nombre },
+    fechaInicio: '2026-12-10T23:00:00.000Z',
+    fechaFin: '2026-12-12T23:00:00.000Z',
+    estado: 'CONFIRMADA' as const,
+    notas: null,
+    importeRenta: '1250.50',
+    depositoRequerido: '500.00',
+    vestidos: [
+      {
+        id: dress.id,
+        codigo: dress.codigo,
+        nombre: dress.nombre,
+        talla: dress.talla,
+        color: dress.color,
+        precioRenta: dress.precioRenta,
+        deposito: dress.deposito,
+      },
+    ],
+    confirmadaAt: '2026-11-01T00:00:00.000Z',
+    entregadaAt: null,
+    devueltaAt: null,
+    canceladaAt: null,
+    motivoCancelacion: null,
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
   };
 
   beforeEach(() => {
@@ -136,6 +171,21 @@ describe('application routes', () => {
             loadDetail: () => of(undefined),
           },
         },
+        {
+          provide: ReservationsStore,
+          useValue: {
+            listState: signal({
+              status: 'loaded',
+              data: [{ ...reservation, vestidos: undefined, vestidosCount: 1 }],
+              pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+              filters: { page: 1, limit: 20 },
+              error: null,
+            }).asReadonly(),
+            detailState: signal({ status: 'loaded', data: reservation, error: null }).asReadonly(),
+            loadList: () => of(undefined),
+            loadDetail: () => of(undefined),
+          },
+        },
       ],
     });
   });
@@ -158,6 +208,7 @@ describe('application routes', () => {
     [`/app/vestidos/${dress.id}`, 'Gala Roja'],
     ['/app/disponibilidad', 'Disponibilidad'],
     ['/app/reservaciones', 'Reservaciones'],
+    [`/app/reservaciones/${reservation.id}`, 'Ana López'],
   ])('renders %s', async (url, expectedText) => {
     authenticated.set(url === '/seleccionar-empresa' || url.startsWith('/app'));
     selectedTenant.set(url.startsWith('/app'));

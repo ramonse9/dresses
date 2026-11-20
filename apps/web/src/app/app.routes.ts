@@ -84,9 +84,9 @@ export const routes: Routes = [
       },
       {
         path: 'reservaciones',
-        loadComponent: () =>
-          import('./features/reservations/reservations-placeholder.component').then(
-            ({ ReservationsPlaceholderComponent }) => ReservationsPlaceholderComponent,
+        loadChildren: () =>
+          import('./features/reservations/reservations.routes').then(
+            ({ RESERVATIONS_ROUTES }) => RESERVATIONS_ROUTES,
           ),
       },
     ],
