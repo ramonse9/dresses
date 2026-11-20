@@ -9,6 +9,7 @@ import { API_BASE_URL } from './core/config/api-config';
 import { TenantStore } from './core/tenant/tenant.store';
 import { BranchesStore } from './features/branches/branches.store';
 import { CustomersStore } from './features/customers/customers.store';
+import { DressesStore } from './features/dresses/dresses.store';
 
 describe('application routes', () => {
   const authenticated = signal(false);
@@ -38,6 +39,23 @@ describe('application routes', () => {
     activo: true,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const dress = {
+    id: '33333333-3333-4333-8333-333333333333',
+    sucursalId: branch.id,
+    codigo: 'GALA-001',
+    nombre: 'Gala Roja',
+    descripcion: 'Vestido largo',
+    talla: 'M',
+    color: 'Rojo',
+    marca: 'Atelier',
+    precioRenta: '1250.50',
+    deposito: '500.00',
+    estadoOperativo: 'DISPONIBLE' as const,
+    activo: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    sucursal: { id: branch.id, nombre: branch.nombre, activo: true },
   };
 
   beforeEach(() => {
@@ -103,6 +121,21 @@ describe('application routes', () => {
             reactivate: () => of(customer),
           },
         },
+        {
+          provide: DressesStore,
+          useValue: {
+            listState: signal({
+              status: 'loaded',
+              data: [dress],
+              pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+              filters: { page: 1, limit: 20 },
+              error: null,
+            }).asReadonly(),
+            detailState: signal({ status: 'loaded', data: dress, error: null }).asReadonly(),
+            loadList: () => of(undefined),
+            loadDetail: () => of(undefined),
+          },
+        },
       ],
     });
   });
@@ -122,6 +155,7 @@ describe('application routes', () => {
     [`/app/clientes/${customer.id}`, 'Ana López'],
     [`/app/clientes/${customer.id}/editar`, 'Ana López'],
     ['/app/vestidos', 'Vestidos'],
+    [`/app/vestidos/${dress.id}`, 'Gala Roja'],
     ['/app/disponibilidad', 'Disponibilidad'],
     ['/app/reservaciones', 'Reservaciones'],
   ])('renders %s', async (url, expectedText) => {

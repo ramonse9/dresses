@@ -954,7 +954,7 @@ cookie HttpOnly → refresh global → /auth/me → /auth/empresas
   → selección automática o manual → access token tenant → /app
 ```
 
-El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. Sucursales y clientes ya consumen datos reales; las demás secciones continúan como placeholders.
+El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. Sucursales, clientes y vestidos ya consumen datos reales; las demás secciones continúan como placeholders.
 
 `APP_NAVIGATION` es la fuente única de enlaces para escritorio y móvil. Sus políticas se filtran con `navigationForRole()` y `hasAnyRole()`; actualmente `OWNER` y `EMPLOYEE` pueden consultar todas las secciones. Esta visibilidad solo mejora la interfaz: los guards y permisos del API siguen siendo la autoridad. El shell muestra alertas claras si desaparece la sesión o el tenant seleccionado.
 
@@ -971,6 +971,12 @@ Las búsquedas nuevas cancelan su suscripción anterior y el store ignora cualqu
 `OWNER` y `EMPLOYEE` pueden crear clientes en `/app/clientes/nuevo` y editar datos en `/app/clientes/:id/editar`. El formulario compartido exige nombre y teléfono o email, normaliza texto, convierte el email a minúsculas y envía opcionales vacíos como `null`; nunca incluye `activo` en el `PATCH` general. Los filtros válidos del listado se conservan al navegar y regresar.
 
 Solamente `OWNER` puede desactivar mediante `DELETE /api/clientes/:id` o reactivar mediante `PATCH /api/clientes/:id/estado`. La desactivación requiere confirmación y es una baja lógica. `EMPLOYEE` no ve acciones de estado y un `403` forzado no modifica el store. Las operaciones pendientes se cancelan al cambiar de tenant. Las pantallas no incluyen reservaciones ni historial de rentas.
+
+El catálogo Angular de vestidos está disponible para `OWNER` y `EMPLOYEE` en `/app/vestidos`, con detalle en `/app/vestidos/:id`. El listado conserva `page`, `limit`, `sucursalId`, `activo`, `estadoOperativo` y `q` en query parameters; busca por código, nombre o marca y reutiliza el catálogo tenant de sucursales para el selector.
+
+Cada pieza muestra código, nombre, sucursal, talla, color, marca, precio, depósito, estado operativo y estado activo. La interfaz diferencia visualmente piezas inactivas, disponibles operativamente y en mantenimiento, y aclara que `DISPONIBLE` no garantiza libertad para fechas. Los importes permanecen como strings decimales y se formatean para presentación sin conversiones ni cálculos de punto flotante.
+
+`DressesStore` ignora respuestas obsoletas y limpia listado, detalle y solicitudes pendientes mediante `TenantResetRegistry`. Los filtros válidos se conservan al abrir un detalle; un UUID ajeno al tenant produce una vista `404` segura. Este paso no añade mutaciones ni imágenes de vestidos.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

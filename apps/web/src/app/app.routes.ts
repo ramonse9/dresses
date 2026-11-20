@@ -72,10 +72,8 @@ export const routes: Routes = [
       },
       {
         path: 'vestidos',
-        loadComponent: () =>
-          import('./features/dresses/dresses-placeholder.component').then(
-            ({ DressesPlaceholderComponent }) => DressesPlaceholderComponent,
-          ),
+        loadChildren: () =>
+          import('./features/dresses/dresses.routes').then(({ DRESSES_ROUTES }) => DRESSES_ROUTES),
       },
       {
         path: 'disponibilidad',

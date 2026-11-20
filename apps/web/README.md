@@ -29,7 +29,8 @@ Las rutas se cargan de forma diferida y actualmente preparan estos puntos de ent
 | `/app/clientes/nuevo`        | Creación de cliente                  |
 | `/app/clientes/:id`          | Detalle de un cliente                |
 | `/app/clientes/:id/editar`   | Edición de datos del cliente         |
-| `/app/vestidos`              | Punto de entrada para catálogo       |
+| `/app/vestidos`              | Catálogo paginado de vestidos        |
+| `/app/vestidos/:id`          | Detalle de una pieza física          |
 | `/app/disponibilidad`        | Punto de entrada para disponibilidad |
 | `/app/reservaciones`         | Punto de entrada para reservaciones  |
 
@@ -112,7 +113,7 @@ No existen modelos, propiedades, headers, query strings ni cuerpos para `schemaN
 
 `hasAnyRole()` y `navigationForRole()` permiten definir visibilidad por rol para acciones futuras. Ocultar una ruta, enlace o botón nunca reemplaza la autorización del backend; el API continúa verificando la membresía vigente y sus permisos.
 
-Los componentes de dashboard, vestidos, disponibilidad y reservaciones son standalone y se importan de forma diferida como placeholders. Sucursales y clientes ya consumen datos reales del API.
+Los componentes de dashboard, disponibilidad y reservaciones son standalone y se importan de forma diferida como placeholders. Sucursales, clientes y vestidos ya consumen datos reales del API.
 
 ## Consulta de sucursales
 
@@ -189,6 +190,23 @@ Las respuestas muestran nombre, teléfono, email, dirección, notas y estado. Un
 Crear utiliza `POST /api/clientes`, editar `PATCH /api/clientes/:id`, reactivar `PATCH /api/clientes/:id/estado` con `{ "activo": true }` y desactivar `DELETE /api/clientes/:id`. La baja lógica requiere confirmación y no elimina físicamente el registro. Las acciones de estado no se muestran a `EMPLOYEE`; el API continúa siendo la autoridad ante peticiones forzadas.
 
 Los enlaces conservan solamente `page`, `limit`, `activo` y `q`, por lo que regresar desde alta, edición o detalle restaura la vista previa sin propagar parámetros desconocidos. Las mutaciones pendientes se cancelan al cambiar de tenant y una respuesta `400`, `403`, `404` o de red no altera los datos locales. No se implementan reservaciones ni historial de rentas en este feature.
+
+## Catálogo de vestidos
+
+`features/dresses` se carga mediante rutas hijas lazy y permite consultar a `OWNER` y `EMPLOYEE`:
+
+```text
+GET /api/vestidos       → /app/vestidos
+GET /api/vestidos/:id   → /app/vestidos/:id
+```
+
+El listado conserva en query parameters `page`, `limit`, `sucursalId`, `activo`, `estadoOperativo` y `q`. La búsqueda por código, nombre o marca se normaliza y aplica un debounce de 350 ms. El selector de sucursal reutiliza el store tenant de sucursales y los valores inválidos de la URL se descartan antes de consultar el API.
+
+Cada tarjeta y detalle muestran código, nombre, sucursal, talla, color, marca, precio de renta, depósito, estado operativo y estado activo. `DISPONIBLE`, `MANTENIMIENTO` e `INACTIVO` usan tratamientos visuales distintos. La interfaz aclara que `DISPONIBLE` significa aptitud operativa y no disponibilidad garantizada para fechas.
+
+`precioRenta` y `deposito` permanecen como strings decimales. `formatDressMoney()` agrega símbolo, separadores y dos decimales manipulando caracteres; no convierte los valores a `number` ni realiza cálculos de punto flotante. Un depósito `null` se presenta como “No requerido”.
+
+`DressesStore` ignora respuestas obsoletas y registra su limpieza en `TenantResetRegistry`, por lo que listado, detalle y solicitudes pendientes se descartan al cambiar de empresa. Los enlaces de detalle conservan únicamente los filtros permitidos. Un UUID de otro tenant se presenta como `404` sin información interna. Este paso no incluye mutaciones ni imágenes.
 
 ## Convenciones para features
 
