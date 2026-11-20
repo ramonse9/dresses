@@ -954,7 +954,7 @@ cookie HttpOnly → refresh global → /auth/me → /auth/empresas
   → selección automática o manual → access token tenant → /app
 ```
 
-El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. Sucursales, clientes y vestidos ya consumen datos reales; las demás secciones continúan como placeholders.
+El shell autenticado de `/app` incorpora sidebar de escritorio, navegación móvil accesible, encabezado con empresa y rol vigentes, menú de usuario, cambio de empresa, logout y `router-outlet`. La raíz `/app` redirige a `/app/dashboard`; dashboard, sucursales, clientes, vestidos, disponibilidad y reservaciones se cargan como componentes standalone diferidos. Sucursales, clientes, vestidos y disponibilidad ya consumen datos reales; dashboard y reservaciones continúan como placeholders.
 
 `APP_NAVIGATION` es la fuente única de enlaces para escritorio y móvil. Sus políticas se filtran con `navigationForRole()` y `hasAnyRole()`; actualmente `OWNER` y `EMPLOYEE` pueden consultar todas las secciones. Esta visibilidad solo mejora la interfaz: los guards y permisos del API siguen siendo la autoridad. El shell muestra alertas claras si desaparece la sesión o el tenant seleccionado.
 
@@ -979,6 +979,10 @@ Cada pieza muestra código, nombre, sucursal, talla, color, marca, precio, depó
 `OWNER` puede crear en `/app/vestidos/nuevo`, editar o trasladar en `/app/vestidos/:id/editar`, y realizar baja lógica o reactivación desde el detalle. El formulario usa únicamente sucursales activas, normaliza el código, mantiene importes como strings decimales y exige confirmación antes de un traslado. `EMPLOYEE` no ve controles de escritura y el API conserva la autoridad ante peticiones forzadas.
 
 `DressesStore` ignora respuestas obsoletas y limpia listado, detalle y mutaciones pendientes mediante `TenantResetRegistry`. Los filtros válidos se conservan al abrir un detalle o formulario; un UUID ajeno al tenant produce una vista `404` segura. No se incluyen imágenes de vestidos.
+
+La consulta Angular de disponibilidad se encuentra en `/app/disponibilidad`. `OWNER` y `EMPLOYEE` pueden seleccionar una sucursal activa, un rango local y filtros por talla, color o estado operativo. La zona IANA y su offset se muestran de forma explícita; las fechas se envían como ISO 8601 UTC y se conservan, junto con la paginación, en query parameters permitidos.
+
+Los resultados distinguen piezas libres por calendario de su aptitud operativa. Una pieza en `MANTENIMIENTO` puede aparecer al solicitar ese filtro, pero se identifica como no rentable. `AvailabilityStore` cancela consultas y limpia resultados al cambiar de tenant. La pantalla no crea reservaciones ni modifica vestidos.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

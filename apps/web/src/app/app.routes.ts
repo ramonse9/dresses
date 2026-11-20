@@ -78,8 +78,8 @@ export const routes: Routes = [
       {
         path: 'disponibilidad',
         loadComponent: () =>
-          import('./features/availability/availability-placeholder.component').then(
-            ({ AvailabilityPlaceholderComponent }) => AvailabilityPlaceholderComponent,
+          import('./features/availability/availability-page.component').then(
+            ({ AvailabilityPageComponent }) => AvailabilityPageComponent,
           ),
       },
       {

@@ -1,0 +1,282 @@
+<section
+  class="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10"
+  aria-labelledby="availability-title"
+>
+  <header>
+    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">
+      Calendario de piezas
+    </p>
+    <h1 id="availability-title" class="mt-2 font-serif text-3xl text-stone-950 sm:text-4xl">
+      Disponibilidad por fechas
+    </h1>
+    <p class="mt-3 max-w-3xl text-base leading-7 text-stone-600">
+      Consulta qué piezas están libres en una sucursal durante un rango específico. Esta pantalla no
+      crea reservaciones ni modifica el catálogo.
+    </p>
+  </header>
+
+  <div class="mt-7 grid gap-4 md:grid-cols-2">
+    <article class="rounded-3xl border border-sky-200 bg-sky-50 p-5">
+      <h2 class="font-serif text-xl text-sky-950">Disponibilidad operativa</h2>
+      <p class="mt-2 leading-7 text-sky-900">
+        <strong>DISPONIBLE</strong> indica que la pieza puede rentarse.
+        <strong>MANTENIMIENTO</strong> permite localizar una pieza libre en el calendario, pero debe
+        mostrarse como no rentable.
+      </p>
+    </article>
+    <article class="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
+      <h2 class="font-serif text-xl text-emerald-950">Disponibilidad por calendario</h2>
+      <p class="mt-2 leading-7 text-emerald-900">
+        Una pieza aparece cuando no tiene una reservación confirmada o entregada que se solape con
+        el rango consultado.
+      </p>
+    </article>
+  </div>
+
+  <form
+    class="mt-7 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm sm:p-7"
+    [formGroup]="form"
+    (ngSubmit)="submit()"
+    novalidate
+    aria-label="Consulta de disponibilidad"
+  >
+    <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div class="md:col-span-2 xl:col-span-1">
+        <label for="availability-branch" class="text-sm font-semibold text-stone-800"
+          >Sucursal</label
+        >
+        <select
+          id="availability-branch"
+          formControlName="sucursalId"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+        >
+          <option value="" disabled>Selecciona una sucursal activa</option>
+          @for (branch of activeBranches(); track branch.id) {
+            <option [value]="branch.id">{{ branch.nombre }}</option>
+          }
+        </select>
+      </div>
+      <div>
+        <label for="availability-start" class="text-sm font-semibold text-stone-800"
+          >Fecha y hora inicial</label
+        >
+        <input
+          id="availability-start"
+          type="datetime-local"
+          formControlName="fechaInicio"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+        />
+      </div>
+      <div>
+        <label for="availability-end" class="text-sm font-semibold text-stone-800"
+          >Fecha y hora final</label
+        >
+        <input
+          id="availability-end"
+          type="datetime-local"
+          formControlName="fechaFin"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+        />
+      </div>
+      <div>
+        <label for="availability-state" class="text-sm font-semibold text-stone-800"
+          >Estado operativo</label
+        >
+        <select
+          id="availability-state"
+          formControlName="estadoOperativo"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+        >
+          <option value="DISPONIBLE">Disponible para renta</option>
+          <option value="MANTENIMIENTO">Mantenimiento</option>
+        </select>
+      </div>
+      <div>
+        <label for="availability-size" class="text-sm font-semibold text-stone-800"
+          >Talla (opcional)</label
+        >
+        <input
+          id="availability-size"
+          formControlName="talla"
+          [attr.maxlength]="maximumSizeLength"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+        />
+      </div>
+      <div>
+        <label for="availability-color" class="text-sm font-semibold text-stone-800"
+          >Color (opcional)</label
+        >
+        <input
+          id="availability-color"
+          formControlName="color"
+          [attr.maxlength]="maximumColorLength"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+        />
+      </div>
+      <div>
+        <label for="availability-limit" class="text-sm font-semibold text-stone-800"
+          >Resultados por página</label
+        >
+        <select
+          id="availability-limit"
+          formControlName="limit"
+          class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4"
+        >
+          @for (size of pageSizes; track size) {
+            <option [ngValue]="size">{{ size }}</option>
+          }
+        </select>
+      </div>
+    </div>
+    <p class="mt-5 rounded-2xl bg-stone-100 px-4 py-3 text-sm leading-6 text-stone-700">
+      <strong>Zona horaria:</strong> {{ timeZoneLabel() }}. Las horas se interpretan en esta zona y
+      se envían al API como ISO 8601 en UTC, con sufijo <code>Z</code>.
+    </p>
+    @if (localValidationError()) {
+      <div class="mt-4"><app-error-message [error]="localValidationError()!" /></div>
+    }
+    <div class="mt-6">
+      <app-submit-button
+        label="Consultar disponibilidad"
+        loadingLabel="Consultando…"
+        [loading]="store.state().status === 'loading'"
+      />
+    </div>
+  </form>
+
+  <div class="mt-8" aria-live="polite">
+    @switch (store.state().status) {
+      @case ('idle') {
+        <app-empty-state
+          title="Selecciona un rango"
+          description="Elige una sucursal, fecha inicial y fecha final para consultar piezas libres."
+        />
+      }
+      @case ('loading') {
+        <div class="rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
+          <app-loading-indicator label="Consultando disponibilidad…" />
+        </div>
+      }
+      @case ('error') {
+        <div class="space-y-4 rounded-3xl border border-stone-200 bg-white p-7 shadow-sm">
+          <app-error-message [error]="errorMessage()" />
+          @if (store.state().error?.status === 403) {
+            <a
+              routerLink="/seleccionar-empresa"
+              [queryParams]="{ change: true }"
+              class="inline-flex min-h-11 items-center rounded-full bg-stone-950 px-5 text-sm font-semibold text-white"
+              >Seleccionar otra empresa</a
+            >
+          } @else {
+            <button
+              type="button"
+              class="min-h-11 rounded-full bg-stone-950 px-5 text-sm font-semibold text-white"
+              (click)="retry()"
+            >
+              Reintentar
+            </button>
+          }
+        </div>
+      }
+      @case ('empty') {
+        <app-empty-state
+          title="No hay piezas libres"
+          description="No encontramos vestidos con estos filtros y rango. Prueba otras fechas o características."
+        />
+      }
+      @case ('loaded') {
+        @if (store.state().range; as range) {
+          <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p class="text-sm font-semibold uppercase tracking-[0.14em] text-stone-500">
+                Rango consultado
+              </p>
+              <p class="mt-1 text-base font-semibold text-stone-900">
+                {{ formatRangeDate(range.fechaInicio) }} — {{ formatRangeDate(range.fechaFin) }}
+              </p>
+            </div>
+            <p class="text-sm font-semibold text-stone-600">
+              {{ store.state().pagination.total }}
+              {{ store.state().pagination.total === 1 ? 'pieza libre' : 'piezas libres' }}
+            </p>
+          </div>
+        }
+        <ul class="grid gap-5 lg:grid-cols-2">
+          @for (dress of store.state().data; track dress.id) {
+            <li
+              class="rounded-3xl border bg-white p-6 shadow-sm"
+              [class.border-amber-300]="dress.estadoOperativo === 'MANTENIMIENTO'"
+              [class.border-stone-200]="dress.estadoOperativo === 'DISPONIBLE'"
+            >
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold uppercase tracking-[0.16em] text-rose-700">
+                    {{ dress.codigo }}
+                  </p>
+                  <h2 class="mt-1 font-serif text-2xl text-stone-950">{{ dress.nombre }}</h2>
+                  <p class="mt-1 text-sm font-semibold text-stone-500">
+                    {{ dress.sucursal.nombre }}
+                  </p>
+                </div>
+                @if (dress.estadoOperativo === 'MANTENIMIENTO') {
+                  <span
+                    class="rounded-full bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-900"
+                    >No rentable · mantenimiento</span
+                  >
+                } @else {
+                  <span
+                    class="rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800"
+                    >Libre y operativamente disponible</span
+                  >
+                }
+              </div>
+              <dl class="mt-6 grid grid-cols-2 gap-4 border-t border-stone-200 pt-5 text-sm">
+                <div>
+                  <dt class="font-semibold text-stone-500">Talla</dt>
+                  <dd class="mt-1 text-stone-950">{{ dress.talla }}</dd>
+                </div>
+                <div>
+                  <dt class="font-semibold text-stone-500">Color</dt>
+                  <dd class="mt-1 text-stone-950">{{ dress.color }}</dd>
+                </div>
+                <div>
+                  <dt class="font-semibold text-stone-500">Precio</dt>
+                  <dd class="mt-1 text-stone-950">{{ formatMoney(dress.precioRenta) }}</dd>
+                </div>
+                <div>
+                  <dt class="font-semibold text-stone-500">Depósito</dt>
+                  <dd class="mt-1 text-stone-950">{{ formatMoney(dress.deposito) }}</dd>
+                </div>
+              </dl>
+            </li>
+          }
+        </ul>
+        @if (store.state().pagination.totalPages > 1) {
+          <nav
+            class="mt-7 flex items-center justify-center gap-4"
+            aria-label="Paginación de disponibilidad"
+          >
+            <button
+              type="button"
+              class="min-h-11 rounded-full border border-stone-300 px-5 font-semibold disabled:opacity-50"
+              [disabled]="store.state().pagination.page === 1"
+              (click)="goToPage(store.state().pagination.page - 1)"
+            >
+              Anterior</button
+            ><span class="text-sm font-semibold text-stone-600"
+              >Página {{ store.state().pagination.page }} de
+              {{ store.state().pagination.totalPages }}</span
+            ><button
+              type="button"
+              class="min-h-11 rounded-full border border-stone-300 px-5 font-semibold disabled:opacity-50"
+              [disabled]="store.state().pagination.page === store.state().pagination.totalPages"
+              (click)="goToPage(store.state().pagination.page + 1)"
+            >
+              Siguiente
+            </button>
+          </nav>
+        }
+      }
+    }
+  </div>
+</section>

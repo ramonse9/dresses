@@ -14,27 +14,27 @@ src/app
 
 Las rutas se cargan de forma diferida y actualmente preparan estos puntos de entrada:
 
-| Ruta                         | Propósito                            |
-| ---------------------------- | ------------------------------------ |
-| `/`                          | Página pública                       |
-| `/login`                     | Formulario de acceso para invitados  |
-| `/seleccionar-empresa`       | Selección entre membresías vigentes  |
-| `/app`                       | Redirección al dashboard autenticado |
-| `/app/dashboard`             | Resumen de operación                 |
-| `/app/sucursales`            | Punto de entrada para sucursales     |
-| `/app/sucursales/nueva`      | Creación de sucursal para OWNER      |
-| `/app/sucursales/:id`        | Detalle de una sucursal              |
-| `/app/sucursales/:id/editar` | Edición de sucursal para OWNER       |
-| `/app/clientes`              | Consulta paginada de clientes        |
-| `/app/clientes/nuevo`        | Creación de cliente                  |
-| `/app/clientes/:id`          | Detalle de un cliente                |
-| `/app/clientes/:id/editar`   | Edición de datos del cliente         |
-| `/app/vestidos`              | Catálogo paginado de vestidos        |
-| `/app/vestidos/nuevo`        | Creación de vestido para OWNER       |
-| `/app/vestidos/:id`          | Detalle de una pieza física          |
-| `/app/vestidos/:id/editar`   | Edición y traslado para OWNER        |
-| `/app/disponibilidad`        | Punto de entrada para disponibilidad |
-| `/app/reservaciones`         | Punto de entrada para reservaciones  |
+| Ruta                         | Propósito                             |
+| ---------------------------- | ------------------------------------- |
+| `/`                          | Página pública                        |
+| `/login`                     | Formulario de acceso para invitados   |
+| `/seleccionar-empresa`       | Selección entre membresías vigentes   |
+| `/app`                       | Redirección al dashboard autenticado  |
+| `/app/dashboard`             | Resumen de operación                  |
+| `/app/sucursales`            | Punto de entrada para sucursales      |
+| `/app/sucursales/nueva`      | Creación de sucursal para OWNER       |
+| `/app/sucursales/:id`        | Detalle de una sucursal               |
+| `/app/sucursales/:id/editar` | Edición de sucursal para OWNER        |
+| `/app/clientes`              | Consulta paginada de clientes         |
+| `/app/clientes/nuevo`        | Creación de cliente                   |
+| `/app/clientes/:id`          | Detalle de un cliente                 |
+| `/app/clientes/:id/editar`   | Edición de datos del cliente          |
+| `/app/vestidos`              | Catálogo paginado de vestidos         |
+| `/app/vestidos/nuevo`        | Creación de vestido para OWNER        |
+| `/app/vestidos/:id`          | Detalle de una pieza física           |
+| `/app/vestidos/:id/editar`   | Edición y traslado para OWNER         |
+| `/app/disponibilidad`        | Consulta de disponibilidad por fechas |
+| `/app/reservaciones`         | Punto de entrada para reservaciones   |
 
 La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. Login, logout, selección de empresa y los guards están activos.
 
@@ -115,7 +115,7 @@ No existen modelos, propiedades, headers, query strings ni cuerpos para `schemaN
 
 `hasAnyRole()` y `navigationForRole()` permiten definir visibilidad por rol para acciones futuras. Ocultar una ruta, enlace o botón nunca reemplaza la autorización del backend; el API continúa verificando la membresía vigente y sus permisos.
 
-Los componentes de dashboard, disponibilidad y reservaciones son standalone y se importan de forma diferida como placeholders. Sucursales, clientes y vestidos ya consumen datos reales del API.
+Los componentes de dashboard y reservaciones son standalone y se importan de forma diferida como placeholders. Sucursales, clientes, vestidos y disponibilidad ya consumen datos reales del API.
 
 ## Consulta de sucursales
 
@@ -225,6 +225,27 @@ El alta utiliza `POST /api/vestidos`, la edición y reactivación `PATCH /api/ve
 El formulario carga únicamente sucursales activas. Normaliza el código a mayúsculas, recorta texto, convierte opcionales vacíos en `null` y conserva `precioRenta` y `deposito` como strings decimales no negativos con máximo dos posiciones; nunca utiliza `Number` para transformarlos. Cambiar `sucursalId` requiere una confirmación explícita de traslado antes de enviar el `PATCH`.
 
 La baja es lógica y recuperable. Los conflictos de código (`409`), recursos o sucursales inexistentes (`404`), pérdida de rol (`403`) y validaciones (`400`) se muestran sin mezclar información de otro tenant. Las mutaciones se cancelan al cambiar de empresa y las respuestas del API nunca se completan con nombres internos de schemas. Este feature no incluye imágenes.
+
+## Disponibilidad por fechas
+
+`/app/disponibilidad` está disponible para `OWNER` y `EMPLOYEE` y consume exclusivamente:
+
+```text
+GET /api/vestidos/disponibilidad
+```
+
+La consulta exige una sucursal activa, fecha inicial y fecha final. Admite filtros por `talla`, `color` y `estadoOperativo`, además de `page` y `limit` con máximo de 100. Los filtros válidos se conservan en query parameters; la pantalla no construye ni acepta `empresaId`, `empresaSlug` o `schemaName`.
+
+Los campos `datetime-local` se interpretan en la zona horaria informada por el navegador. La interfaz muestra el identificador IANA y su desplazamiento UTC; antes de consultar convierte ambos extremos a ISO 8601 en UTC con sufijo `Z`. Se rechazan fechas locales inexistentes y rangos donde `fechaFin <= fechaInicio`.
+
+La pantalla distingue dos conceptos:
+
+- disponibilidad operativa: `DISPONIBLE` puede rentarse y `MANTENIMIENTO` no;
+- disponibilidad por calendario: ausencia de reservaciones bloqueantes solapadas con el rango.
+
+Una búsqueda explícita de `MANTENIMIENTO` puede mostrar piezas libres por calendario, siempre con la etiqueta “No rentable · mantenimiento”. Los importes se conservan como strings decimales y se presentan con el mismo formateador seguro del catálogo. La pantalla solamente consulta: no crea reservaciones ni cambia estados.
+
+`AvailabilityStore` registra su limpieza en `TenantResetRegistry`, cancela respuestas pendientes al cambiar de empresa y mantiene estados `idle`, `loading`, `loaded`, `empty` y `error`. Un `404` de sucursal se presenta sin revelar si el UUID existe en otro tenant.
 
 ## Convenciones para features
 
