@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
+import { TenantStore } from '../../core/tenant/tenant.store';
 import type { Dress, DressDetailState } from './dress.models';
 import { DressDetailPageComponent } from './dress-detail-page.component';
 import { DressesStore } from './dresses.store';
@@ -29,15 +30,19 @@ const dress: Dress = {
 };
 
 describe('DressDetailPageComponent', () => {
+  const role = signal<'OWNER' | 'EMPLOYEE'>('OWNER');
   const detailState = signal<DressDetailState>({ status: 'loaded', data: dress, error: null });
   const store = {
     detailState: detailState.asReadonly(),
     loadDetail: vi.fn(() => of(undefined)),
+    deactivate: vi.fn(() => of({ ...dress, sucursal: undefined })),
+    reactivate: vi.fn(() => of({ ...dress, sucursal: undefined, activo: true })),
   };
   let fixture: ComponentFixture<DressDetailPageComponent>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    role.set('OWNER');
     detailState.set({ status: 'loaded', data: dress, error: null });
     const paramMap = convertToParamMap({ id: dress.id });
     const queryParamMap = convertToParamMap({ page: '2', estadoOperativo: 'MANTENIMIENTO' });
@@ -46,6 +51,7 @@ describe('DressDetailPageComponent', () => {
       providers: [
         provideRouter([]),
         { provide: DressesStore, useValue: store },
+        { provide: TenantStore, useValue: { role: role.asReadonly() } },
         {
           provide: ActivatedRoute,
           useValue: { paramMap: of(paramMap), snapshot: { paramMap, queryParamMap } },
@@ -90,5 +96,31 @@ describe('DressDetailPageComponent', () => {
     const backLink = fixture.nativeElement.querySelector('a') as HTMLAnchorElement;
 
     expect(backLink.search).toBe('?page=2&limit=20&estadoOperativo=MANTENIMIENTO');
+  });
+
+  it('requires confirmation before logical deactivation', () => {
+    detailState.set({ status: 'loaded', data: { ...dress, activo: true }, error: null });
+    fixture.detectChanges();
+    fixture.componentInstance.requestDeactivate();
+    expect(store.deactivate).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.confirmationOpen()).toBe(true);
+    fixture.componentInstance.confirmDeactivate();
+    expect(store.deactivate).toHaveBeenCalledWith(dress.id);
+  });
+
+  it('hides every mutation control from EMPLOYEE', () => {
+    role.set('EMPLOYEE');
+    detailState.set({ status: 'loaded', data: { ...dress, activo: true }, error: null });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Editar vestido');
+    expect(fixture.nativeElement.textContent).not.toContain('Desactivar');
+    fixture.componentInstance.requestDeactivate();
+    expect(fixture.componentInstance.confirmationOpen()).toBe(false);
+  });
+
+  it('reactivates an inactive dress through the dedicated action', () => {
+    fixture.componentInstance.reactivate();
+    expect(store.reactivate).toHaveBeenCalledWith(dress.id);
   });
 });

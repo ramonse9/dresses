@@ -2,7 +2,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of, Subject, throwError } from 'rxjs';
 import { TenantResetRegistry } from '../../core/tenant/tenant-reset-registry.service';
-import type { Dress, PaginatedDressesResponse } from './dress.models';
+import type {
+  CreateDressInput,
+  Dress,
+  DressMutationResult,
+  PaginatedDressesResponse,
+} from './dress.models';
 import { DressesApiService } from './dresses-api.service';
 import { DressesStore } from './dresses.store';
 
@@ -37,12 +42,21 @@ function response(data: Dress[] = [dress], page = 1): PaginatedDressesResponse {
 }
 
 describe('DressesStore', () => {
-  const api = { list: vi.fn(), getById: vi.fn() };
+  const api = {
+    list: vi.fn(),
+    getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    deactivate: vi.fn(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     api.list.mockReturnValue(of(response()));
     api.getById.mockReturnValue(of(dress));
+    api.create.mockReturnValue(of({ ...dress, sucursal: undefined }));
+    api.update.mockReturnValue(of({ ...dress, sucursal: undefined }));
+    api.deactivate.mockReturnValue(of({ ...dress, sucursal: undefined, activo: false }));
     TestBed.configureTestingModule({
       providers: [DressesStore, TenantResetRegistry, { provide: DressesApiService, useValue: api }],
     });
@@ -115,5 +129,32 @@ describe('DressesStore', () => {
 
     expect(store.listState().error?.status).toBe(0);
     expect(JSON.stringify(store.listState())).not.toMatch(/schemaName|empresaSlug/);
+  });
+
+  it('cancels a pending mutation when the tenant changes', () => {
+    const pending = new Subject<DressMutationResult>();
+    api.create.mockReturnValueOnce(pending.asObservable());
+    const store = TestBed.inject(DressesStore);
+    const registry = TestBed.inject(TenantResetRegistry);
+    const received = vi.fn();
+    const input: CreateDressInput = {
+      sucursalId: 'branch-1',
+      codigo: 'GALA-2',
+      nombre: 'Gala',
+      descripcion: null,
+      talla: 'M',
+      color: 'Rojo',
+      marca: null,
+      precioRenta: '100.00',
+      deposito: null,
+      estadoOperativo: 'DISPONIBLE',
+    };
+
+    store.create(input).subscribe(received);
+    registry.resetAll();
+    pending.next({ ...dress });
+
+    expect(received).not.toHaveBeenCalled();
+    expect(store.listState().status).toBe('idle');
   });
 });

@@ -28,6 +28,24 @@ export interface Dress {
   readonly sucursal: DressBranch;
 }
 
+export interface DressFormValue {
+  readonly sucursalId: string;
+  readonly codigo: string;
+  readonly nombre: string;
+  readonly descripcion: string | null;
+  readonly talla: string;
+  readonly color: string;
+  readonly marca: string | null;
+  readonly precioRenta: string;
+  readonly deposito: string | null;
+  readonly estadoOperativo: DressOperationalState;
+  readonly activo: boolean;
+}
+
+export type CreateDressInput = Omit<DressFormValue, 'activo'>;
+export type UpdateDressInput = DressFormValue;
+export type DressMutationResult = Omit<Dress, 'sucursal'>;
+
 export interface DressPagination {
   readonly page: number;
   readonly limit: number;

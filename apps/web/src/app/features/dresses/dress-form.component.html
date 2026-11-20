@@ -1,0 +1,150 @@
+<form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate class="space-y-6">
+  @if (serverError()) {
+    <app-error-message [error]="serverError()!" />
+  }
+  <div class="grid gap-5 sm:grid-cols-2">
+    <div class="sm:col-span-2">
+      <label for="dress-branch-field" class="text-sm font-semibold text-stone-800">Sucursal</label>
+      <select
+        id="dress-branch-field"
+        formControlName="sucursalId"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      >
+        <option value="" disabled>Selecciona una sucursal activa</option>
+        @if (hasCurrentInactiveBranch()) {
+          <option [value]="initialValue()!.sucursalId" disabled>
+            {{ initialValue()!.sucursal.nombre }} (actual, inactiva)
+          </option>
+        }
+        @for (branch of branches(); track branch.id) {
+          <option [value]="branch.id">{{ branch.nombre }}</option>
+        }
+      </select>
+      @if (form.controls.sucursalId.touched && form.controls.sucursalId.invalid) {
+        <p class="mt-2 text-sm text-red-700">Selecciona una sucursal activa.</p>
+      }
+    </div>
+    <div>
+      <label for="dress-code" class="text-sm font-semibold text-stone-800">Código</label>
+      <input
+        id="dress-code"
+        formControlName="codigo"
+        maxlength="50"
+        (input)="normalizeCode()"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4 uppercase focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      />
+      @if (form.controls.codigo.touched && form.controls.codigo.invalid) {
+        <p class="mt-2 text-sm text-red-700">
+          El código es obligatorio y admite hasta 50 caracteres.
+        </p>
+      }
+    </div>
+    <div>
+      <label for="dress-name" class="text-sm font-semibold text-stone-800">Nombre</label>
+      <input
+        id="dress-name"
+        formControlName="nombre"
+        maxlength="160"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      />
+      @if (form.controls.nombre.touched && form.controls.nombre.invalid) {
+        <p class="mt-2 text-sm text-red-700">El nombre es obligatorio.</p>
+      }
+    </div>
+    <div>
+      <label for="dress-size" class="text-sm font-semibold text-stone-800">Talla</label
+      ><input
+        id="dress-size"
+        formControlName="talla"
+        maxlength="30"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+      />
+    </div>
+    <div>
+      <label for="dress-color" class="text-sm font-semibold text-stone-800">Color</label
+      ><input
+        id="dress-color"
+        formControlName="color"
+        maxlength="80"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+      />
+    </div>
+    <div>
+      <label for="dress-brand" class="text-sm font-semibold text-stone-800">Marca (opcional)</label
+      ><input
+        id="dress-brand"
+        formControlName="marca"
+        maxlength="100"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+      />
+    </div>
+    <div>
+      <label for="dress-state" class="text-sm font-semibold text-stone-800">Estado operativo</label
+      ><select
+        id="dress-state"
+        formControlName="estadoOperativo"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4"
+      >
+        <option value="DISPONIBLE">Disponible</option>
+        <option value="MANTENIMIENTO">Mantenimiento</option>
+      </select>
+    </div>
+    <div>
+      <label for="dress-price" class="text-sm font-semibold text-stone-800">Precio de renta</label>
+      <input
+        id="dress-price"
+        formControlName="precioRenta"
+        inputmode="decimal"
+        placeholder="0.00"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+      />
+      @if (form.controls.precioRenta.touched && form.controls.precioRenta.invalid) {
+        <p class="mt-2 text-sm text-red-700">
+          Usa un importe no negativo con máximo dos decimales.
+        </p>
+      }
+    </div>
+    <div>
+      <label for="dress-deposit" class="text-sm font-semibold text-stone-800"
+        >Depósito (opcional)</label
+      >
+      <input
+        id="dress-deposit"
+        formControlName="deposito"
+        inputmode="decimal"
+        placeholder="0.00"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+      />
+      @if (form.controls.deposito.touched && form.controls.deposito.invalid) {
+        <p class="mt-2 text-sm text-red-700">
+          Usa un importe no negativo con máximo dos decimales.
+        </p>
+      }
+    </div>
+    <div class="sm:col-span-2">
+      <label for="dress-description" class="text-sm font-semibold text-stone-800"
+        >Descripción (opcional)</label
+      ><textarea
+        id="dress-description"
+        formControlName="descripcion"
+        maxlength="1000"
+        rows="4"
+        class="mt-2 w-full rounded-2xl border border-stone-300 px-4 py-3"
+      ></textarea>
+    </div>
+    @if (showActive()) {
+      <label class="flex items-center gap-3 sm:col-span-2"
+        ><input
+          type="checkbox"
+          formControlName="activo"
+          class="size-5 rounded border-stone-300 text-rose-700"
+        /><span class="font-semibold text-stone-800">Vestido activo</span></label
+      >
+    }
+  </div>
+  <app-submit-button
+    [label]="submitLabel()"
+    [loadingLabel]="submittingLabel()"
+    [loading]="submitting()"
+  />
+</form>

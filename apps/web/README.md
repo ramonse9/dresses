@@ -30,7 +30,9 @@ Las rutas se cargan de forma diferida y actualmente preparan estos puntos de ent
 | `/app/clientes/:id`          | Detalle de un cliente                |
 | `/app/clientes/:id/editar`   | Edición de datos del cliente         |
 | `/app/vestidos`              | Catálogo paginado de vestidos        |
+| `/app/vestidos/nuevo`        | Creación de vestido para OWNER       |
 | `/app/vestidos/:id`          | Detalle de una pieza física          |
+| `/app/vestidos/:id/editar`   | Edición y traslado para OWNER        |
 | `/app/disponibilidad`        | Punto de entrada para disponibilidad |
 | `/app/reservaciones`         | Punto de entrada para reservaciones  |
 
@@ -206,7 +208,23 @@ Cada tarjeta y detalle muestran código, nombre, sucursal, talla, color, marca, 
 
 `precioRenta` y `deposito` permanecen como strings decimales. `formatDressMoney()` agrega símbolo, separadores y dos decimales manipulando caracteres; no convierte los valores a `number` ni realiza cálculos de punto flotante. Un depósito `null` se presenta como “No requerido”.
 
-`DressesStore` ignora respuestas obsoletas y registra su limpieza en `TenantResetRegistry`, por lo que listado, detalle y solicitudes pendientes se descartan al cambiar de empresa. Los enlaces de detalle conservan únicamente los filtros permitidos. Un UUID de otro tenant se presenta como `404` sin información interna. Este paso no incluye mutaciones ni imágenes.
+`DressesStore` ignora respuestas obsoletas y registra su limpieza en `TenantResetRegistry`, por lo que listado, detalle y solicitudes pendientes se descartan al cambiar de empresa. Los enlaces de detalle conservan únicamente los filtros permitidos. Un UUID de otro tenant se presenta como `404` sin información interna.
+
+### Mutaciones de vestidos
+
+| Operación  | OWNER | EMPLOYEE |
+| ---------- | ----- | -------- |
+| Crear      | Sí    | No       |
+| Editar     | Sí    | No       |
+| Trasladar  | Sí    | No       |
+| Desactivar | Sí    | No       |
+| Reactivar  | Sí    | No       |
+
+El alta utiliza `POST /api/vestidos`, la edición y reactivación `PATCH /api/vestidos/:id`, y la baja lógica `DELETE /api/vestidos/:id`. Las acciones se ocultan a `EMPLOYEE`, pero el API sigue siendo la autoridad y un `403` forzado no modifica el estado local.
+
+El formulario carga únicamente sucursales activas. Normaliza el código a mayúsculas, recorta texto, convierte opcionales vacíos en `null` y conserva `precioRenta` y `deposito` como strings decimales no negativos con máximo dos posiciones; nunca utiliza `Number` para transformarlos. Cambiar `sucursalId` requiere una confirmación explícita de traslado antes de enviar el `PATCH`.
+
+La baja es lógica y recuperable. Los conflictos de código (`409`), recursos o sucursales inexistentes (`404`), pérdida de rol (`403`) y validaciones (`400`) se muestran sin mezclar información de otro tenant. Las mutaciones se cancelan al cambiar de empresa y las respuestas del API nunca se completan con nombres internos de schemas. Este feature no incluye imágenes.
 
 ## Convenciones para features
 

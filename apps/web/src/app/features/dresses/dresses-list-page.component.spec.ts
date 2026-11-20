@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { BehaviorSubject, of } from 'rxjs';
 import { BranchesStore } from '../branches/branches.store';
+import { TenantStore } from '../../core/tenant/tenant.store';
 import type { Dress, DressListState } from './dress.models';
 import { DressesListPageComponent } from './dresses-list-page.component';
 import { DressesStore } from './dresses.store';
@@ -82,6 +83,7 @@ describe('DressesListPageComponent', () => {
         provideRouter([]),
         { provide: DressesStore, useValue: dressesStore },
         { provide: BranchesStore, useValue: branchesStore },
+        { provide: TenantStore, useValue: { role: signal('OWNER') } },
         { provide: ActivatedRoute, useValue: route },
       ],
     });
@@ -111,6 +113,7 @@ describe('DressesListPageComponent', () => {
     expect(text).toContain('Inactivo');
     expect(text).toContain('No requerido');
     expect(text).toContain('no garantiza que esté libre');
+    expect(text).toContain('Nuevo vestido');
   });
 
   it('reads every supported filter from query parameters', () => {

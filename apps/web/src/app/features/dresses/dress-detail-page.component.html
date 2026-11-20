@@ -11,6 +11,9 @@
   </a>
 
   <div class="mt-5" aria-live="polite">
+    @if (mutationError()) {
+      <div class="mb-5"><app-error-message [error]="mutationError()!" /></div>
+    }
     @switch (store.detailState().status) {
       @case ('idle') {
         <div class="rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
@@ -88,6 +91,35 @@
                   </span>
                 </div>
               </div>
+              @if (isOwner()) {
+                <div class="mt-6 flex flex-wrap gap-3 border-t border-stone-200 pt-6">
+                  <a
+                    [routerLink]="['/app/vestidos', dress.id, 'editar']"
+                    [queryParams]="returnQueryParams"
+                    class="inline-flex min-h-11 items-center rounded-full bg-stone-950 px-5 text-sm font-semibold text-white"
+                    >Editar vestido</a
+                  >
+                  @if (dress.activo) {
+                    <button
+                      type="button"
+                      class="min-h-11 rounded-full border border-red-300 px-5 text-sm font-semibold text-red-800"
+                      [disabled]="statusSubmitting()"
+                      (click)="requestDeactivate()"
+                    >
+                      Desactivar
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="min-h-11 rounded-full border border-emerald-300 px-5 text-sm font-semibold text-emerald-800"
+                      [disabled]="statusSubmitting()"
+                      (click)="reactivate()"
+                    >
+                      Reactivar
+                    </button>
+                  }
+                </div>
+              }
               <p class="mt-6 rounded-2xl bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-950">
                 El estado DISPONIBLE no confirma que la pieza esté libre para un rango de fechas.
               </p>
@@ -151,3 +183,39 @@
     }
   </div>
 </section>
+
+@if (confirmationOpen()) {
+  <div
+    class="fixed inset-0 z-50 grid place-items-center bg-stone-950/60 p-5"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="deactivate-dress-title"
+  >
+    <div class="w-full max-w-lg rounded-3xl bg-white p-7 shadow-2xl">
+      <p class="text-sm font-semibold uppercase tracking-[0.18em] text-red-700">Baja lógica</p>
+      <h2 id="deactivate-dress-title" class="mt-2 font-serif text-2xl text-stone-950">
+        ¿Desactivar este vestido?
+      </h2>
+      <p class="mt-4 leading-7 text-stone-600">
+        El registro no se eliminará. Permanecerá en el catálogo como inactivo y podrá reactivarse
+        después.
+      </p>
+      <div class="mt-7 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          class="min-h-11 rounded-full border border-stone-300 px-5 font-semibold"
+          (click)="cancelDeactivate()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          class="min-h-11 rounded-full bg-red-700 px-5 font-semibold text-white"
+          (click)="confirmDeactivate()"
+        >
+          Confirmar baja lógica
+        </button>
+      </div>
+    </div>
+  </div>
+}

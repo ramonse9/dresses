@@ -976,7 +976,9 @@ El catálogo Angular de vestidos está disponible para `OWNER` y `EMPLOYEE` en `
 
 Cada pieza muestra código, nombre, sucursal, talla, color, marca, precio, depósito, estado operativo y estado activo. La interfaz diferencia visualmente piezas inactivas, disponibles operativamente y en mantenimiento, y aclara que `DISPONIBLE` no garantiza libertad para fechas. Los importes permanecen como strings decimales y se formatean para presentación sin conversiones ni cálculos de punto flotante.
 
-`DressesStore` ignora respuestas obsoletas y limpia listado, detalle y solicitudes pendientes mediante `TenantResetRegistry`. Los filtros válidos se conservan al abrir un detalle; un UUID ajeno al tenant produce una vista `404` segura. Este paso no añade mutaciones ni imágenes de vestidos.
+`OWNER` puede crear en `/app/vestidos/nuevo`, editar o trasladar en `/app/vestidos/:id/editar`, y realizar baja lógica o reactivación desde el detalle. El formulario usa únicamente sucursales activas, normaliza el código, mantiene importes como strings decimales y exige confirmación antes de un traslado. `EMPLOYEE` no ve controles de escritura y el API conserva la autoridad ante peticiones forzadas.
+
+`DressesStore` ignora respuestas obsoletas y limpia listado, detalle y mutaciones pendientes mediante `TenantResetRegistry`. Los filtros válidos se conservan al abrir un detalle o formulario; un UUID ajeno al tenant produce una vista `404` segura. No se incluyen imágenes de vestidos.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

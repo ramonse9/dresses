@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, map, switchMap, tap } from 'rxjs';
 import { BranchesStore } from '../branches/branches.store';
+import { TenantStore } from '../../core/tenant/tenant.store';
 import { EmptyStateComponent } from '../../shared/ui/empty-state/empty-state.component';
 import { ErrorMessageComponent } from '../../shared/ui/error-message/error-message.component';
 import { LoadingIndicatorComponent } from '../../shared/ui/loading-indicator/loading-indicator.component';
@@ -36,6 +37,7 @@ type OperationalFilter = 'all' | DressOperationalState;
 export class DressesListPageComponent implements OnInit {
   readonly store = inject(DressesStore);
   readonly branchesStore = inject(BranchesStore);
+  private readonly tenantStore = inject(TenantStore);
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -51,6 +53,7 @@ export class DressesListPageComponent implements OnInit {
     limit: 20,
   });
   readonly errorMessage = computed(() => dressErrorMessage(this.store.listState().error));
+  readonly isOwner = computed(() => this.tenantStore.role() === 'OWNER');
   readonly hasFilters = computed(() => {
     const filters = this.store.listState().filters;
     return (
