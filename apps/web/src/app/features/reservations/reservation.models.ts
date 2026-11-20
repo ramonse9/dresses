@@ -56,6 +56,16 @@ export interface ReservationDetail extends Omit<ReservationListItem, 'vestidosCo
   readonly motivoCancelacion: string | null;
 }
 
+export interface CreateReservationInput {
+  readonly clienteId: string;
+  readonly sucursalId: string;
+  readonly vestidoIds: readonly string[];
+  readonly fechaInicio: string;
+  readonly fechaFin: string;
+  readonly notas: string | null;
+  readonly confirmar: boolean;
+}
+
 export interface ReservationFilters {
   readonly page: number;
   readonly limit: number;

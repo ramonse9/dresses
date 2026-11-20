@@ -10,11 +10,13 @@ import { TenantStore } from './core/tenant/tenant.store';
 import { BranchesStore } from './features/branches/branches.store';
 import { CustomersStore } from './features/customers/customers.store';
 import { DressesStore } from './features/dresses/dresses.store';
+import { ReservationCreateStore } from './features/reservations/reservation-create.store';
 import { ReservationsStore } from './features/reservations/reservations.store';
 
 describe('application routes', () => {
   const authenticated = signal(false);
   const selectedTenant = signal(false);
+  const role = signal<'OWNER' | 'EMPLOYEE'>('OWNER');
   const company = {
     id: 'empresa-1',
     nombre: 'Atelier Norte',
@@ -96,6 +98,7 @@ describe('application routes', () => {
   beforeEach(() => {
     authenticated.set(false);
     selectedTenant.set(false);
+    role.set('OWNER');
     TestBed.configureTestingModule({
       providers: [
         provideRouter(routes),
@@ -113,7 +116,7 @@ describe('application routes', () => {
             initialize: () => of(undefined),
             hasSelectedTenant: selectedTenant.asReadonly(),
             selectedCompany: signal(company).asReadonly(),
-            role: signal('OWNER').asReadonly(),
+            role: role.asReadonly(),
             status: signal('ready').asReadonly(),
             loading: signal(false).asReadonly(),
             companies: signal([company]).asReadonly(),
@@ -172,6 +175,19 @@ describe('application routes', () => {
           },
         },
         {
+          provide: ReservationCreateStore,
+          useValue: {
+            customers: signal([customer]).asReadonly(),
+            customersStatus: signal('loaded').asReadonly(),
+            availability: signal(null).asReadonly(),
+            availabilityStatus: signal('idle').asReadonly(),
+            searchCustomers: () => of(undefined),
+            loadAvailability: () => of(undefined),
+            clearAvailability: () => undefined,
+            create: () => of(reservation),
+          },
+        },
+        {
           provide: ReservationsStore,
           useValue: {
             listState: signal({
@@ -208,6 +224,7 @@ describe('application routes', () => {
     [`/app/vestidos/${dress.id}`, 'Gala Roja'],
     ['/app/disponibilidad', 'Disponibilidad'],
     ['/app/reservaciones', 'Reservaciones'],
+    ['/app/reservaciones/nueva', 'Crear reservación'],
     [`/app/reservaciones/${reservation.id}`, 'Ana López'],
   ])('renders %s', async (url, expectedText) => {
     authenticated.set(url === '/seleccionar-empresa' || url.startsWith('/app'));
@@ -227,6 +244,20 @@ describe('application routes', () => {
 
     expect(TestBed.inject(Router).url).toBe('/app/dashboard');
   });
+
+  it.each(['OWNER', 'EMPLOYEE'] as const)(
+    'allows %s to open the reservation creation flow',
+    async (currentRole) => {
+      authenticated.set(true);
+      selectedTenant.set(true);
+      role.set(currentRole);
+      const harness = await RouterTestingHarness.create();
+
+      await harness.navigateByUrl('/app/reservaciones/nueva');
+
+      expect(harness.routeNativeElement?.textContent).toContain('Crear reservación');
+    },
+  );
 
   it('redirects unknown routes to the public home', async () => {
     const harness = await RouterTestingHarness.create();

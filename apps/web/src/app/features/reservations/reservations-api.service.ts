@@ -2,6 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import type { Observable } from 'rxjs';
 import { ApiClient } from '../../core/http/api-client.service';
 import type {
+  CreateReservationInput,
   PaginatedReservationsResponse,
   ReservationDetail,
   ReservationFilters,
@@ -28,5 +29,9 @@ export class ReservationsApiService {
 
   getById(id: string): Observable<ReservationDetail> {
     return this.api.get<ReservationDetail>(`reservaciones/${encodeURIComponent(id)}`);
+  }
+
+  create(input: CreateReservationInput): Observable<ReservationDetail> {
+    return this.api.post<ReservationDetail, CreateReservationInput>('reservaciones', input);
   }
 }

@@ -986,6 +986,8 @@ Los resultados distinguen piezas libres por calendario de su aptitud operativa. 
 
 El listado Angular de reservaciones se encuentra en `/app/reservaciones` y conserva filtros por cliente, sucursal, estado, rango, búsqueda y paginación en la URL. El detalle `/app/reservaciones/:id` muestra vestidos, snapshots históricos de precio y depósito, totales, notas, timestamps del ciclo y motivo de cancelación. La interfaz explica el rango semiabierto y nunca sustituye snapshots con precios actuales del catálogo.
 
+La creación Angular se encuentra en `/app/reservaciones/nueva` y está disponible para `OWNER` y `EMPLOYEE`. El flujo selecciona cliente activo, sucursal, rango y entre 1 y 50 vestidos obtenidos desde la consulta de disponibilidad. Muestra importes actuales solamente como estimación y envía al backend únicamente referencias, fechas, notas y la elección entre confirmada —predeterminada— o borrador. Un conflicto `409` conserva el formulario y actualiza las piezas disponibles antes de solicitar una nueva revisión; no se envían totales, estados arbitrarios ni selectores tenant.
+
 `ReservationsStore` mantiene separados listado y detalle, cancela respuestas pendientes al cambiar de tenant y presenta un `404` seguro para UUIDs ajenos. Estas pantallas permiten consulta a `OWNER` y `EMPLOYEE`; todavía no incorporan creación, edición ni transiciones.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).

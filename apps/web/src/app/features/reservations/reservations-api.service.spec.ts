@@ -4,7 +4,7 @@ import { ApiClient } from '../../core/http/api-client.service';
 import { ReservationsApiService } from './reservations-api.service';
 
 describe('ReservationsApiService', () => {
-  const api = { get: vi.fn(() => of(undefined)) };
+  const api = { get: vi.fn(() => of(undefined)), post: vi.fn(() => of(undefined)) };
   beforeEach(() => {
     vi.clearAllMocks();
     TestBed.configureTestingModule({
@@ -31,5 +31,24 @@ describe('ReservationsApiService', () => {
   it('requests detail with an encoded identifier', () => {
     TestBed.inject(ReservationsApiService).getById('reservation/id').subscribe();
     expect(api.get).toHaveBeenCalledWith('reservaciones/reservation%2Fid');
+  });
+
+  it('creates a reservation using only the backend-owned contract', () => {
+    const input = {
+      clienteId: '11111111-1111-4111-8111-111111111111',
+      sucursalId: '22222222-2222-4222-8222-222222222222',
+      vestidoIds: ['33333333-3333-4333-8333-333333333333'],
+      fechaInicio: '2026-12-10T23:00:00.000Z',
+      fechaFin: '2026-12-12T23:00:00.000Z',
+      notas: null,
+      confirmar: true,
+    };
+
+    TestBed.inject(ReservationsApiService).create(input).subscribe();
+
+    expect(api.post).toHaveBeenCalledWith('reservaciones', input);
+    expect(JSON.stringify(api.post.mock.calls)).not.toMatch(
+      /importe|total|estado|empresaId|empresaSlug|schemaName/,
+    );
   });
 });

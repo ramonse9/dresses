@@ -35,6 +35,7 @@ Las rutas se cargan de forma diferida y actualmente preparan estos puntos de ent
 | `/app/vestidos/:id/editar`   | Edición y traslado para OWNER         |
 | `/app/disponibilidad`        | Consulta de disponibilidad por fechas |
 | `/app/reservaciones`         | Listado paginado de reservaciones     |
+| `/app/reservaciones/nueva`   | Creación guiada de reservaciones      |
 | `/app/reservaciones/:id`     | Detalle e importes históricos         |
 
 La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. Login, logout, selección de empresa y los guards están activos.
@@ -265,7 +266,15 @@ El detalle presenta contacto del cliente, sucursal, notas, motivo de cancelació
 
 `ReservationsStore` separa estado de listado y detalle, ignora respuestas obsoletas y cancela solicitudes pendientes mediante `TenantResetRegistry`. Los filtros válidos se conservan al abrir y cerrar un detalle. Un UUID inexistente o de otro tenant muestra un `404` seguro sin información del schema.
 
-Este paso es exclusivamente de consulta: no incluye creación, edición ni transiciones del ciclo de renta.
+### Creación de reservaciones
+
+`/app/reservaciones/nueva` ofrece a `OWNER` y `EMPLOYEE` un flujo por secciones: cliente activo, sucursal activa, rango, vestidos disponibles y confirmación final. La búsqueda de clientes utiliza `GET /api/clientes` con `activo=true`; al seleccionar sucursal y rango se consulta `GET /api/vestidos/disponibilidad`. Cambiar cualquiera de esos datos limpia las piezas seleccionadas y vuelve a comprobar el calendario.
+
+Se pueden seleccionar entre 1 y 50 piezas sin duplicados. La interfaz muestra precio y depósito actuales como estimación previa y los suma como strings decimales con aritmética entera, sin punto flotante. Estos valores no forman parte de la solicitud: `POST /api/reservaciones` recibe exclusivamente `clienteId`, `sucursalId`, `vestidoIds`, fechas ISO 8601 con zona, notas y `confirmar`. El backend conserva la autoridad sobre estado, snapshots, importes, totales, tenant y disponibilidad.
+
+`confirmar=true` es la opción predeterminada; también se puede guardar como `BORRADOR`. Ante un conflicto `409`, la pantalla conserva cliente, sucursal, rango y notas, consulta nuevamente la disponibilidad, descarta únicamente piezas que dejaron de estar libres y solicita revisar la selección. El botón permanece bloqueado mientras la creación está pendiente para evitar solicitudes duplicadas.
+
+La creación no implementa pagos, edición ni transiciones del ciclo de renta.
 
 ## Convenciones para features
 

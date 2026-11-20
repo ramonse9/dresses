@@ -1,0 +1,316 @@
+<section
+  class="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10"
+  aria-labelledby="create-reservation-title"
+>
+  <a
+    routerLink="/app/reservaciones"
+    class="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-stone-600 hover:bg-white"
+    >Volver a reservaciones</a
+  >
+  <header class="mt-5">
+    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">Nueva renta</p>
+    <h1 id="create-reservation-title" class="mt-2 font-serif text-3xl text-stone-950 sm:text-4xl">
+      Crear reservación
+    </h1>
+    <p class="mt-3 max-w-3xl text-base leading-7 text-stone-600">
+      Completa las secciones y revisa la estimación antes de confirmar. El backend volverá a validar
+      disponibilidad e importes.
+    </p>
+  </header>
+
+  <form class="mt-8 space-y-6" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <section
+      class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8"
+      aria-labelledby="customer-step-title"
+    >
+      <p class="text-sm font-semibold uppercase tracking-[0.14em] text-rose-700">Cliente</p>
+      <h2 id="customer-step-title" class="mt-1 font-serif text-2xl text-stone-950">
+        Selecciona un cliente activo
+      </h2>
+      <label
+        for="reservation-customer-search"
+        class="mt-5 block text-sm font-semibold text-stone-800"
+        >Buscar por nombre, email o teléfono</label
+      ><input
+        id="reservation-customer-search"
+        type="search"
+        formControlName="buscarCliente"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+        placeholder="Buscar cliente"
+      />
+      <div class="mt-4" aria-live="polite">
+        @if (store.customersStatus() === 'loading') {
+          <app-loading-indicator label="Buscando clientes…" />
+        } @else if (store.customersStatus() === 'empty') {
+          <p class="rounded-2xl bg-stone-100 p-4 text-stone-700">
+            No encontramos clientes activos.
+          </p>
+        } @else if (store.customersStatus() === 'error') {
+          <app-error-message error="No fue posible consultar clientes activos." />
+        } @else {
+          <ul class="grid gap-3 md:grid-cols-2">
+            @for (customer of store.customers(); track customer.id) {
+              <li>
+                <button
+                  type="button"
+                  class="w-full rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+                  [class.border-rose-600]="form.controls.clienteId.value === customer.id"
+                  [class.bg-rose-50]="form.controls.clienteId.value === customer.id"
+                  [class.border-stone-200]="form.controls.clienteId.value !== customer.id"
+                  (click)="selectCustomer(customer)"
+                >
+                  <span class="block font-semibold text-stone-950">{{ customer.nombre }}</span
+                  ><span class="mt-1 block text-sm text-stone-600">{{
+                    customer.email || customer.telefono || 'Sin contacto'
+                  }}</span>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </section>
+
+    <section
+      class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8"
+      aria-labelledby="branch-step-title"
+    >
+      <p class="text-sm font-semibold uppercase tracking-[0.14em] text-rose-700">Sucursal</p>
+      <h2 id="branch-step-title" class="mt-1 font-serif text-2xl text-stone-950">
+        Elige el punto de renta
+      </h2>
+      <label for="reservation-create-branch" class="mt-5 block text-sm font-semibold text-stone-800"
+        >Sucursal activa</label
+      ><select
+        id="reservation-create-branch"
+        formControlName="sucursalId"
+        class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+      >
+        <option value="" disabled>Selecciona una sucursal</option>
+        @for (branch of activeBranches(); track branch.id) {
+          <option [value]="branch.id">{{ branch.nombre }}</option>
+        }
+      </select>
+      <p class="mt-3 text-sm leading-6 text-stone-600">
+        Cambiar de sucursal limpia la selección de vestidos y consulta nuevamente el inventario.
+      </p>
+    </section>
+
+    <section
+      class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8"
+      aria-labelledby="range-step-title"
+    >
+      <p class="text-sm font-semibold uppercase tracking-[0.14em] text-rose-700">Rango</p>
+      <h2 id="range-step-title" class="mt-1 font-serif text-2xl text-stone-950">
+        Define las fechas de renta
+      </h2>
+      <div class="mt-5 grid gap-5 md:grid-cols-2">
+        <div>
+          <label for="reservation-create-start" class="text-sm font-semibold text-stone-800"
+            >Fecha y hora inicial</label
+          ><input
+            id="reservation-create-start"
+            type="datetime-local"
+            formControlName="fechaInicio"
+            (change)="refreshAfterDateChange()"
+            class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+          />
+        </div>
+        <div>
+          <label for="reservation-create-end" class="text-sm font-semibold text-stone-800"
+            >Fecha y hora final</label
+          ><input
+            id="reservation-create-end"
+            type="datetime-local"
+            formControlName="fechaFin"
+            (change)="refreshAfterDateChange()"
+            class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+          />
+        </div>
+      </div>
+      <p class="mt-4 rounded-2xl bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-950">
+        <strong>Zona horaria:</strong> {{ timeZoneLabel }}. Se enviarán fechas ISO 8601 en UTC. El
+        rango es semiabierto: <code>[inicio, fin)</code>.
+      </p>
+    </section>
+
+    <section
+      class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8"
+      aria-labelledby="dresses-step-title"
+    >
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p class="text-sm font-semibold uppercase tracking-[0.14em] text-rose-700">Vestidos</p>
+          <h2 id="dresses-step-title" class="mt-1 font-serif text-2xl text-stone-950">
+            Selecciona piezas disponibles
+          </h2>
+        </div>
+        <p class="text-sm font-semibold text-stone-600">
+          {{ selectedDressIds().length }} de 50 seleccionados
+        </p>
+      </div>
+      <p class="mt-3 text-sm leading-6 text-stone-600">
+        Los precios y depósitos mostrados son actuales y funcionan únicamente como estimación
+        previa.
+      </p>
+      <div class="mt-5" aria-live="polite">
+        @switch (store.availabilityStatus()) {
+          @case ('idle') {
+            <p class="rounded-2xl bg-stone-100 p-5 text-stone-700">
+              Selecciona sucursal y rango para consultar disponibilidad.
+            </p>
+          }
+          @case ('loading') {
+            <app-loading-indicator label="Consultando piezas disponibles…" />
+          }
+          @case ('empty') {
+            <p class="rounded-2xl bg-stone-100 p-5 text-stone-700">
+              No hay vestidos disponibles para este rango.
+            </p>
+          }
+          @case ('error') {
+            <app-error-message
+              error="No fue posible consultar la disponibilidad para este rango."
+            />
+          }
+          @case ('loaded') {
+            <ul class="grid gap-4 md:grid-cols-2">
+              @for (dress of store.availability()?.data ?? []; track dress.id) {
+                <li>
+                  <label
+                    class="block cursor-pointer rounded-2xl border p-5 transition"
+                    [class.border-rose-600]="isSelected(dress.id)"
+                    [class.bg-rose-50]="isSelected(dress.id)"
+                    [class.border-stone-200]="!isSelected(dress.id)"
+                    ><span class="flex items-start gap-3"
+                      ><input
+                        type="checkbox"
+                        class="mt-1 size-5 rounded border-stone-300 text-rose-700"
+                        [checked]="isSelected(dress.id)"
+                        (change)="toggleDress(dress)"
+                      /><span class="min-w-0 flex-1"
+                        ><span
+                          class="block text-sm font-semibold uppercase tracking-[0.14em] text-rose-700"
+                          >{{ dress.codigo }}</span
+                        ><span class="mt-1 block font-serif text-xl text-stone-950">{{
+                          dress.nombre
+                        }}</span
+                        ><span class="mt-1 block text-sm text-stone-600"
+                          >Talla {{ dress.talla }} · {{ dress.color }}</span
+                        ><span
+                          class="mt-4 grid grid-cols-2 gap-3 border-t border-stone-200 pt-4 text-sm"
+                          ><span
+                            ><span class="block font-semibold text-stone-500">Renta actual</span
+                            ><span class="mt-1 block text-stone-950">{{
+                              formatMoney(dress.precioRenta)
+                            }}</span></span
+                          ><span
+                            ><span class="block font-semibold text-stone-500">Depósito actual</span
+                            ><span class="mt-1 block text-stone-950">{{
+                              formatMoney(dress.deposito)
+                            }}</span></span
+                          ></span
+                        ></span
+                      ></span
+                    ></label
+                  >
+                </li>
+              }
+            </ul>
+          }
+        }
+      </div>
+      @if (selectionError()) {
+        <div class="mt-4"><app-error-message [error]="selectionError()!" /></div>
+      }
+    </section>
+
+    <section
+      class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8"
+      aria-labelledby="confirmation-step-title"
+    >
+      <p class="text-sm font-semibold uppercase tracking-[0.14em] text-rose-700">
+        Confirmación final
+      </p>
+      <h2 id="confirmation-step-title" class="mt-1 font-serif text-2xl text-stone-950">
+        Revisa antes de crear
+      </h2>
+      <dl class="mt-5 grid gap-4 rounded-2xl bg-stone-50 p-5 md:grid-cols-2">
+        <div>
+          <dt class="text-sm font-semibold text-stone-500">Cliente</dt>
+          <dd class="mt-1 text-stone-950">{{ selectedCustomer()?.nombre || 'Sin seleccionar' }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-semibold text-stone-500">Sucursal</dt>
+          <dd class="mt-1 text-stone-950">{{ selectedBranchName() }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-semibold text-stone-500">Piezas</dt>
+          <dd class="mt-1 text-stone-950">{{ selectedDressIds().length }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-semibold text-stone-500">Estimación de renta actual</dt>
+          <dd class="mt-1 font-serif text-xl text-stone-950">{{ formatMoney(estimatedRent()) }}</dd>
+        </div>
+        <div>
+          <dt class="text-sm font-semibold text-stone-500">Estimación de depósito actual</dt>
+          <dd class="mt-1 font-serif text-xl text-stone-950">
+            {{ formatMoney(estimatedDeposit()) }}
+          </dd>
+        </div>
+      </dl>
+      <p class="mt-4 text-sm leading-6 text-stone-600">
+        Estas estimaciones no se envían. El backend toma snapshots, calcula los totales y vuelve a
+        validar disponibilidad dentro de la transacción.
+      </p>
+      <label for="reservation-notes" class="mt-5 block text-sm font-semibold text-stone-800"
+        >Notas (opcional)</label
+      ><textarea
+        id="reservation-notes"
+        formControlName="notas"
+        maxlength="2000"
+        rows="4"
+        class="mt-2 w-full rounded-2xl border border-stone-300 px-4 py-3"
+      ></textarea>
+      <fieldset class="mt-5">
+        <legend class="text-sm font-semibold text-stone-800">Cómo crearla</legend>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <label class="flex cursor-pointer gap-3 rounded-2xl border border-stone-200 p-4"
+            ><input type="radio" formControlName="confirmar" [value]="true" class="mt-1" /><span
+              ><strong class="block text-stone-950">Crear confirmada</strong
+              ><span class="mt-1 block text-sm text-stone-600"
+                >Predeterminado. Bloquea disponibilidad.</span
+              ></span
+            ></label
+          ><label class="flex cursor-pointer gap-3 rounded-2xl border border-stone-200 p-4"
+            ><input type="radio" formControlName="confirmar" [value]="false" class="mt-1" /><span
+              ><strong class="block text-stone-950">Guardar como borrador</strong
+              ><span class="mt-1 block text-sm text-stone-600"
+                >No bloquea el calendario todavía.</span
+              ></span
+            ></label
+          >
+        </div>
+      </fieldset>
+      @if (conflictMessage()) {
+        <div
+          class="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950"
+          role="alert"
+        >
+          <strong>La disponibilidad cambió.</strong>
+          <p class="mt-1 leading-6">{{ conflictMessage() }}</p>
+        </div>
+      }
+      @if (formError()) {
+        <div class="mt-5"><app-error-message [error]="formError()!" /></div>
+      }
+      <div class="mt-6">
+        <app-submit-button
+          label="Crear reservación"
+          loadingLabel="Creando…"
+          [loading]="submitting()"
+        />
+      </div>
+    </section>
+  </form>
+</section>

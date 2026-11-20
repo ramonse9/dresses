@@ -10,6 +10,13 @@ export const RESERVATIONS_ROUTES: Routes = [
       ),
   },
   {
+    path: 'nueva',
+    loadComponent: () =>
+      import('./reservation-create-page.component').then(
+        ({ ReservationCreatePageComponent }) => ReservationCreatePageComponent,
+      ),
+  },
+  {
     path: ':id',
     loadComponent: () =>
       import('./reservation-detail-page.component').then(

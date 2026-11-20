@@ -112,6 +112,9 @@ describe('ReservationsListPageComponent', () => {
     expect(text).toContain('$500.00');
     expect(text).toContain('2 vestidos');
     expect(text).toContain('Rango semiabierto');
+    expect(
+      fixture.nativeElement.querySelector('a[href="/app/reservaciones/nueva"]')?.textContent,
+    ).toContain('Nueva reservación');
   });
 
   it('reads filters and pagination from query parameters', () => {
