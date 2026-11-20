@@ -66,6 +66,22 @@ export interface CreateReservationInput {
   readonly confirmar: boolean;
 }
 
+export interface UpdateReservationInput {
+  readonly clienteId: string;
+  readonly sucursalId: string;
+  readonly vestidoIds: readonly string[];
+  readonly fechaInicio: string;
+  readonly fechaFin: string;
+  readonly notas: string | null;
+}
+
+export const RESERVATION_TRANSITIONS = ['confirmar', 'entregar', 'devolver', 'cancelar'] as const;
+export type ReservationTransition = (typeof RESERVATION_TRANSITIONS)[number];
+
+export interface CancelReservationInput {
+  readonly motivo: string | null;
+}
+
 export interface ReservationFilters {
   readonly page: number;
   readonly limit: number;

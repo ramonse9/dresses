@@ -74,6 +74,50 @@
               </div>
             </header>
 
+            <section class="border-b border-stone-200 bg-stone-50 p-7 sm:px-10">
+              <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 class="font-serif text-2xl text-stone-950">Acciones de la renta</h2>
+                  <p class="mt-1 text-sm leading-6 text-stone-600">
+                    Cada transición se valida nuevamente en el servidor antes de aplicarse.
+                  </p>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  @if (isEditable()) {
+                    <a
+                      [routerLink]="['/app/reservaciones', reservation.id, 'editar']"
+                      [queryParams]="returnQueryParams"
+                      class="inline-flex min-h-11 items-center rounded-full border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-900 hover:border-stone-500"
+                      >Editar reservación</a
+                    >
+                  }
+                  @for (transition of availableTransitions(); track transition) {
+                    <button
+                      type="button"
+                      class="min-h-11 rounded-full px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      [class.bg-red-700]="transition === 'cancelar'"
+                      [class.bg-stone-950]="transition !== 'cancelar'"
+                      [disabled]="transitionSubmitting()"
+                      (click)="requestTransition(transition)"
+                    >
+                      {{ transitionLabel(transition) }}
+                    </button>
+                  }
+                </div>
+              </div>
+              @if (!isEditable() && availableTransitions().length === 0) {
+                <p class="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-stone-600">
+                  Esta reservación se encuentra en un estado terminal y no tiene acciones
+                  disponibles.
+                </p>
+              }
+              @if (transitionError()) {
+                <div class="mt-4" role="alert">
+                  <app-error-message [error]="transitionError()!" />
+                </div>
+              }
+            </section>
+
             <div class="grid gap-px bg-stone-200 md:grid-cols-2">
               <section class="bg-white p-7 sm:p-10">
                 <h2 class="font-serif text-2xl text-stone-950">Cliente</h2>
@@ -202,3 +246,63 @@
     }
   </div>
 </section>
+
+@if (pendingTransition(); as transition) {
+  <div
+    class="fixed inset-0 z-50 grid place-items-center bg-stone-950/60 p-5"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="reservation-transition-title"
+  >
+    <div class="w-full max-w-lg rounded-3xl bg-white p-7 shadow-2xl sm:p-8">
+      <p class="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">
+        Confirmar acción
+      </p>
+      <h2 id="reservation-transition-title" class="mt-2 font-serif text-2xl text-stone-950">
+        {{ transitionLabel(transition) }}
+      </h2>
+      <p class="mt-4 text-base leading-7 text-stone-600">
+        {{ transitionDescription(transition) }}
+      </p>
+      @if (transition === 'cancelar') {
+        <label
+          for="reservation-cancel-reason"
+          class="mt-5 block text-sm font-semibold text-stone-800"
+        >
+          Motivo (opcional)
+        </label>
+        <textarea
+          id="reservation-cancel-reason"
+          [formControl]="cancelReason"
+          maxlength="1000"
+          rows="4"
+          class="mt-2 w-full rounded-2xl border border-stone-300 px-4 py-3 focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
+        ></textarea>
+        @if (cancelReason.touched && cancelReason.hasError('maxlength')) {
+          <p class="mt-2 text-sm font-semibold text-red-700" role="alert">
+            El motivo no puede exceder 1,000 caracteres.
+          </p>
+        }
+      }
+      <div class="mt-7 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          class="min-h-11 rounded-full border border-stone-300 px-5 font-semibold text-stone-800 disabled:opacity-60"
+          [disabled]="transitionSubmitting()"
+          (click)="closeTransitionDialog()"
+        >
+          Volver
+        </button>
+        <button
+          type="button"
+          class="min-h-11 rounded-full bg-rose-700 px-5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          [disabled]="transitionSubmitting()"
+          [attr.aria-busy]="transitionSubmitting()"
+          (click)="confirmTransition()"
+        >
+          {{ transitionSubmitting() ? 'Procesando…' : 'Confirmar acción' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

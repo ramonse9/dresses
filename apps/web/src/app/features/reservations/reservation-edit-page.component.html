@@ -1,0 +1,289 @@
+<section
+  class="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10"
+  aria-labelledby="reservation-edit-title"
+>
+  <a
+    [routerLink]="['/app/reservaciones', reservationId]"
+    [queryParams]="returnQueryParams"
+    class="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-stone-600 hover:bg-white"
+    >Volver al detalle</a
+  >
+  <div class="mt-5">
+    @if (!canEditRole()) {
+      <div class="rounded-3xl border border-stone-200 bg-white p-7 shadow-sm">
+        <app-error-message error="No tienes autorización para editar reservaciones." />
+      </div>
+    } @else if (store.detailState().status === 'idle' || store.detailState().status === 'loading') {
+      <div class="rounded-3xl border border-stone-200 bg-white p-8 shadow-sm">
+        <app-loading-indicator label="Cargando reservación…" />
+      </div>
+    } @else if (store.detailState().status === 'error') {
+      <div class="rounded-3xl border border-stone-200 bg-white p-7 shadow-sm">
+        <app-error-message [error]="loadError()" />
+      </div>
+    } @else if (store.detailState().data; as reservation) {
+      @if (!isEditable()) {
+        <div class="rounded-3xl border border-stone-200 bg-white p-7 shadow-sm sm:p-10">
+          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">
+            Edición no disponible
+          </p>
+          <h1 id="reservation-edit-title" class="mt-2 font-serif text-3xl text-stone-950">
+            La reservación ya no puede editarse
+          </h1>
+          <p class="mt-4 leading-7 text-stone-600">
+            Solamente las reservaciones en borrador o confirmadas admiten cambios. Su estado actual
+            es <strong>{{ reservation.estado }}</strong
+            >.
+          </p>
+        </div>
+      } @else {
+        <header>
+          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">
+            Edición controlada
+          </p>
+          <h1
+            id="reservation-edit-title"
+            class="mt-2 font-serif text-3xl text-stone-950 sm:text-4xl"
+          >
+            Editar reservación
+          </h1>
+          <p class="mt-3 max-w-3xl text-base leading-7 text-stone-600">
+            Actualiza las referencias y el rango. El servidor volverá a validar disponibilidad antes
+            de guardar.
+          </p>
+        </header>
+        <form class="mt-8 space-y-6" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+          <section class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 class="font-serif text-2xl text-stone-950">Cliente</h2>
+            <p class="mt-2 text-sm text-stone-600">
+              Seleccionado: <strong>{{ selectedCustomer()?.nombre || 'Sin seleccionar' }}</strong>
+            </p>
+            <label
+              for="reservation-edit-customer-search"
+              class="mt-5 block text-sm font-semibold text-stone-800"
+              >Buscar cliente activo</label
+            ><input
+              id="reservation-edit-customer-search"
+              type="search"
+              formControlName="buscarCliente"
+              class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+            />
+            <div class="mt-4" aria-live="polite">
+              @if (supportStore.customersStatus() === 'loading') {
+                <app-loading-indicator label="Buscando clientes…" />
+              } @else {
+                <ul class="grid gap-3 md:grid-cols-2">
+                  @for (customer of supportStore.customers(); track customer.id) {
+                    <li>
+                      <button
+                        type="button"
+                        class="w-full rounded-2xl border p-4 text-left"
+                        [class.border-rose-600]="form.controls.clienteId.value === customer.id"
+                        [class.bg-rose-50]="form.controls.clienteId.value === customer.id"
+                        (click)="selectCustomer(customer)"
+                      >
+                        <span class="block font-semibold text-stone-950">{{ customer.nombre }}</span
+                        ><span class="mt-1 block text-sm text-stone-600">{{
+                          customer.email || customer.telefono
+                        }}</span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          </section>
+
+          <section class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 class="font-serif text-2xl text-stone-950">Sucursal y rango</h2>
+            <label
+              for="reservation-edit-branch"
+              class="mt-5 block text-sm font-semibold text-stone-800"
+              >Sucursal</label
+            ><select
+              id="reservation-edit-branch"
+              formControlName="sucursalId"
+              class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4"
+            >
+              <option value="" disabled>Selecciona una sucursal</option>
+              @for (branch of availableBranches(); track branch.id) {
+                <option [value]="branch.id">
+                  {{ branch.nombre }}{{ branch.activo ? '' : ' (inactiva)' }}
+                </option>
+              }
+            </select>
+            <p class="mt-2 text-sm text-stone-600">
+              Cambiar de sucursal limpia la selección de vestidos.
+            </p>
+            <div class="mt-5 grid gap-5 md:grid-cols-2">
+              <div>
+                <label for="reservation-edit-start" class="text-sm font-semibold text-stone-800"
+                  >Fecha inicial</label
+                ><input
+                  id="reservation-edit-start"
+                  type="datetime-local"
+                  formControlName="fechaInicio"
+                  (change)="refreshAfterDateChange()"
+                  class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+                />
+              </div>
+              <div>
+                <label for="reservation-edit-end" class="text-sm font-semibold text-stone-800"
+                  >Fecha final</label
+                ><input
+                  id="reservation-edit-end"
+                  type="datetime-local"
+                  formControlName="fechaFin"
+                  (change)="refreshAfterDateChange()"
+                  class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 px-4"
+                />
+              </div>
+            </div>
+            <p class="mt-4 rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-950">
+              <strong>Zona horaria:</strong> {{ timeZoneLabel }}. Rango semiabierto
+              <code>[inicio, fin)</code>.
+            </p>
+          </section>
+
+          <section class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold uppercase tracking-[0.14em] text-rose-700">
+                  Snapshots existentes
+                </p>
+                <h2 class="mt-1 font-serif text-2xl text-stone-950">Piezas actuales</h2>
+              </div>
+              <p class="text-sm font-semibold text-stone-600">
+                {{ selectedDressIds().length }} de 50 seleccionadas
+              </p>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-stone-600">
+              Los importes mostrados en esta sección son históricos y se conservarán mientras la
+              pieza permanezca en la reservación.
+            </p>
+            <ul class="mt-5 grid gap-4 md:grid-cols-2">
+              @for (dress of existingSnapshots(); track dress.id) {
+                <li>
+                  <label
+                    class="block cursor-pointer rounded-2xl border p-5"
+                    [class.border-rose-600]="isSelected(dress.id)"
+                    [class.bg-rose-50]="isSelected(dress.id)"
+                    ><span class="flex gap-3"
+                      ><input
+                        type="checkbox"
+                        class="mt-1 size-5"
+                        [checked]="isSelected(dress.id)"
+                        (change)="toggleSnapshot(dress)"
+                      /><span
+                        ><span class="block font-semibold text-stone-950"
+                          >{{ dress.codigo }} · {{ dress.nombre }}</span
+                        ><span class="mt-2 block text-sm text-stone-600"
+                          >Precio histórico {{ formatMoney(dress.precioRenta) }} · Depósito
+                          histórico {{ formatMoney(dress.deposito) }}</span
+                        ><span
+                          class="mt-2 block text-sm font-semibold"
+                          [class.text-rose-700]="isSelected(dress.id)"
+                          [class.text-stone-500]="!isSelected(dress.id)"
+                          >{{
+                            isSelected(dress.id) ? 'Se conservará' : 'Se quitará al guardar'
+                          }}</span
+                        ></span
+                      ></span
+                    ></label
+                  >
+                </li>
+              }
+            </ul>
+          </section>
+
+          <section class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
+            <p class="text-sm font-semibold uppercase tracking-[0.14em] text-rose-700">
+              Disponibilidad actual
+            </p>
+            <h2 class="mt-1 font-serif text-2xl text-stone-950">Agregar nuevas piezas</h2>
+            <p class="mt-3 text-sm leading-6 text-stone-600">
+              Las piezas nuevas tomarán el precio y depósito actuales al guardarse. El backend
+              generará sus nuevos snapshots.
+            </p>
+            <div class="mt-5" aria-live="polite">
+              @switch (supportStore.availabilityStatus()) {
+                @case ('loading') {
+                  <app-loading-indicator label="Consultando disponibilidad…" />
+                }
+                @case ('idle') {
+                  <p class="rounded-2xl bg-stone-100 p-4 text-stone-700">
+                    Completa sucursal y rango.
+                  </p>
+                }
+                @case ('empty') {
+                  <p class="rounded-2xl bg-stone-100 p-4 text-stone-700">
+                    No hay piezas adicionales disponibles.
+                  </p>
+                }
+                @case ('error') {
+                  <app-error-message error="No fue posible consultar disponibilidad." />
+                }
+                @case ('loaded') {
+                  <ul class="grid gap-4 md:grid-cols-2">
+                    @for (dress of availableNewDresses(); track dress.id) {
+                      <li>
+                        <label
+                          class="block cursor-pointer rounded-2xl border p-5"
+                          [class.border-rose-600]="isSelected(dress.id)"
+                          [class.bg-rose-50]="isSelected(dress.id)"
+                          ><span class="flex gap-3"
+                            ><input
+                              type="checkbox"
+                              class="mt-1 size-5"
+                              [checked]="isSelected(dress.id)"
+                              (change)="toggleDress(dress)"
+                            /><span
+                              ><span class="block font-semibold text-stone-950"
+                                >{{ dress.codigo }} · {{ dress.nombre }}</span
+                              ><span class="mt-2 block text-sm text-stone-600"
+                                >Precio actual {{ formatMoney(dress.precioRenta) }} · Depósito
+                                actual {{ formatMoney(dress.deposito) }}</span
+                              ></span
+                            ></span
+                          ></label
+                        >
+                      </li>
+                    }
+                  </ul>
+                }
+              }
+            </div>
+            @if (selectionError()) {
+              <div class="mt-4"><app-error-message [error]="selectionError()!" /></div>
+            }
+          </section>
+
+          <section class="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
+            <h2 class="font-serif text-2xl text-stone-950">Notas y guardado</h2>
+            <label
+              for="reservation-edit-notes"
+              class="mt-5 block text-sm font-semibold text-stone-800"
+              >Notas (opcional)</label
+            ><textarea
+              id="reservation-edit-notes"
+              formControlName="notas"
+              maxlength="2000"
+              rows="4"
+              class="mt-2 w-full rounded-2xl border border-stone-300 px-4 py-3"
+            ></textarea>
+            @if (formError()) {
+              <div class="mt-5"><app-error-message [error]="formError()!" /></div>
+            }
+            <div class="mt-6">
+              <app-submit-button
+                label="Guardar cambios"
+                loadingLabel="Guardando…"
+                [loading]="submitting()"
+              />
+            </div>
+          </section>
+        </form>
+      }
+    }
+  </div>
+</section>

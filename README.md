@@ -988,7 +988,9 @@ El listado Angular de reservaciones se encuentra en `/app/reservaciones` y conse
 
 La creación Angular se encuentra en `/app/reservaciones/nueva` y está disponible para `OWNER` y `EMPLOYEE`. El flujo selecciona cliente activo, sucursal, rango y entre 1 y 50 vestidos obtenidos desde la consulta de disponibilidad. Muestra importes actuales solamente como estimación y envía al backend únicamente referencias, fechas, notas y la elección entre confirmada —predeterminada— o borrador. Un conflicto `409` conserva el formulario y actualiza las piezas disponibles antes de solicitar una nueva revisión; no se envían totales, estados arbitrarios ni selectores tenant.
 
-`ReservationsStore` mantiene separados listado y detalle, cancela respuestas pendientes al cambiar de tenant y presenta un `404` seguro para UUIDs ajenos. Estas pantallas permiten consulta a `OWNER` y `EMPLOYEE`; todavía no incorporan creación, edición ni transiciones.
+La edición Angular se encuentra en `/app/reservaciones/:id/editar` y solamente admite estados `BORRADOR` o `CONFIRMADA`. Conserva los snapshots existentes y diferencia claramente las piezas nuevas con precios actuales. El detalle expone confirmar, entregar, devolver y cancelar como acciones explícitas según el estado; `OWNER` y `EMPLOYEE` pueden confirmar, entregar y devolver, mientras que cancelar está reservado a `OWNER`. Cada transición requiere confirmación y vuelve a cargar el detalle autoritativo; un `409` concurrente muestra el estado actualizado.
+
+`ReservationsStore` mantiene separados listado y detalle, cancela respuestas pendientes al cambiar de tenant y presenta un `404` seguro para UUIDs ajenos. Estas pantallas no incluyen pagos, daños ni reembolsos.
 
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 

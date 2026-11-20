@@ -4,9 +4,11 @@ import { normalizeApiError } from '../../core/http/api-error';
 import { TenantResetRegistry } from '../../core/tenant/tenant-reset-registry.service';
 import { DEFAULT_RESERVATION_LIMIT, DEFAULT_RESERVATION_PAGE } from './reservation-filters';
 import type {
+  CancelReservationInput,
   ReservationDetailState,
   ReservationFilters,
   ReservationListState,
+  UpdateReservationInput,
 } from './reservation.models';
 import { ReservationsApiService } from './reservations-api.service';
 
@@ -98,6 +100,26 @@ export class ReservationsStore {
         return of(undefined);
       }),
     );
+  }
+
+  update(id: string, input: UpdateReservationInput) {
+    return this.api.update(id, input).pipe(takeUntil(this.resetRequests));
+  }
+
+  confirm(id: string) {
+    return this.api.confirm(id).pipe(takeUntil(this.resetRequests));
+  }
+
+  deliver(id: string) {
+    return this.api.deliver(id).pipe(takeUntil(this.resetRequests));
+  }
+
+  returnReservation(id: string) {
+    return this.api.returnReservation(id).pipe(takeUntil(this.resetRequests));
+  }
+
+  cancel(id: string, input: CancelReservationInput) {
+    return this.api.cancel(id, input).pipe(takeUntil(this.resetRequests));
   }
 
   reset(): void {

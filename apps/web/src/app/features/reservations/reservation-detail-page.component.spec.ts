@@ -1,7 +1,9 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
+import { TenantStore } from '../../core/tenant/tenant.store';
 import type { ReservationDetail, ReservationDetailState } from './reservation.models';
 import { ReservationDetailPageComponent } from './reservation-detail-page.component';
 import { ReservationsStore } from './reservations.store';
@@ -38,16 +40,25 @@ const detail: ReservationDetail = {
 };
 
 describe('ReservationDetailPageComponent', () => {
+  const role = signal<'OWNER' | 'EMPLOYEE'>('OWNER');
   const detailState = signal<ReservationDetailState>({
     status: 'loaded',
     data: detail,
     error: null,
   });
-  const store = { detailState: detailState.asReadonly(), loadDetail: vi.fn(() => of(undefined)) };
+  const store = {
+    detailState: detailState.asReadonly(),
+    loadDetail: vi.fn(() => of(undefined)),
+    confirm: vi.fn(() => of(detail)),
+    deliver: vi.fn(() => of(detail)),
+    returnReservation: vi.fn(() => of(detail)),
+    cancel: vi.fn(() => of(detail)),
+  };
   let fixture: ComponentFixture<ReservationDetailPageComponent>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    role.set('OWNER');
     detailState.set({ status: 'loaded', data: detail, error: null });
     const paramMap = convertToParamMap({ id });
     const queryParamMap = convertToParamMap({ page: '2', estado: 'CANCELADA' });
@@ -56,6 +67,7 @@ describe('ReservationDetailPageComponent', () => {
       providers: [
         provideRouter([]),
         { provide: ReservationsStore, useValue: store },
+        { provide: TenantStore, useValue: { role: role.asReadonly() } },
         {
           provide: ActivatedRoute,
           useValue: { paramMap: of(paramMap), snapshot: { paramMap, queryParamMap } },
@@ -96,5 +108,124 @@ describe('ReservationDetailPageComponent', () => {
   it('preserves valid list filters in the back link', () => {
     const back = fixture.nativeElement.querySelector('a') as HTMLAnchorElement;
     expect(back.search).toBe('?page=2&limit=20&estado=CANCELADA');
+  });
+
+  it('shows edit, confirm and cancel actions for an owner draft', () => {
+    detailState.set({
+      status: 'loaded',
+      data: { ...detail, estado: 'BORRADOR', canceladaAt: null, motivoCancelacion: null },
+      error: null,
+    });
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Editar reservación');
+    expect(text).toContain('Confirmar reservación');
+    expect(text).toContain('Cancelar reservación');
+  });
+
+  it('shows deliver for a confirmed employee but hides cancellation', () => {
+    role.set('EMPLOYEE');
+    detailState.set({
+      status: 'loaded',
+      data: { ...detail, estado: 'CONFIRMADA', canceladaAt: null, motivoCancelacion: null },
+      error: null,
+    });
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Registrar entrega');
+    expect(text).not.toContain('Cancelar reservación');
+  });
+
+  it('confirms, delivers and returns through explicit actions and reloads detail', () => {
+    const component = fixture.componentInstance;
+    for (const [status, transition, method] of [
+      ['BORRADOR', 'confirmar', 'confirm'],
+      ['CONFIRMADA', 'entregar', 'deliver'],
+      ['ENTREGADA', 'devolver', 'returnReservation'],
+    ] as const) {
+      detailState.set({
+        status: 'loaded',
+        data: { ...detail, estado: status, canceladaAt: null, motivoCancelacion: null },
+        error: null,
+      });
+      component.requestTransition(transition);
+      component.confirmTransition();
+      expect(store[method]).toHaveBeenCalledWith(id);
+    }
+    expect(store.loadDetail).toHaveBeenCalledTimes(4);
+  });
+
+  it('allows an owner to cancel with an optional normalized reason', () => {
+    detailState.set({
+      status: 'loaded',
+      data: { ...detail, estado: 'CONFIRMADA', canceladaAt: null, motivoCancelacion: null },
+      error: null,
+    });
+    const component = fixture.componentInstance;
+    component.requestTransition('cancelar');
+    component.cancelReason.setValue('  Cambio de evento  ');
+    component.confirmTransition();
+    expect(store.cancel).toHaveBeenCalledWith(id, { motivo: 'Cambio de evento' });
+  });
+
+  it('keeps cancellation unavailable to employees even when forced', () => {
+    role.set('EMPLOYEE');
+    detailState.set({
+      status: 'loaded',
+      data: { ...detail, estado: 'CONFIRMADA', canceladaAt: null, motivoCancelacion: null },
+      error: null,
+    });
+    const component = fixture.componentInstance;
+    component.requestTransition('cancelar');
+    component.confirmTransition();
+    expect(store.cancel).not.toHaveBeenCalled();
+  });
+
+  it('shows authorization errors without replacing local detail', () => {
+    store.deliver.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 403, statusText: 'Forbidden' })),
+    );
+    detailState.set({
+      status: 'loaded',
+      data: { ...detail, estado: 'CONFIRMADA', canceladaAt: null, motivoCancelacion: null },
+      error: null,
+    });
+    const component = fixture.componentInstance;
+    component.requestTransition('entregar');
+    component.confirmTransition();
+    expect(component.transitionError()).toContain('autorización');
+    expect(detailState().data?.estado).toBe('CONFIRMADA');
+  });
+
+  it('reloads the authoritative state after a concurrent 409', () => {
+    store.confirm.mockReturnValueOnce(
+      throwError(() => new HttpErrorResponse({ status: 409, statusText: 'Conflict' })),
+    );
+    detailState.set({
+      status: 'loaded',
+      data: { ...detail, estado: 'BORRADOR', canceladaAt: null, motivoCancelacion: null },
+      error: null,
+    });
+    const component = fixture.componentInstance;
+    component.requestTransition('confirmar');
+    component.confirmTransition();
+    expect(component.transitionError()).toContain('estado actualizado');
+    expect(store.loadDetail).toHaveBeenLastCalledWith(id);
+  });
+
+  it('blocks duplicate transition submissions and terminal actions', () => {
+    const pending = new Subject<ReservationDetail>();
+    store.returnReservation.mockReturnValueOnce(pending.asObservable());
+    detailState.set({ status: 'loaded', data: { ...detail, estado: 'ENTREGADA' }, error: null });
+    const component = fixture.componentInstance;
+    component.requestTransition('devolver');
+    component.confirmTransition();
+    component.confirmTransition();
+    expect(store.returnReservation).toHaveBeenCalledOnce();
+
+    detailState.set({ status: 'loaded', data: { ...detail, estado: 'DEVUELTA' }, error: null });
+    fixture.detectChanges();
+    expect(component.availableTransitions()).toEqual([]);
+    expect(fixture.nativeElement.textContent).toContain('estado terminal');
   });
 });

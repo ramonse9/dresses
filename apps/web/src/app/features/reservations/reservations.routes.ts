@@ -17,6 +17,13 @@ export const RESERVATIONS_ROUTES: Routes = [
       ),
   },
   {
+    path: ':id/editar',
+    loadComponent: () =>
+      import('./reservation-edit-page.component').then(
+        ({ ReservationEditPageComponent }) => ReservationEditPageComponent,
+      ),
+  },
+  {
     path: ':id',
     loadComponent: () =>
       import('./reservation-detail-page.component').then(

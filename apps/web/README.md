@@ -14,29 +14,30 @@ src/app
 
 Las rutas se cargan de forma diferida y actualmente preparan estos puntos de entrada:
 
-| Ruta                         | Propósito                             |
-| ---------------------------- | ------------------------------------- |
-| `/`                          | Página pública                        |
-| `/login`                     | Formulario de acceso para invitados   |
-| `/seleccionar-empresa`       | Selección entre membresías vigentes   |
-| `/app`                       | Redirección al dashboard autenticado  |
-| `/app/dashboard`             | Resumen de operación                  |
-| `/app/sucursales`            | Punto de entrada para sucursales      |
-| `/app/sucursales/nueva`      | Creación de sucursal para OWNER       |
-| `/app/sucursales/:id`        | Detalle de una sucursal               |
-| `/app/sucursales/:id/editar` | Edición de sucursal para OWNER        |
-| `/app/clientes`              | Consulta paginada de clientes         |
-| `/app/clientes/nuevo`        | Creación de cliente                   |
-| `/app/clientes/:id`          | Detalle de un cliente                 |
-| `/app/clientes/:id/editar`   | Edición de datos del cliente          |
-| `/app/vestidos`              | Catálogo paginado de vestidos         |
-| `/app/vestidos/nuevo`        | Creación de vestido para OWNER        |
-| `/app/vestidos/:id`          | Detalle de una pieza física           |
-| `/app/vestidos/:id/editar`   | Edición y traslado para OWNER         |
-| `/app/disponibilidad`        | Consulta de disponibilidad por fechas |
-| `/app/reservaciones`         | Listado paginado de reservaciones     |
-| `/app/reservaciones/nueva`   | Creación guiada de reservaciones      |
-| `/app/reservaciones/:id`     | Detalle e importes históricos         |
+| Ruta                            | Propósito                             |
+| ------------------------------- | ------------------------------------- |
+| `/`                             | Página pública                        |
+| `/login`                        | Formulario de acceso para invitados   |
+| `/seleccionar-empresa`          | Selección entre membresías vigentes   |
+| `/app`                          | Redirección al dashboard autenticado  |
+| `/app/dashboard`                | Resumen de operación                  |
+| `/app/sucursales`               | Punto de entrada para sucursales      |
+| `/app/sucursales/nueva`         | Creación de sucursal para OWNER       |
+| `/app/sucursales/:id`           | Detalle de una sucursal               |
+| `/app/sucursales/:id/editar`    | Edición de sucursal para OWNER        |
+| `/app/clientes`                 | Consulta paginada de clientes         |
+| `/app/clientes/nuevo`           | Creación de cliente                   |
+| `/app/clientes/:id`             | Detalle de un cliente                 |
+| `/app/clientes/:id/editar`      | Edición de datos del cliente          |
+| `/app/vestidos`                 | Catálogo paginado de vestidos         |
+| `/app/vestidos/nuevo`           | Creación de vestido para OWNER        |
+| `/app/vestidos/:id`             | Detalle de una pieza física           |
+| `/app/vestidos/:id/editar`      | Edición y traslado para OWNER         |
+| `/app/disponibilidad`           | Consulta de disponibilidad por fechas |
+| `/app/reservaciones`            | Listado paginado de reservaciones     |
+| `/app/reservaciones/nueva`      | Creación guiada de reservaciones      |
+| `/app/reservaciones/:id`        | Detalle e importes históricos         |
+| `/app/reservaciones/:id/editar` | Edición de borrador o confirmada      |
 
 La infraestructura restaura la sesión desde la cookie HttpOnly y mantiene el access token únicamente en memoria. Login, logout, selección de empresa y los guards están activos.
 
@@ -274,7 +275,23 @@ Se pueden seleccionar entre 1 y 50 piezas sin duplicados. La interfaz muestra pr
 
 `confirmar=true` es la opción predeterminada; también se puede guardar como `BORRADOR`. Ante un conflicto `409`, la pantalla conserva cliente, sucursal, rango y notas, consulta nuevamente la disponibilidad, descarta únicamente piezas que dejaron de estar libres y solicita revisar la selección. El botón permanece bloqueado mientras la creación está pendiente para evitar solicitudes duplicadas.
 
-La creación no implementa pagos, edición ni transiciones del ciclo de renta.
+### Edición y ciclo de vida
+
+`/app/reservaciones/:id/editar` permite a `OWNER` y `EMPLOYEE` modificar cliente, sucursal, rango, vestidos y notas únicamente cuando el estado vigente es `BORRADOR` o `CONFIRMADA`. La página vuelve a consultar disponibilidad, conserva por separado los snapshots históricos de piezas existentes y aclara que cada pieza nueva tomará los importes actuales al incorporarse. El `PATCH` no contiene estado, importes, totales ni selectores tenant.
+
+El detalle ofrece acciones explícitas, sin selector genérico:
+
+| Estado     | OWNER                | EMPLOYEE     |
+| ---------- | -------------------- | ------------ |
+| BORRADOR   | Confirmar o cancelar | Confirmar    |
+| CONFIRMADA | Entregar o cancelar  | Entregar     |
+| ENTREGADA  | Devolver             | Devolver     |
+| DEVUELTA   | Sin acciones         | Sin acciones |
+| CANCELADA  | Sin acciones         | Sin acciones |
+
+Cada acción abre una confirmación y queda deshabilitada mientras se procesa. Cancelar acepta un motivo opcional de hasta 1,000 caracteres y solamente se muestra a `OWNER`. Después de cualquier transición exitosa se descarta su respuesta como fuente de estado y se vuelve a consultar `GET /api/reservaciones/:id`. Un `409` concurrente realiza la misma recarga y muestra el estado autoritativo del servidor; un `403` no modifica el detalle local.
+
+Estas pantallas no implementan pagos, daños ni reembolsos.
 
 ## Convenciones para features
 

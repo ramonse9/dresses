@@ -182,7 +182,15 @@ describe('application routes', () => {
             availability: signal(null).asReadonly(),
             availabilityStatus: signal('idle').asReadonly(),
             searchCustomers: () => of(undefined),
-            loadAvailability: () => of(undefined),
+            loadAvailability: () =>
+              of({
+                data: [dress],
+                pagination: { page: 1, limit: 100, total: 1, totalPages: 1 },
+                range: {
+                  fechaInicio: reservation.fechaInicio,
+                  fechaFin: reservation.fechaFin,
+                },
+              }),
             clearAvailability: () => undefined,
             create: () => of(reservation),
           },
@@ -200,6 +208,11 @@ describe('application routes', () => {
             detailState: signal({ status: 'loaded', data: reservation, error: null }).asReadonly(),
             loadList: () => of(undefined),
             loadDetail: () => of(undefined),
+            update: () => of(reservation),
+            confirm: () => of(reservation),
+            deliver: () => of(reservation),
+            returnReservation: () => of(reservation),
+            cancel: () => of(reservation),
           },
         },
       ],
@@ -225,6 +238,7 @@ describe('application routes', () => {
     ['/app/disponibilidad', 'Disponibilidad'],
     ['/app/reservaciones', 'Reservaciones'],
     ['/app/reservaciones/nueva', 'Crear reservación'],
+    [`/app/reservaciones/${reservation.id}/editar`, 'Editar reservación'],
     [`/app/reservaciones/${reservation.id}`, 'Ana López'],
   ])('renders %s', async (url, expectedText) => {
     authenticated.set(url === '/seleccionar-empresa' || url.startsWith('/app'));

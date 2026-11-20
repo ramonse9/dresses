@@ -50,11 +50,24 @@ const response: PaginatedReservationsResponse = {
 };
 
 describe('ReservationsStore', () => {
-  const api = { list: vi.fn(() => of(response)), getById: vi.fn(() => of(detail)) };
+  const api = {
+    list: vi.fn(() => of(response)),
+    getById: vi.fn(() => of(detail)),
+    update: vi.fn(() => of(detail)),
+    confirm: vi.fn(() => of(detail)),
+    deliver: vi.fn(() => of(detail)),
+    returnReservation: vi.fn(() => of(detail)),
+    cancel: vi.fn(() => of(detail)),
+  };
   beforeEach(() => {
     vi.clearAllMocks();
     api.list.mockReturnValue(of(response));
     api.getById.mockReturnValue(of(detail));
+    api.update.mockReturnValue(of(detail));
+    api.confirm.mockReturnValue(of(detail));
+    api.deliver.mockReturnValue(of(detail));
+    api.returnReservation.mockReturnValue(of(detail));
+    api.cancel.mockReturnValue(of(detail));
     TestBed.configureTestingModule({
       providers: [
         ReservationsStore,
@@ -92,5 +105,28 @@ describe('ReservationsStore', () => {
     pending.next(response);
     expect(store.listState().status).toBe('idle');
     expect(store.detailState()).toEqual({ status: 'idle', data: null, error: null });
+  });
+
+  it('delegates updates and every explicit transition', async () => {
+    const store = TestBed.inject(ReservationsStore);
+    const input = {
+      clienteId: detail.cliente.id,
+      sucursalId: detail.sucursal.id,
+      vestidoIds: detail.vestidos.map(({ id }) => id),
+      fechaInicio: detail.fechaInicio,
+      fechaFin: detail.fechaFin,
+      notas: detail.notas,
+    };
+    await firstValueFrom(store.update(detail.id, input));
+    await firstValueFrom(store.confirm(detail.id));
+    await firstValueFrom(store.deliver(detail.id));
+    await firstValueFrom(store.returnReservation(detail.id));
+    await firstValueFrom(store.cancel(detail.id, { motivo: 'Cambio' }));
+
+    expect(api.update).toHaveBeenCalledWith(detail.id, input);
+    expect(api.confirm).toHaveBeenCalledWith(detail.id);
+    expect(api.deliver).toHaveBeenCalledWith(detail.id);
+    expect(api.returnReservation).toHaveBeenCalledWith(detail.id);
+    expect(api.cancel).toHaveBeenCalledWith(detail.id, { motivo: 'Cambio' });
   });
 });
