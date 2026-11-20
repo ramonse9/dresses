@@ -1,4 +1,4 @@
-import { Component, computed, inject, OnInit } from '@angular/core';
+import { Component, computed, inject, type OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TenantStore } from '../../core/tenant/tenant.store';
 import { EmptyStateComponent } from '../../shared/ui/empty-state/empty-state.component';

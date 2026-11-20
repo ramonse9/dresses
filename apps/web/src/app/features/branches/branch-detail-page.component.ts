@@ -3,10 +3,10 @@ import {
   computed,
   DestroyRef,
   effect,
-  ElementRef,
+  type ElementRef,
   HostListener,
   inject,
-  OnInit,
+  type OnInit,
   signal,
   viewChild,
 } from '@angular/core';

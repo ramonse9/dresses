@@ -1,9 +1,9 @@
 import { Component, effect, inject, input, output } from '@angular/core';
 import {
-  AbstractControl,
+  type AbstractControl,
   FormBuilder,
   ReactiveFormsModule,
-  ValidationErrors,
+  type ValidationErrors,
   Validators,
 } from '@angular/forms';
 import type { Branch } from '../branches/branch.models';

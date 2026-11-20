@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { type Observable } from 'rxjs';
 import { API_BASE_URL } from '../config/api-config';
 
 export type ApiQueryValue = string | number | boolean | readonly (string | number | boolean)[];
@@ -11,6 +11,7 @@ export interface ApiRequestOptions {
 }
 
 const schemaNamePattern = /(?:^|\/)tenant_[^/]+(?:\/|$)/i;
+const blockedTenantQueryParameters = new Set(['empresaid', 'empresaslug', 'schemaname']);
 
 @Injectable({ providedIn: 'root' })
 export class ApiClient {
@@ -78,8 +79,8 @@ export class ApiClient {
     let httpParams = new HttpParams();
 
     for (const [key, rawValue] of Object.entries(params)) {
-      if (key.toLowerCase() === 'schemaname') {
-        throw new Error('schemaName no es un parámetro permitido.');
+      if (blockedTenantQueryParameters.has(key.toLowerCase())) {
+        throw new Error(`${key} no es un parámetro permitido.`);
       }
       if (rawValue === null || rawValue === undefined) {
         continue;

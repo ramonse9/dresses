@@ -1,12 +1,12 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
-  ActivatedRouteSnapshot,
+  type ActivatedRouteSnapshot,
   convertToParamMap,
   provideRouter,
   Router,
-  RouterStateSnapshot,
-  UrlTree,
+  type RouterStateSnapshot,
+  type UrlTree,
 } from '@angular/router';
 import { authGuard, guestGuard } from './auth.guards';
 import { AuthStore } from './auth.store';

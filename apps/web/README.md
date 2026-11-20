@@ -293,6 +293,26 @@ Cada acción abre una confirmación y queda deshabilitada mientras se procesa. C
 
 Estas pantallas no implementan pagos, daños ni reembolsos.
 
+## Auditoría y endurecimiento frontend
+
+La aplicación mantiene el access token exclusivamente en `AccessTokenStore`, una signal en memoria. El refresh token continúa siendo una cookie HttpOnly administrada por el navegador y ningún servicio intenta leerla. `localStorage` conserva únicamente la preferencia no autoritativa `vestidos_empresa_id`; no almacena tokens, roles ni nombres de schemas.
+
+`ApiClient` rechaza URLs absolutas, rutas con nombres internos de tenant y query parameters `empresaId`, `empresaSlug` o `schemaName`. La única selección de empresa permitida continúa siendo `POST /auth/select-empresa` mediante un cuerpo tipado con `empresaId`. Los errores visibles se derivan del código HTTP y usan mensajes del dominio: `403` representa pérdida de acceso o permisos y `404` conserva la semántica de recurso inexistente o ajeno sin revelar detalles internos.
+
+Todos los stores con datos tenant se registran en `TenantResetRegistry`, cancelan solicitudes pendientes y limpian su estado antes de cambiar de empresa. Los listados limitan `limit` a 100, conservan filtros válidos en la URL, ignoran respuestas obsoletas y usan IDs o rutas estables en `@for`. Los importes permanecen como strings decimales y las fechas locales se convierten a ISO 8601 mostrando la zona IANA utilizada.
+
+ESLint utiliza las configuraciones recomendadas de TypeScript y Angular, incluyendo reglas de accesibilidad para templates. Playwright ejecuta recorridos contra un API interceptado en memoria: no necesita credenciales, PostgreSQL ni información real. Sus fixtures usan exclusivamente dominios `.test` y tokens ficticios.
+
+Los recorridos e2e cubren:
+
+- login, selección automática de empresa, catálogo y logout;
+- creación de cliente;
+- disponibilidad con zona horaria;
+- creación confirmada de reservación;
+- ciclo confirmar → entregar → devolver;
+- cancelación por `OWNER` y rechazo forzado para `EMPLOYEE`;
+- navegación móvil, teclado, foco y cierre con `Escape`.
+
 ## Convenciones para features
 
 - Crear componentes standalone dentro de `features/<dominio>`.
@@ -311,10 +331,12 @@ Desde la raíz del monorepo:
 ```bash
 npm run dev:web
 npm run build --workspace=web
+npm run lint --workspace=web
 npm run test --workspace=web
+npm run test:e2e --workspace=web
 ```
 
-La aplicación se sirve en <http://localhost:4200>. Este workspace aún no tiene un target de lint; el build aplica la validación estricta de TypeScript y templates, y Prettier puede comprobarse con:
+La aplicación se sirve en <http://localhost:4200>. El e2e inicia su propio servidor Angular y Chromium, intercepta el API y genera trazas o capturas únicamente al fallar. Prettier puede comprobarse con:
 
 ```bash
 npx prettier --check "apps/web/**/*.{ts,html,css,json,md}"

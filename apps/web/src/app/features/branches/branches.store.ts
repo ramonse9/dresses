@@ -3,7 +3,7 @@ import {
   catchError,
   finalize,
   map,
-  Observable,
+  type Observable,
   of,
   shareReplay,
   Subject,

@@ -26,7 +26,7 @@ export function sanitizeReturnUrl(value: unknown): string | null {
     !candidate.startsWith('/') ||
     candidate.startsWith('//') ||
     candidate.includes('\\') ||
-    /[\u0000-\u001f\u007f]/.test(candidate)
+    containsControlCharacter(candidate)
   ) {
     return null;
   }
@@ -37,4 +37,11 @@ export function sanitizeReturnUrl(value: unknown): string | null {
   }
 
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+function containsControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  });
 }

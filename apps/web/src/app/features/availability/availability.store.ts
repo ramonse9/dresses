@@ -1,5 +1,5 @@
 import { inject, Injectable, signal } from '@angular/core';
-import { catchError, map, Observable, of, Subject, takeUntil, tap } from 'rxjs';
+import { catchError, map, type Observable, of, Subject, takeUntil, tap } from 'rxjs';
 import { normalizeApiError } from '../../core/http/api-error';
 import { TenantResetRegistry } from '../../core/tenant/tenant-reset-registry.service';
 import { DEFAULT_AVAILABILITY_LIMIT, DEFAULT_AVAILABILITY_PAGE } from './availability-filters';

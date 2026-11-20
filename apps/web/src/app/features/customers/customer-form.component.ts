@@ -1,10 +1,10 @@
 import { Component, effect, inject, input, output } from '@angular/core';
 import {
-  AbstractControl,
+  type AbstractControl,
   FormBuilder,
   ReactiveFormsModule,
-  ValidationErrors,
-  ValidatorFn,
+  type ValidationErrors,
+  type ValidatorFn,
   Validators,
 } from '@angular/forms';
 import { ErrorMessageComponent } from '../../shared/ui/error-message/error-message.component';

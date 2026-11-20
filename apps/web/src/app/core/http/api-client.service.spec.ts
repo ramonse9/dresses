@@ -90,5 +90,11 @@ describe('ApiClient', () => {
     expect(() => client.get('vestidos', { params: { schemaName: 'tenant_untrusted' } })).toThrow(
       'schemaName no es un parámetro permitido.',
     );
+    expect(() => client.get('vestidos', { params: { empresaId: 'empresa-untrusted' } })).toThrow(
+      'empresaId no es un parámetro permitido.',
+    );
+    expect(() => client.get('vestidos', { params: { empresaSlug: 'empresa-untrusted' } })).toThrow(
+      'empresaSlug no es un parámetro permitido.',
+    );
   });
 });

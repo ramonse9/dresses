@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, from, map, Observable, of, switchMap, tap } from 'rxjs';
+import { catchError, from, map, type Observable, of, switchMap, tap } from 'rxjs';
 import { TenantStore } from '../tenant/tenant.store';
 import { AuthStore } from './auth.store';
 

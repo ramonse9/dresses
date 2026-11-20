@@ -1,5 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { type Observable } from 'rxjs';
 import { ApiClient } from '../http/api-client.service';
 import type { AccessTokenResponse, AuthenticatedUser, LoginCredentials } from './auth.models';
 

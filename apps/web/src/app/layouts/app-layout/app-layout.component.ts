@@ -2,7 +2,7 @@ import {
   Component,
   computed,
   effect,
-  ElementRef,
+  type ElementRef,
   HostListener,
   inject,
   signal,

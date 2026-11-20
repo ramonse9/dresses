@@ -992,6 +992,8 @@ La edición Angular se encuentra en `/app/reservaciones/:id/editar` y solamente 
 
 `ReservationsStore` mantiene separados listado y detalle, cancela respuestas pendientes al cambiar de tenant y presenta un `404` seguro para UUIDs ajenos. Estas pantallas no incluyen pagos, daños ni reembolsos.
 
+La auditoría frontend incorpora ESLint para TypeScript, Angular y accesibilidad de templates, además de Playwright para recorridos completos con API simulado. Las pruebas confirman tokens únicamente en memoria, refresh compartido sin ciclos, revocación inmediata, limpieza al cambiar tenant, separación entre `403` y `404`, ausencia de selectores tenant, límites de paginación, strings decimales y fechas con zona horaria. Los fixtures e2e utilizan únicamente identidades `.test`, tokens ficticios y datos en memoria.
+
 Las convenciones completas para agregar features se encuentran en [`apps/web/README.md`](apps/web/README.md).
 
 Para iniciar el API y la aplicación web al mismo tiempo:
@@ -1005,6 +1007,9 @@ También se pueden ejecutar por separado:
 ```bash
 npm run dev:api
 npm run dev:web
+npm run lint
+npm run test
+npm run test:e2e:web
 ```
 
 - Web: <http://localhost:4200>
