@@ -8,6 +8,7 @@ export default defineConfig({
     include: [
       'test/auth-sessions.integration.ts',
       'test/auth-company-selection.integration.ts',
+      'test/equipo-miembros.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,

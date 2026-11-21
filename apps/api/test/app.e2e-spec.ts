@@ -26,6 +26,8 @@ import { ClientesController } from './../src/clientes/clientes.controller.js';
 import { ClientesService } from './../src/clientes/clientes.service.js';
 import { createCorsOptions } from './../src/config/cors.config.js';
 import { DatabaseHealthService } from './../src/database/database-health.service.js';
+import { EquipoController } from './../src/equipo/equipo.controller.js';
+import { EquipoService } from './../src/equipo/equipo.service.js';
 import { DevTenantAdminGuard } from './../src/empresas/dev-tenant-admin.guard.js';
 import { EmpresasController } from './../src/empresas/empresas.controller.js';
 import { EmpresasService } from './../src/empresas/empresas.service.js';
@@ -61,6 +63,20 @@ describe('AppController (e2e)', () => {
   const vestidoId = 'e18c2a56-d33f-4d88-a8e7-42931121e295';
   const clienteId = 'f18c2a56-d33f-4d88-a8e7-42931121e295';
   const reservacionId = '918c2a56-d33f-4d88-a8e7-42931121e295';
+  const miembroId = '818c2a56-d33f-4d88-a8e7-42931121e295';
+  const authenticatedUserId = '019a6f33-82b7-7a22-971b-6a8d7c5e4f30';
+  const miembroResponse = {
+    id: miembroId,
+    usuario: {
+      id: authenticatedUserId,
+      nombre: 'Owner',
+      email: 'owner@example.com',
+      activo: true,
+    },
+    rol: EmpresaUsuarioRol.OWNER,
+    activo: true,
+    createdAt: new Date('2026-11-20T12:00:00.000Z'),
+  };
   const clienteResponse = {
     id: clienteId,
     nombre: 'Ana López',
@@ -132,7 +148,7 @@ describe('AppController (e2e)', () => {
   };
 
   const authenticatedUser = {
-    sub: '019a6f33-82b7-7a22-971b-6a8d7c5e4f30',
+    sub: authenticatedUserId,
     email: 'owner@example.com',
     sessionId: '47ecf96a-8f2c-4e07-bd1f-93936f2cdb90',
   };
@@ -143,6 +159,7 @@ describe('AppController (e2e)', () => {
         AppController,
         AuthController,
         ClientesController,
+        EquipoController,
         EmpresasController,
         ReservacionesController,
         SucursalesController,
@@ -237,6 +254,21 @@ describe('AppController (e2e)', () => {
               schemaName: 'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
               activo: true,
             }),
+          },
+        },
+        {
+          provide: EquipoService,
+          useValue: {
+            findAll: vi.fn().mockResolvedValue({
+              data: [miembroResponse],
+              pagination: {
+                page: 1,
+                limit: 20,
+                total: 1,
+                totalPages: 1,
+              },
+            }),
+            findOne: vi.fn().mockResolvedValue(miembroResponse),
           },
         },
         {
@@ -671,6 +703,77 @@ describe('AppController (e2e)', () => {
 
   it('/api/sucursales rejects requests without JWT', () => {
     return request(app.getHttpServer()).get('/api/sucursales').expect(401);
+  });
+
+  it('/api/equipo/miembros (GET) returns only the scoped safe projection for OWNER', () => {
+    return request(app.getHttpServer())
+      .get('/api/equipo/miembros?page=1&limit=20&rol=OWNER&activo=true&q=owner')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .set('x-empresa-id', 'b28c2a56-d33f-4d88-a8e7-42931121e295')
+      .set('x-schema-name', 'tenant_untrusted')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          data: [
+            {
+              id: miembroId,
+              usuario: {
+                id: authenticatedUserId,
+                nombre: 'Owner',
+                email: 'owner@example.com',
+                activo: true,
+              },
+              rol: EmpresaUsuarioRol.OWNER,
+              activo: true,
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        });
+        expect(JSON.stringify(response.body)).not.toMatch(
+          /passwordHash|refreshTokenHash|sessionId|schemaName|tenant_/,
+        );
+      });
+  });
+
+  it('/api/equipo/miembros/:id (GET) returns OWNER detail', () => {
+    return request(app.getHttpServer())
+      .get(`/api/equipo/miembros/${miembroId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: miembroId,
+          usuario: { id: authenticatedUserId },
+          rol: EmpresaUsuarioRol.OWNER,
+        });
+        expect(JSON.stringify(response.body)).not.toContain('schemaName');
+      });
+  });
+
+  it.each(['/api/equipo/miembros', `/api/equipo/miembros/${miembroId}`])(
+    'returns 403 when EMPLOYEE consults %s',
+    (path) =>
+      request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', 'Bearer employee.jwt.token')
+        .expect(403),
+  );
+
+  it('/api/equipo/miembros rejects tenant selectors and missing JWT', async () => {
+    for (const selector of [
+      ['empresaId', selectedEmpresaId],
+      ['empresaSlug', 'atelier-norte'],
+      ['schemaName', 'tenant_untrusted'],
+      ['usuarioId', authenticatedUserId],
+    ]) {
+      await request(app.getHttpServer())
+        .get('/api/equipo/miembros')
+        .query(Object.fromEntries([selector]))
+        .set('Authorization', 'Bearer selected.jwt.token')
+        .expect(400);
+    }
+
+    await request(app.getHttpServer()).get('/api/equipo/miembros').expect(401);
   });
 
   it('/api/clientes (POST) allows OWNER and normalizes email', () => {

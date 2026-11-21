@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { ClientesModule } from './clientes/clientes.module.js';
 import { validateApplicationEnvironment } from './config/application-environment.js';
 import { DatabaseModule } from './database/database.module.js';
+import { EquipoModule } from './equipo/equipo.module.js';
 import { EmpresasModule } from './empresas/empresas.module.js';
 import { ReservacionesModule } from './reservaciones/reservaciones.module.js';
 import { SucursalesModule } from './sucursales/sucursales.module.js';
@@ -20,6 +21,7 @@ import { VestidosModule } from './vestidos/vestidos.module.js';
       validate: validateApplicationEnvironment,
     }),
     DatabaseModule,
+    EquipoModule,
     EmpresasModule,
     SucursalesModule,
     UsuariosModule,

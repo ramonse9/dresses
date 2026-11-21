@@ -136,6 +136,51 @@ La migration global correspondiente es `CreateUsuariosMemberships1794442297164` 
 
 Las sesiones también son globales y viven en `public.auth_sessions`. Cada registro pertenece a un usuario y contiene únicamente el hash del refresh token, su expiración y el momento opcional de revocación. La migration `CreateAuthSessions1794528000000` crea esta tabla y sus índices.
 
+### Consulta administrativa de miembros
+
+Un `OWNER` puede consultar las membresías de la empresa seleccionada sin cambiar el `search_path`, porque `EmpresaUsuario` y `Usuario` pertenecen explícitamente a `public`:
+
+```text
+GET /api/equipo/miembros
+GET /api/equipo/miembros/:id
+```
+
+Ambas rutas usan `JwtAuthGuard`, `TenantAuthGuard` y `RolesGuard`. El alcance se obtiene exclusivamente de `TenantScope.empresaId`; los parámetros `empresaId`, `empresaSlug`, `schemaName` y `usuarioId` son rechazados y los headers personalizados de tenant no modifican el contexto verificado. `EMPLOYEE` recibe `403` y una membresía de otra empresa responde `404`.
+
+El listado admite `page`, `limit` —con máximo de 100—, `rol`, `activo` y `q` por nombre o email. Utiliza el orden estable `createdAt DESC, id DESC` y el formato paginado estándar:
+
+```bash
+curl 'http://localhost:3000/api/equipo/miembros?page=1&limit=20&rol=EMPLOYEE&activo=true&q=ana' \
+  --header 'Authorization: Bearer eyJ...'
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "818c2a56-d33f-4d88-a8e7-42931121e295",
+      "usuario": {
+        "id": "019a6f33-82b7-7a22-971b-6a8d7c5e4f30",
+        "nombre": "Ana López",
+        "email": "ana@example.com",
+        "activo": true
+      },
+      "rol": "EMPLOYEE",
+      "activo": true,
+      "createdAt": "2026-11-20T12:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+La respuesta se construye mediante una proyección explícita y nunca incluye `passwordHash`, sesiones, hashes de refresh, nombres de schemas ni membresías del mismo usuario en otras empresas. Este paso es únicamente de consulta: todavía no crea invitaciones ni modifica roles o estados.
+
 ## Autenticación JWT
 
 `AuthModule` implementa autenticación básica sin abrir registro público:
