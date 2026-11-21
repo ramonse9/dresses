@@ -9,6 +9,7 @@ export default defineConfig({
       'test/auth-sessions.integration.ts',
       'test/auth-company-selection.integration.ts',
       'test/equipo-miembros.integration.ts',
+      'test/equipo-membresias.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,

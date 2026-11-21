@@ -52,4 +52,38 @@ describe('EquipoController', () => {
     expect(JSON.stringify(findOne.mock.calls)).not.toContain('schemaName');
     expect(JSON.stringify(findOne.mock.calls)).not.toContain('tenant_');
   });
+
+  it('forwards only a validated role change', async () => {
+    const response = { id: 'membership-id', rol: EmpresaUsuarioRol.EMPLOYEE };
+    const updateRol = vi.fn().mockResolvedValue(response);
+    const controller = new EquipoController({
+      updateRol,
+    } as unknown as EquipoService);
+
+    await expect(
+      controller.updateRol(tenant, 'membership-id', { rol: 'EMPLOYEE' }),
+    ).resolves.toBe(response);
+    expect(updateRol).toHaveBeenCalledWith(
+      tenant.empresaId,
+      'membership-id',
+      EmpresaUsuarioRol.EMPLOYEE,
+    );
+  });
+
+  it('forwards only a validated membership state', async () => {
+    const response = { id: 'membership-id', activo: false };
+    const updateEstado = vi.fn().mockResolvedValue(response);
+    const controller = new EquipoController({
+      updateEstado,
+    } as unknown as EquipoService);
+
+    await expect(
+      controller.updateEstado(tenant, 'membership-id', { activo: false }),
+    ).resolves.toBe(response);
+    expect(updateEstado).toHaveBeenCalledWith(
+      tenant.empresaId,
+      'membership-id',
+      false,
+    );
+  });
 });

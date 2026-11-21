@@ -179,7 +179,42 @@ curl 'http://localhost:3000/api/equipo/miembros?page=1&limit=20&rol=EMPLOYEE&act
 }
 ```
 
-La respuesta se construye mediante una proyección explícita y nunca incluye `passwordHash`, sesiones, hashes de refresh, nombres de schemas ni membresías del mismo usuario en otras empresas. Este paso es únicamente de consulta: todavía no crea invitaciones ni modifica roles o estados.
+La respuesta se construye mediante una proyección explícita y nunca incluye `passwordHash`, sesiones, hashes de refresh, nombres de schemas ni membresías del mismo usuario en otras empresas.
+
+### Administración de membresías
+
+Un `OWNER` puede modificar exclusivamente el rol o el estado de una membresía existente de su empresa:
+
+```text
+PATCH /api/equipo/miembros/:id/rol
+PATCH /api/equipo/miembros/:id/estado
+```
+
+| Operación                   | OWNER     | EMPLOYEE |
+| --------------------------- | --------- | -------- |
+| Consultar miembros          | Permitido | 403      |
+| Cambiar `OWNER`/`EMPLOYEE`  | Permitido | 403      |
+| Activar o desactivar acceso | Permitido | 403      |
+
+Los cuerpos son estrictos y aceptan exactamente un campo:
+
+```bash
+curl --request PATCH http://localhost:3000/api/equipo/miembros/ID_MEMBRESIA/rol \
+  --header 'Authorization: Bearer TOKEN_CON_EMPRESA' \
+  --header 'Content-Type: application/json' \
+  --data '{"rol":"EMPLOYEE"}'
+
+curl --request PATCH http://localhost:3000/api/equipo/miembros/ID_MEMBRESIA/estado \
+  --header 'Authorization: Bearer TOKEN_CON_EMPRESA' \
+  --header 'Content-Type: application/json' \
+  --data '{"activo":false}'
+```
+
+El backend obtiene `empresaId` del `TenantScope` verificado; nunca acepta selectores de tenant ni modifica `Usuario`, contraseñas, sesiones o membresías de otras empresas. Una desactivación retira inmediatamente el acceso a esa empresa, pero conserva las demás sesiones y membresías del usuario. La reactivación exige que tanto el usuario global como la empresa continúen activos.
+
+Toda mutación se ejecuta en una transacción sobre `public`. El servicio bloquea primero la fila de `Empresa` y después la de `EmpresaUsuario`, vuelve a contar las membresías `OWNER` activas cuyos usuarios globales también estén activos y responde `409` si la operación dejaría a la empresa sin propietario efectivo. Este orden serializa los cambios de una misma empresa y protege al último `OWNER` incluso ante solicitudes concurrentes. Un `OWNER` puede desactivar su propia membresía únicamente cuando permanece otro `OWNER` activo.
+
+Todavía no se crean usuarios ni invitaciones desde estas rutas.
 
 ## Autenticación JWT
 

@@ -32,6 +32,14 @@ export type PaginatedMiembrosResponseDto = {
   };
 };
 
+export type UpdateMiembroRolDto = {
+  rol: EmpresaUsuarioRol;
+};
+
+export type UpdateMiembroEstadoDto = {
+  activo: boolean;
+};
+
 const listFields = new Set(['page', 'limit', 'rol', 'activo', 'q']);
 
 function requireObject(value: unknown): Record<string, unknown> {
@@ -40,6 +48,30 @@ function requireObject(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>;
+}
+
+function parseSingleFieldBody(
+  body: unknown,
+  field: string,
+): Record<string, unknown> {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new BadRequestException(
+      'El cuerpo de la solicitud debe ser un objeto',
+    );
+  }
+
+  const input = body as Record<string, unknown>;
+  const fields = Object.keys(input);
+  if (fields.length !== 1 || fields[0] !== field) {
+    const unexpected = fields.find((candidate) => candidate !== field);
+    throw new BadRequestException(
+      unexpected
+        ? `Campo no permitido: ${unexpected}`
+        : `${field} es requerido`,
+    );
+  }
+
+  return input;
 }
 
 function parsePositiveInteger(
@@ -120,4 +152,29 @@ export function parseListMiembrosQuery(query: unknown): ListMiembrosQueryDto {
   }
 
   return result;
+}
+
+export function parseUpdateMiembroRolBody(body: unknown): UpdateMiembroRolDto {
+  const input = parseSingleFieldBody(body, 'rol');
+
+  if (
+    input.rol !== EmpresaUsuarioRol.OWNER &&
+    input.rol !== EmpresaUsuarioRol.EMPLOYEE
+  ) {
+    throw new BadRequestException('rol debe ser OWNER o EMPLOYEE');
+  }
+
+  return { rol: input.rol };
+}
+
+export function parseUpdateMiembroEstadoBody(
+  body: unknown,
+): UpdateMiembroEstadoDto {
+  const input = parseSingleFieldBody(body, 'activo');
+
+  if (typeof input.activo !== 'boolean') {
+    throw new BadRequestException('activo debe ser booleano');
+  }
+
+  return { activo: input.activo };
 }

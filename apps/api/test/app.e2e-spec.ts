@@ -269,6 +269,14 @@ describe('AppController (e2e)', () => {
               },
             }),
             findOne: vi.fn().mockResolvedValue(miembroResponse),
+            updateRol: vi.fn().mockResolvedValue({
+              ...miembroResponse,
+              rol: EmpresaUsuarioRol.EMPLOYEE,
+            }),
+            updateEstado: vi.fn().mockResolvedValue({
+              ...miembroResponse,
+              activo: false,
+            }),
           },
         },
         {
@@ -774,6 +782,79 @@ describe('AppController (e2e)', () => {
     }
 
     await request(app.getHttpServer()).get('/api/equipo/miembros').expect(401);
+  });
+
+  it('/api/equipo/miembros/:id/rol (PATCH) changes a membership role for OWNER', () => {
+    return request(app.getHttpServer())
+      .patch(`/api/equipo/miembros/${miembroId}/rol`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ rol: EmpresaUsuarioRol.EMPLOYEE })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: miembroId,
+          rol: EmpresaUsuarioRol.EMPLOYEE,
+        });
+        expect(JSON.stringify(response.body)).not.toMatch(
+          /passwordHash|refreshTokenHash|sessionId|schemaName|tenant_/,
+        );
+      });
+  });
+
+  it('/api/equipo/miembros/:id/estado (PATCH) changes membership state for OWNER', () => {
+    return request(app.getHttpServer())
+      .patch(`/api/equipo/miembros/${miembroId}/estado`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ activo: false })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({ id: miembroId, activo: false });
+      });
+  });
+
+  it.each(['rol', 'estado'])(
+    'returns 403 when EMPLOYEE changes membership %s',
+    (operation) =>
+      request(app.getHttpServer())
+        .patch(`/api/equipo/miembros/${miembroId}/${operation}`)
+        .set('Authorization', 'Bearer employee.jwt.token')
+        .send(
+          operation === 'rol'
+            ? { rol: EmpresaUsuarioRol.OWNER }
+            : { activo: false },
+        )
+        .expect(403),
+  );
+
+  it('/api/equipo/miembros mutations reject empty, protected and tenant fields', async () => {
+    for (const body of [
+      {},
+      { rol: 'ADMIN' },
+      { rol: EmpresaUsuarioRol.OWNER, usuarioId: authenticatedUserId },
+      { rol: EmpresaUsuarioRol.OWNER, empresaId: selectedEmpresaId },
+      { rol: EmpresaUsuarioRol.OWNER, email: 'other@example.com' },
+      { rol: EmpresaUsuarioRol.OWNER, nombre: 'Other' },
+      { rol: EmpresaUsuarioRol.OWNER, password: 'secret' },
+      { rol: EmpresaUsuarioRol.OWNER, schemaName: 'tenant_untrusted' },
+    ]) {
+      await request(app.getHttpServer())
+        .patch(`/api/equipo/miembros/${miembroId}/rol`)
+        .set('Authorization', 'Bearer selected.jwt.token')
+        .send(body)
+        .expect(400);
+    }
+
+    for (const body of [
+      {},
+      { activo: 'false' },
+      { activo: false, empresaSlug: 'untrusted' },
+    ]) {
+      await request(app.getHttpServer())
+        .patch(`/api/equipo/miembros/${miembroId}/estado`)
+        .set('Authorization', 'Bearer selected.jwt.token')
+        .send(body)
+        .expect(400);
+    }
   });
 
   it('/api/clientes (POST) allows OWNER and normalizes email', () => {

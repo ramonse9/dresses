@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import type { Repository } from 'typeorm';
+import type { DataSource, Repository } from 'typeorm';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { EmpresaUsuario } from '../usuarios/entities/empresa-usuario.entity.js';
 import { Usuario } from '../usuarios/entities/usuario.entity.js';
@@ -65,7 +65,7 @@ describe('EquipoService', () => {
     const repository = {
       createQueryBuilder: vi.fn().mockReturnValue(builder),
     } as unknown as Repository<EmpresaUsuario>;
-    const service = new EquipoService(repository);
+    const service = new EquipoService(repository, {} as DataSource);
 
     const result = await service.findAll(empresaId, {
       page: 2,
@@ -121,7 +121,7 @@ describe('EquipoService', () => {
     const repository = {
       createQueryBuilder: vi.fn().mockReturnValue(builder),
     } as unknown as Repository<EmpresaUsuario>;
-    const service = new EquipoService(repository);
+    const service = new EquipoService(repository, {} as DataSource);
 
     await expect(
       service.findOne(empresaId, membresia.id),
@@ -140,7 +140,7 @@ describe('EquipoService', () => {
     const repository = {
       createQueryBuilder: vi.fn().mockReturnValue(builder),
     } as unknown as Repository<EmpresaUsuario>;
-    const service = new EquipoService(repository);
+    const service = new EquipoService(repository, {} as DataSource);
 
     await expect(
       service.findOne(empresaId, membresia.id),
