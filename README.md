@@ -68,6 +68,7 @@ JWT_ACCESS_SECRET=un_secreto_local_aleatorio_de_al_menos_32_bytes
 JWT_ACCESS_TTL_SECONDS=900
 AUTH_REFRESH_TTL_SECONDS=2592000
 CORS_ALLOWED_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
+TRUST_PROXY=false
 ```
 
 El archivo `.env` está ignorado por Git. TypeORM tiene `synchronize: false`; los cambios de esquema se gestionan exclusivamente mediante migrations.
@@ -298,6 +299,40 @@ La respuesta JSON contiene únicamente el access token de corta duración:
   "expiresIn": 900
 }
 ```
+
+### Protección contra abuso
+
+Los endpoints públicos de autenticación cuentan con políticas independientes de rate limiting. En este paso solamente `POST /api/auth/login` aplica su política; las demás quedan preparadas para los flujos posteriores de invitaciones y recuperación de contraseña. `refresh`, las rutas autenticadas y las rutas tenant no consumen la ventana de login.
+
+| Política                       | Límite predeterminado | Ventana predeterminada |
+| ------------------------------ | --------------------: | ---------------------: |
+| Login                          |                     5 |            60 segundos |
+| Verificación de invitación     |                    20 |            60 segundos |
+| Aceptación de invitación       |                     5 |           300 segundos |
+| Solicitud de recuperación      |                     3 |           900 segundos |
+| Restablecimiento de contraseña |                     5 |           900 segundos |
+
+Cada política se configura de forma independiente:
+
+```env
+AUTH_RATE_LIMIT_LOGIN_LIMIT=5
+AUTH_RATE_LIMIT_LOGIN_WINDOW_SECONDS=60
+AUTH_RATE_LIMIT_INVITATION_VERIFICATION_LIMIT=20
+AUTH_RATE_LIMIT_INVITATION_VERIFICATION_WINDOW_SECONDS=60
+AUTH_RATE_LIMIT_INVITATION_ACCEPTANCE_LIMIT=5
+AUTH_RATE_LIMIT_INVITATION_ACCEPTANCE_WINDOW_SECONDS=300
+AUTH_RATE_LIMIT_RECOVERY_REQUEST_LIMIT=3
+AUTH_RATE_LIMIT_RECOVERY_REQUEST_WINDOW_SECONDS=900
+AUTH_RATE_LIMIT_PASSWORD_RESET_LIMIT=5
+AUTH_RATE_LIMIT_PASSWORD_RESET_WINDOW_SECONDS=900
+TRUST_PROXY=false
+```
+
+Al exceder un límite, el API responde `429` con un mensaje genérico e incluye `Retry-After` en segundos. La clave interna se deriva de `request.ip`, el endpoint y la política; nunca incorpora contraseñas, tokens, cookies, cuerpos, nombres de schema ni headers de autenticación.
+
+Express no confía en `X-Forwarded-For` de forma predeterminada. Mantén `TRUST_PROXY=false` al acceder directamente al API. Configura `TRUST_PROXY=true` solamente cuando la aplicación esté detrás de un proxy controlado que reemplace correctamente ese header; así `request.ip` puede representar al cliente real. `AuthOriginGuard` continúa validando el origen del navegador y admite clientes no navegador sin header `Origin`.
+
+El almacenamiento inicial del rate limiter es local al proceso. Si el API se despliega con varias réplicas, debe sustituirse por un almacenamiento compartido compatible antes de considerar los límites globales entre instancias.
 
 El JWT inicial contiene `sub`, `email` y un `sessionId` aleatorio, además de los timestamps estándar del token. No contiene `schemaName`, empresa ni membresía. El access token nunca se almacena en una cookie.
 

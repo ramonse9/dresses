@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TenancyModule } from '../tenancy/tenancy.module.js';
 import { UsuariosModule } from '../usuarios/usuarios.module.js';
+import { AuthRateLimitModule } from '../security/auth-rate-limit/auth-rate-limit.module.js';
 import { AuthController } from './auth.controller.js';
 import { AuthOriginGuard } from './auth-origin.guard.js';
 import { AuthSessionsService } from './auth-sessions.service.js';
@@ -38,6 +39,7 @@ import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.intercepto
     TypeOrmModule.forFeature([AuthSession]),
     TenancyModule,
     UsuariosModule,
+    AuthRateLimitModule,
   ],
   controllers: [AuthController],
   providers: [

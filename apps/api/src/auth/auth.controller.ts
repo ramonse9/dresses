@@ -10,6 +10,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { AuthRateLimit } from '../security/auth-rate-limit/auth-rate-limit.decorator.js';
+import { AUTH_RATE_LIMIT_POLICIES } from '../security/auth-rate-limit/auth-rate-limit.config.js';
 import { AuthOriginGuard } from './auth-origin.guard.js';
 import { AccessTokenResponse, AuthService } from './auth.service.js';
 import { CurrentUser } from './current-user.decorator.js';
@@ -30,6 +32,7 @@ export class AuthController {
   ) {}
 
   @Post('login')
+  @AuthRateLimit(AUTH_RATE_LIMIT_POLICIES.LOGIN)
   async login(
     @Body() body: unknown,
     @Res({ passthrough: true }) response: Response,

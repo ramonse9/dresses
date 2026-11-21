@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import {
   Controller,
   ExecutionContext,
@@ -34,6 +35,8 @@ import { EmpresasService } from './../src/empresas/empresas.service.js';
 import { ReservacionEstado } from './../src/reservaciones/entities/reservacion.tenant-entity.js';
 import { ReservacionesController } from './../src/reservaciones/reservaciones.controller.js';
 import { ReservacionesService } from './../src/reservaciones/reservaciones.service.js';
+import { createAuthRateLimitOptions } from './../src/security/auth-rate-limit/auth-rate-limit.config.js';
+import { AuthRateLimitGuard } from './../src/security/auth-rate-limit/auth-rate-limit.guard.js';
 import { SucursalesController } from './../src/sucursales/sucursales.controller.js';
 import { SucursalesService } from './../src/sucursales/sucursales.service.js';
 import type { TenantScope } from './../src/tenancy/tenant-scope.js';
@@ -155,6 +158,7 @@ describe('AppController (e2e)', () => {
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [ThrottlerModule.forRoot(createAuthRateLimitOptions())],
       controllers: [
         AppController,
         AuthController,
@@ -177,6 +181,7 @@ describe('AppController (e2e)', () => {
           }),
         },
         AuthOriginGuard,
+        AuthRateLimitGuard,
         RefreshTokenCookieService,
         {
           provide: AuthService,
@@ -481,6 +486,37 @@ describe('AppController (e2e)', () => {
         expect(cookie).not.toContain('Secure');
         expect(response.body).not.toHaveProperty('refreshToken');
       });
+  });
+
+  it('/api/auth/login (POST) applies its rate limit without blocking refresh', async () => {
+    const credentials = {
+      email: 'owner@example.com',
+      password: 'rate-limit-secret-password',
+    };
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send(credentials)
+        .expect(201);
+    }
+
+    const limited = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send(credentials)
+      .expect(429);
+
+    expect(limited.headers['retry-after']).toMatch(/^\d+$/);
+    expect(limited.body).toEqual({
+      statusCode: 429,
+      message: 'Demasiadas solicitudes. Intenta nuevamente más tarde.',
+    });
+    expect(JSON.stringify(limited.body)).not.toContain(credentials.password);
+
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', `${AUTH_REFRESH_COOKIE_NAME}=${refreshToken}`)
+      .expect(200);
   });
 
   it('/api/auth/refresh (POST) rotates the cookie and returns only an access token', () => {
