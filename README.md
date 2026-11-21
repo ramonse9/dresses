@@ -231,6 +231,40 @@ La navegación y los controles se muestran según esta matriz visual:
 
 La interfaz solicita confirmación antes de degradar un `OWNER`, desactivar una membresía o modificar la membresía propia. Un `409` se presenta como protección del último propietario, mientras que `403` y `404` se mantienen diferenciados. Después de cada mutación, el store vuelve a consultar el registro autoritativo. La ocultación visual no sustituye los guards ni la autorización del API.
 
+## Correo transaccional
+
+`MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Actualmente no existen endpoints, invitaciones ni correos de recuperación que utilicen esta infraestructura.
+
+Configuración local segura:
+
+```env
+MAIL_MODE=disabled
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_SECURE=false
+MAIL_USERNAME=change_me
+MAIL_PASSWORD=change_me
+MAIL_FROM=Vestidos SaaS <no-reply@example.com>
+WEB_APP_URL=http://localhost:4200
+```
+
+`MAIL_MODE=disabled` es válido fuera de producción. Si algún servicio intenta enviar, recibe `MailDisabledError`; el contenido, las URLs y posibles tokens no se imprimen. En producción se exige `MAIL_MODE=smtp` y todas las variables SMTP. `WEB_APP_URL` debe ser exclusivamente un origen HTTP(S), sin comodines, credenciales, rutas, query strings ni fragmentos.
+
+El remitente se toma siempre de `MAIL_FROM`; la entrada de `TransactionalMailService` no permite seleccionar remitente, host, credenciales, templates o rutas. Los futuros templates deben vivir dentro del backend y escapar cada valor dinámico con `escapeMailHtml()` antes de insertarlo en HTML. Ningún error de transporte conserva mensajes del proveedor que puedan incluir secretos.
+
+Para pruebas puede sustituirse el transporte sin SMTP:
+
+```ts
+const testingModule = await Test.createTestingModule({
+  imports: [MailModule],
+})
+  .overrideProvider(MAIL_TRANSPORT)
+  .useValue(new InMemoryMailTransport())
+  .compile();
+```
+
+`InMemoryMailTransport` conserva mensajes solamente en memoria y permite limpiarlos entre casos. En producción, el provider interno crea el transporte Nodemailer con la configuración validada.
+
 ## Autenticación JWT
 
 `AuthModule` implementa autenticación básica sin abrir registro público:

@@ -8,6 +8,7 @@ import { validateApplicationEnvironment } from './config/application-environment
 import { DatabaseModule } from './database/database.module.js';
 import { EquipoModule } from './equipo/equipo.module.js';
 import { EmpresasModule } from './empresas/empresas.module.js';
+import { MailModule } from './mail/mail.module.js';
 import { ReservacionesModule } from './reservaciones/reservaciones.module.js';
 import { SucursalesModule } from './sucursales/sucursales.module.js';
 import { UsuariosModule } from './usuarios/usuarios.module.js';
@@ -29,6 +30,7 @@ import { VestidosModule } from './vestidos/vestidos.module.js';
     ClientesModule,
     ReservacionesModule,
     VestidosModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [AppService],
