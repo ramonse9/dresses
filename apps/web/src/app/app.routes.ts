@@ -89,6 +89,11 @@ export const routes: Routes = [
             ({ RESERVATIONS_ROUTES }) => RESERVATIONS_ROUTES,
           ),
       },
+      {
+        path: 'equipo',
+        loadChildren: () =>
+          import('./features/team/team.routes').then(({ TEAM_ROUTES }) => TEAM_ROUTES),
+      },
     ],
   },
   { path: '**', redirectTo: '' },

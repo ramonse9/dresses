@@ -216,6 +216,21 @@ Toda mutación se ejecuta en una transacción sobre `public`. El servicio bloque
 
 Todavía no se crean usuarios ni invitaciones desde estas rutas.
 
+### Administración de equipo en Angular
+
+El frontend expone el feature lazy-loaded en `/app/equipo`, con listado filtrable y detalle administrativo. El listado conserva `page`, `limit`, `rol`, `activo` y `q` en los query parameters, aplica debounce a la búsqueda e ignora respuestas obsoletas. Su store está registrado en `TenantResetRegistry`, por lo que listado, detalle y solicitudes pendientes se limpian al cambiar de empresa.
+
+La navegación y los controles se muestran según esta matriz visual:
+
+| Acción                             | OWNER     | EMPLOYEE |
+| ---------------------------------- | --------- | -------- |
+| Ver enlace de Equipo               | Permitido | Oculto   |
+| Consultar listado y detalle        | Permitido | 403 API  |
+| Cambiar rol                        | Permitido | Oculto   |
+| Activar o desactivar una membresía | Permitido | Oculto   |
+
+La interfaz solicita confirmación antes de degradar un `OWNER`, desactivar una membresía o modificar la membresía propia. Un `409` se presenta como protección del último propietario, mientras que `403` y `404` se mantienen diferenciados. Después de cada mutación, el store vuelve a consultar el registro autoritativo. La ocultación visual no sustituye los guards ni la autorización del API.
+
 ## Autenticación JWT
 
 `AuthModule` implementa autenticación básica sin abrir registro público:

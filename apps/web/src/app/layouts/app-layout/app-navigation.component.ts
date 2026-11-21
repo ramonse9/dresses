@@ -84,6 +84,16 @@ import type { AppNavigationItem } from '../../core/navigation/app-navigation';
                       />
                     </svg>
                   }
+                  @case ('team') {
+                    <svg class="size-5" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M15.5 20v-1.5A3.5 3.5 0 0 0 12 15H6.5A3.5 3.5 0 0 0 3 18.5V20m6.25-8a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 8v6m-3-3h6"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  }
                 }
               </span>
               <span>{{ item.label }}</span>

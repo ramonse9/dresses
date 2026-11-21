@@ -12,6 +12,8 @@ export interface MockApiState {
   role: MockRole;
   reservationStatus: 'BORRADOR' | 'CONFIRMADA' | 'ENTREGADA' | 'DEVUELTA' | 'CANCELADA';
   cancellationReason: string | null;
+  teamMemberRole: MockRole;
+  teamMemberActive: boolean;
 }
 
 const now = '2026-11-20T15:00:00.000Z';
@@ -22,6 +24,8 @@ export const ids = {
   createdCustomer: '66666666-6666-4666-8666-666666666666',
   dress: '33333333-3333-4333-8333-333333333333',
   reservation: '44444444-4444-4444-8444-444444444444',
+  member: '55555555-5555-4555-8555-555555555555',
+  memberUser: '99999999-9999-4999-8999-999999999999',
 } as const;
 
 const branch = {
@@ -71,6 +75,8 @@ export async function installMockApi(
     role: options.role ?? 'OWNER',
     reservationStatus: 'BORRADOR',
     cancellationReason: null,
+    teamMemberRole: 'EMPLOYEE',
+    teamMemberActive: true,
   };
 
   await page.route('http://localhost:3000/api/**', async (route) => {
@@ -114,6 +120,30 @@ async function handleApiRoute(route: Route, state: MockApiState): Promise<void> 
     ]);
   }
   if (path === 'auth/select-empresa' && method === 'POST') return fulfill(route, 200, token());
+
+  if (path === 'equipo/miembros' && method === 'GET') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    return fulfill(route, 200, {
+      data: [teamMember(state)],
+      pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+    });
+  }
+  if (path === `equipo/miembros/${ids.member}` && method === 'GET') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    return fulfill(route, 200, teamMember(state));
+  }
+  if (path === `equipo/miembros/${ids.member}/rol` && method === 'PATCH') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    const input = request.postDataJSON() as { rol: MockRole };
+    state.teamMemberRole = input.rol;
+    return fulfill(route, 200, teamMember(state));
+  }
+  if (path === `equipo/miembros/${ids.member}/estado` && method === 'PATCH') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    const input = request.postDataJSON() as { activo: boolean };
+    state.teamMemberActive = input.activo;
+    return fulfill(route, 200, teamMember(state));
+  }
 
   if (path === 'sucursales' && method === 'GET') return fulfill(route, 200, [branch]);
   if (path === 'clientes' && method === 'GET') {
@@ -230,6 +260,21 @@ function reservation(state: MockApiState) {
     motivoCancelacion: state.cancellationReason,
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+function teamMember(state: MockApiState) {
+  return {
+    id: ids.member,
+    usuario: {
+      id: ids.memberUser,
+      nombre: 'Mariana Torres',
+      email: 'mariana@example.test',
+      activo: true,
+    },
+    rol: state.teamMemberRole,
+    activo: state.teamMemberActive,
+    createdAt: now,
   };
 }
 

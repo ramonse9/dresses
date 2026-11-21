@@ -73,6 +73,7 @@ describe('AppLayoutComponent', () => {
       'Vestidos',
       'Disponibilidad',
       'Reservaciones',
+      'Equipo',
     ]) {
       expect(text).toContain(label);
     }
@@ -84,6 +85,7 @@ describe('AppLayoutComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Empleado');
     expect(fixture.nativeElement.textContent).toContain('Reservaciones');
+    expect(fixture.nativeElement.textContent).not.toContain('Equipo');
   });
 
   it('opens and closes the accessible mobile menu', () => {

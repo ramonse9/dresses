@@ -110,6 +110,35 @@ test('keeps mobile navigation keyboard-accessible', async ({ page }) => {
   await expect(trigger).toBeFocused();
 });
 
+test('OWNER administers team role and membership state', async ({ page }) => {
+  await installMockApi(page, { role: 'OWNER' });
+  await page.goto('/app/dashboard');
+  await page.getByRole('link', { name: 'Equipo' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Equipo' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Mariana Torres' })).toBeVisible();
+  await page.goto(`/app/equipo/${ids.member}`);
+  await expect(page.getByRole('heading', { name: 'Mariana Torres' })).toBeVisible();
+
+  await page.getByLabel('Rol').selectOption('OWNER');
+  await page.getByRole('button', { name: 'Guardar rol' }).click();
+  await expect(page.getByLabel('Rol')).toHaveValue('OWNER');
+
+  await page.getByRole('button', { name: 'Desactivar membresía' }).click();
+  await expect(page.getByRole('dialog')).toContainText('únicamente a la empresa actual');
+  await page.getByRole('button', { name: 'Confirmar acción' }).click();
+  await expect(page.getByRole('button', { name: 'Activar membresía' })).toBeVisible();
+});
+
+test('hides Equipo from EMPLOYEE and preserves a forced 403', async ({ page }) => {
+  await installMockApi(page, { role: 'EMPLOYEE' });
+  await page.goto('/app/dashboard');
+  await expect(page.getByRole('link', { name: 'Equipo' })).toHaveCount(0);
+
+  await page.goto('/app/equipo');
+  await expect(page.getByText('No tienes autorización para administrar el equipo')).toBeVisible();
+  await expect(page.getByText(/no existe o pertenece/)).toHaveCount(0);
+});
+
 async function runTransition(page: Page, action: string): Promise<void> {
   await page.getByRole('button', { name: action }).click();
   await page.getByRole('button', { name: 'Confirmar acción' }).click();

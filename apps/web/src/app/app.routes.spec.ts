@@ -12,6 +12,7 @@ import { CustomersStore } from './features/customers/customers.store';
 import { DressesStore } from './features/dresses/dresses.store';
 import { ReservationCreateStore } from './features/reservations/reservation-create.store';
 import { ReservationsStore } from './features/reservations/reservations.store';
+import { TeamStore } from './features/team/team.store';
 
 describe('application routes', () => {
   const authenticated = signal(false);
@@ -93,6 +94,18 @@ describe('application routes', () => {
     motivoCancelacion: null,
     createdAt: '2026-11-01T00:00:00.000Z',
     updatedAt: '2026-11-01T00:00:00.000Z',
+  };
+  const member = {
+    id: '55555555-5555-4555-8555-555555555555',
+    usuario: {
+      id: '77777777-7777-4777-8777-777777777777',
+      nombre: 'Owner Principal',
+      email: 'owner@example.test',
+      activo: true,
+    },
+    rol: 'OWNER' as const,
+    activo: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
   };
 
   beforeEach(() => {
@@ -215,6 +228,23 @@ describe('application routes', () => {
             cancel: () => of(reservation),
           },
         },
+        {
+          provide: TeamStore,
+          useValue: {
+            listState: signal({
+              status: 'loaded',
+              data: [member],
+              pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+              filters: { page: 1, limit: 20 },
+              error: null,
+            }).asReadonly(),
+            detailState: signal({ status: 'loaded', data: member, error: null }).asReadonly(),
+            loadList: () => of(undefined),
+            loadDetail: () => of(undefined),
+            changeRole: () => of(member),
+            changeStatus: () => of(member),
+          },
+        },
       ],
     });
   });
@@ -240,6 +270,8 @@ describe('application routes', () => {
     ['/app/reservaciones/nueva', 'Crear reservación'],
     [`/app/reservaciones/${reservation.id}/editar`, 'Editar reservación'],
     [`/app/reservaciones/${reservation.id}`, 'Ana López'],
+    ['/app/equipo', 'Equipo'],
+    [`/app/equipo/${member.id}`, 'Owner Principal'],
   ])('renders %s', async (url, expectedText) => {
     authenticated.set(url === '/seleccionar-empresa' || url.startsWith('/app'));
     selectedTenant.set(url.startsWith('/app'));

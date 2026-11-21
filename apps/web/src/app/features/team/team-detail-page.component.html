@@ -1,0 +1,181 @@
+<section
+  class="mx-auto max-w-5xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10"
+  aria-labelledby="member-title"
+>
+  <a
+    routerLink="/app/equipo"
+    [queryParams]="returnQueryParams"
+    class="inline-flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold text-stone-600 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600"
+    >Volver al equipo</a
+  >
+  <div class="mt-5" aria-live="polite">
+    @switch (store.detailState().status) {
+      @case ('idle') {
+        <div class="rounded-3xl border border-stone-200 bg-white p-8">
+          <app-loading-indicator label="Preparando miembro…" />
+        </div>
+      }
+      @case ('loading') {
+        <div class="rounded-3xl border border-stone-200 bg-white p-8">
+          <app-loading-indicator label="Cargando miembro…" />
+        </div>
+      }
+      @case ('error') {
+        <div class="space-y-4 rounded-3xl border border-stone-200 bg-white p-7">
+          <app-error-message [error]="errorMessage()" />
+          @if (
+            store.detailState().error?.status !== 403 && store.detailState().error?.status !== 404
+          ) {
+            <button
+              type="button"
+              class="min-h-11 rounded-full bg-stone-950 px-5 py-2 font-semibold text-white"
+              (click)="retry()"
+            >
+              Reintentar
+            </button>
+          }
+        </div>
+      }
+      @case ('loaded') {
+        @if (store.detailState().data; as member) {
+          <article class="overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
+            <header class="border-b border-stone-200 p-7 sm:p-10">
+              <p class="text-sm font-semibold uppercase tracking-[0.18em] text-rose-700">
+                Membresía
+              </p>
+              <h1 id="member-title" class="mt-2 font-serif text-3xl text-stone-950 sm:text-4xl">
+                {{ member.usuario.nombre }}
+              </h1>
+              <p class="mt-2 break-all text-stone-600">{{ member.usuario.email }}</p>
+              @if (isCurrentUser()) {
+                <p
+                  class="mt-3 inline-flex rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-800"
+                >
+                  Esta es tu membresía
+                </p>
+              }
+            </header>
+            @if (mutationError()) {
+              <div class="border-b border-stone-200 p-5 sm:px-10">
+                <app-error-message [error]="mutationError()" />
+              </div>
+            }
+            <dl class="grid gap-px bg-stone-200 sm:grid-cols-3">
+              <div class="bg-white p-7">
+                <dt class="text-sm font-semibold text-stone-500">Membresía</dt>
+                <dd class="mt-2 text-stone-950">{{ member.activo ? 'Activa' : 'Inactiva' }}</dd>
+              </div>
+              <div class="bg-white p-7">
+                <dt class="text-sm font-semibold text-stone-500">Usuario global</dt>
+                <dd class="mt-2 text-stone-950">
+                  {{ member.usuario.activo ? 'Activo' : 'Inactivo' }}
+                </dd>
+              </div>
+              <div class="bg-white p-7">
+                <dt class="text-sm font-semibold text-stone-500">Incorporación</dt>
+                <dd class="mt-2 text-stone-950">{{ member.createdAt | date: 'longDate' }}</dd>
+              </div>
+            </dl>
+            @if (isOwner()) {
+              <section
+                class="grid gap-6 p-7 sm:p-10 md:grid-cols-2"
+                aria-labelledby="member-actions-title"
+              >
+                <h2 id="member-actions-title" class="sr-only">Acciones administrativas</h2>
+                <div class="rounded-2xl border border-stone-200 p-5">
+                  <label for="member-role" class="text-sm font-semibold text-stone-800">Rol</label>
+                  <select
+                    id="member-role"
+                    [formControl]="roleControl"
+                    class="mt-2 min-h-12 w-full rounded-2xl border border-stone-300 bg-white px-4"
+                  >
+                    <option value="OWNER">Propietario</option>
+                    <option value="EMPLOYEE">Empleado</option>
+                  </select>
+                  <button
+                    type="button"
+                    class="mt-4 min-h-11 rounded-full bg-stone-950 px-5 py-2 font-semibold text-white disabled:opacity-50"
+                    [disabled]="submitting() || roleControl.value === member.rol"
+                    [attr.aria-busy]="submitting()"
+                    (click)="requestRoleChange()"
+                  >
+                    Guardar rol
+                  </button>
+                </div>
+                <div class="rounded-2xl border border-stone-200 p-5">
+                  <h3 class="font-semibold text-stone-900">Acceso a esta empresa</h3>
+                  <p class="mt-2 text-sm leading-6 text-stone-600">
+                    Desactivar retira el acceso únicamente a la empresa actual. No desactiva al
+                    usuario global ni sus accesos a otras empresas.
+                  </p>
+                  <button
+                    type="button"
+                    class="mt-4 min-h-11 rounded-full px-5 py-2 font-semibold disabled:opacity-50"
+                    [class.bg-red-700]="member.activo"
+                    [class.text-white]="member.activo"
+                    [class.bg-stone-950]="!member.activo"
+                    [class.text-white]="!member.activo"
+                    [disabled]="submitting() || (!member.usuario.activo && !member.activo)"
+                    [attr.aria-busy]="submitting()"
+                    (click)="requestStatusChange()"
+                  >
+                    {{ member.activo ? 'Desactivar membresía' : 'Activar membresía' }}
+                  </button>
+                  @if (!member.usuario.activo && !member.activo) {
+                    <p class="mt-3 text-sm font-semibold text-amber-800">
+                      El usuario global debe estar activo antes de reactivar la membresía.
+                    </p>
+                  }
+                </div>
+              </section>
+            }
+          </article>
+        }
+      }
+    }
+  </div>
+
+  @if (pendingAction(); as action) {
+    <div class="fixed inset-0 z-50 grid place-items-center bg-stone-950/55 p-5">
+      <section
+        class="w-full max-w-lg rounded-3xl bg-white p-7 shadow-2xl sm:p-9"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="team-confirmation-title"
+      >
+        <h2 id="team-confirmation-title" class="font-serif text-3xl text-stone-950">
+          {{ confirmationTitle() }}
+        </h2>
+        <p class="mt-4 text-base leading-7 text-stone-600">
+          @if (action.kind === 'status') {
+            Esta acción retirará el acceso únicamente a la empresa actual.
+          } @else if (isCurrentUser()) {
+            Cambiar tu propio rol puede retirar inmediatamente tus permisos administrativos.
+          } @else {
+            La persona conservará acceso como empleado, pero perderá las acciones exclusivas de
+            propietario.
+          }
+        </p>
+        <div class="mt-7 flex justify-end gap-3">
+          <button
+            type="button"
+            class="min-h-11 rounded-full border border-stone-300 px-5 py-2 font-semibold disabled:opacity-50"
+            [disabled]="submitting()"
+            (click)="cancelConfirmation()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="min-h-11 rounded-full bg-red-700 px-5 py-2 font-semibold text-white disabled:opacity-50"
+            [disabled]="submitting()"
+            [attr.aria-busy]="submitting()"
+            (click)="confirmAction()"
+          >
+            {{ submitting() ? 'Procesando…' : 'Confirmar acción' }}
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+</section>
