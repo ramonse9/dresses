@@ -252,6 +252,39 @@ La prueba PostgreSQL crea y elimina una base aislada para comprobar una instalac
 npm run test:auth-database
 ```
 
+### Modelo global de recuperación de contraseña
+
+Los tokens de recuperación se almacenan exclusivamente en `public.password_reset_tokens`; no existe una tabla equivalente en los schemas tenant. Cada registro conserva el usuario, el hash SHA-256 del token, su expiración y los timestamps opcionales de uso o revocación. `public.usuarios.password_changed_at` registra cuándo cambió la contraseña por última vez y permanece en `null` hasta que un flujo futuro complete el cambio.
+
+El token original nunca se persiste ni se serializa. `token_hash` exige 64 caracteres hexadecimales en minúsculas, tiene un índice único y está configurado con `select: false` en TypeORM. La relación con `Usuario` utiliza `ON DELETE CASCADE`, por lo que los tokens dejan de existir si se elimina físicamente el usuario global.
+
+El estado se deriva sin guardar una columna adicional:
+
+| Estado derivado | Condición                                      |
+| --------------- | ---------------------------------------------- |
+| `PENDIENTE`     | No fue usado ni revocado y aún no ha expirado  |
+| `USADO`         | `usedAt` tiene valor                           |
+| `REVOCADO`      | No fue usado y `revokedAt` tiene valor         |
+| `EXPIRADO`      | No fue usado ni revocado y `expiresAt` ya pasó |
+
+Un token solamente es utilizable si está pendiente y el usuario global continúa activo. Un índice único parcial impide más de un token sin usar ni revocar por usuario. Por diseño, un token expirado continúa ocupando esa restricción hasta que el futuro flujo de solicitud lo marque como revocado antes de emitir el reemplazo.
+
+La migration pública es `CreatePasswordResetTokens1795647600000` y se administra con las migrations normales:
+
+```bash
+npm run migration:show
+npm run migration:run
+npm run migration:revert
+```
+
+La validación PostgreSQL crea una base temporal, aplica todas las migrations públicas, revierte y reaplica la migration nueva, comprueba sus restricciones e índices y elimina la base al terminar:
+
+```bash
+npm run test:auth-database
+```
+
+Este paso define solamente el modelo. Todavía no existen endpoints para solicitar o completar una recuperación de contraseña.
+
 ### Emisión y administración de invitaciones
 
 Las invitaciones son operaciones administrativas disponibles exclusivamente para `OWNER`:

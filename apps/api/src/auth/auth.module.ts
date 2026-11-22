@@ -11,6 +11,7 @@ import { AuthSessionsService } from './auth-sessions.service.js';
 import { getJwtAccessTtlSeconds } from './auth.config.js';
 import { AuthService } from './auth.service.js';
 import { AuthSession } from './entities/auth-session.entity.js';
+import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { PasswordHashService } from './password-hash.service.js';
 import { RefreshTokenCookieService } from './refresh-token-cookie.service.js';
@@ -36,7 +37,7 @@ import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.intercepto
         },
       }),
     }),
-    TypeOrmModule.forFeature([AuthSession]),
+    TypeOrmModule.forFeature([AuthSession, PasswordResetToken]),
     TenancyModule,
     UsuariosModule,
     AuthRateLimitModule,

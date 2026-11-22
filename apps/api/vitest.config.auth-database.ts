@@ -13,6 +13,7 @@ export default defineConfig({
       'test/empresa-invitaciones-migration.integration.ts',
       'test/empresa-invitaciones.integration.ts',
       'test/empresa-invitaciones-aceptacion.integration.ts',
+      'test/password-reset-tokens-migration.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,

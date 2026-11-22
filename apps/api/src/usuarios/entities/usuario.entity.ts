@@ -11,6 +11,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { AuthSession } from '../../auth/entities/auth-session.entity.js';
+import { PasswordResetToken } from '../../auth/entities/password-reset-token.entity.js';
 import { EmpresaInvitacion } from '../../invitaciones/entities/empresa-invitacion.entity.js';
 import { normalizeEmail } from '../email.js';
 import { EmpresaUsuario } from './empresa-usuario.entity.js';
@@ -34,6 +35,9 @@ export class Usuario {
   @Column({ default: true })
   activo!: boolean;
 
+  @Column({ name: 'password_changed_at', type: 'timestamptz', nullable: true })
+  passwordChangedAt!: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
@@ -45,6 +49,9 @@ export class Usuario {
 
   @OneToMany(() => AuthSession, (session) => session.usuario)
   authSessions!: AuthSession[];
+
+  @OneToMany(() => PasswordResetToken, (token) => token.usuario)
+  passwordResetTokens!: PasswordResetToken[];
 
   @OneToMany(
     () => EmpresaInvitacion,
@@ -70,6 +77,7 @@ export class Usuario {
       email: this.email,
       nombre: this.nombre,
       activo: this.activo,
+      passwordChangedAt: this.passwordChangedAt,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
