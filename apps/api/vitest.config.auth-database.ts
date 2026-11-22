@@ -12,6 +12,7 @@ export default defineConfig({
       'test/equipo-membresias.integration.ts',
       'test/empresa-invitaciones-migration.integration.ts',
       'test/empresa-invitaciones.integration.ts',
+      'test/empresa-invitaciones-aceptacion.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,

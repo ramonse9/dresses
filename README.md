@@ -302,7 +302,38 @@ curl 'http://localhost:3000/api/equipo/invitaciones?page=1&limit=20&estado=PENDI
   --header 'Authorization: Bearer TOKEN_CON_EMPRESA'
 ```
 
-La creación bloquea la empresa dentro de una transacción para serializar comprobaciones por email. Reenvío y revocación utilizan un lock advisory interno y estable por empresa–invitación, además del bloqueo de fila; ninguna clave de lock proviene del cliente. Todavía no existe un endpoint para aceptar invitaciones.
+La creación bloquea la empresa dentro de una transacción para serializar comprobaciones por email. Reenvío y revocación utilizan un lock advisory interno y estable por empresa–invitación, además del bloqueo de fila; ninguna clave de lock proviene del cliente.
+
+### Verificación y aceptación de invitaciones
+
+La pantalla pública obtiene el token del fragmento de la URL y lo envía explícitamente al API. Los endpoints no requieren JWT, pero usan `AuthOriginGuard` y políticas de rate limit independientes:
+
+```text
+POST /api/auth/invitaciones/verificar
+POST /api/auth/invitaciones/aceptar
+```
+
+La verificación recibe exclusivamente el token opaco:
+
+```bash
+curl --request POST http://localhost:3000/api/auth/invitaciones/verificar \
+  --header 'Content-Type: application/json' \
+  --data '{"token":"TOKEN_DE_LA_INVITACION"}'
+```
+
+Un token válido devuelve solamente el nombre de la empresa, el email enmascarado, el rol, `expiresAt` y `accountExists`. Los tokens inválidos, expirados, revocados, aceptados o asociados a una empresa inactiva producen el mismo error genérico. Nunca se devuelven identificadores internos, hashes o nombres de schemas.
+
+Para una cuenta nueva se requiere nombre y una contraseña de entre 8 y 1024 caracteres:
+
+```bash
+curl --request POST http://localhost:3000/api/auth/invitaciones/aceptar \
+  --header 'Content-Type: application/json' \
+  --data '{"token":"TOKEN_DE_LA_INVITACION","nombre":"Ana López","password":"contraseña-segura"}'
+```
+
+El backend crea el usuario con Argon2id y la membresía con el rol guardado en la invitación. Si el email ya corresponde a una cuenta global activa, `nombre` no es necesario: `password` debe ser la contraseña actual y el perfil no se modifica. Una membresía inactiva se reactiva con el rol de la invitación; una membresía ya activa responde `409`.
+
+La aceptación bloquea primero la empresa y después la invitación dentro de una única transacción de `public`. Un lock transaccional interno por email serializa la creación global del usuario. Solamente una solicitud concurrente puede consumir el token; cualquier error revierte usuario, membresía y aceptación. El endpoint no crea una sesión ni devuelve tokens JWT: al terminar, la persona debe usar `/api/auth/login`.
 
 ### Administración de equipo en Angular
 
@@ -321,7 +352,7 @@ La interfaz solicita confirmación antes de degradar un `OWNER`, desactivar una 
 
 ## Correo transaccional
 
-`MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Actualmente no existen endpoints, invitaciones ni correos de recuperación que utilicen esta infraestructura.
+`MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Las invitaciones utilizan esta infraestructura; todavía no existen correos de recuperación de contraseña.
 
 Configuración local segura:
 

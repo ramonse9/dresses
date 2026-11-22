@@ -56,6 +56,7 @@ import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.intercepto
   ],
   exports: [
     AuthService,
+    AuthOriginGuard,
     AuthSessionsService,
     PasswordHashService,
     JwtAuthGuard,
