@@ -86,6 +86,22 @@ describe('authInterceptor', () => {
     expect(authStore.refreshAccessToken).not.toHaveBeenCalled();
   });
 
+  it('does not attach JWTs or refresh public invitation requests', async () => {
+    tokens.set('current.jwt.token');
+    for (const path of ['verificar', 'aceptar']) {
+      const response = firstValueFrom(
+        http.post(`http://localhost:3000/api/auth/invitaciones/${path}`, {
+          token: 'opaque-token',
+        }),
+      );
+      const request = controller.expectOne(`http://localhost:3000/api/auth/invitaciones/${path}`);
+      expect(request.request.headers.has('Authorization')).toBe(false);
+      request.flush(null, { status: 401, statusText: 'Unauthorized' });
+      await expect(response).rejects.toBeInstanceOf(HttpErrorResponse);
+    }
+    expect(authStore.refreshAccessToken).not.toHaveBeenCalled();
+  });
+
   it('retries an original request only once', async () => {
     tokens.set('expired.jwt.token');
     const response = firstValueFrom(http.get('http://localhost:3000/api/reservaciones'));

@@ -27,6 +27,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'aceptar-invitacion',
+        loadComponent: () =>
+          import('./features/auth/invitation-acceptance/invitation-acceptance-page.component').then(
+            ({ InvitationAcceptancePageComponent }) => InvitationAcceptancePageComponent,
+          ),
+      },
+      {
         path: 'seleccionar-empresa',
         canActivate: [authGuard],
         loadComponent: () =>

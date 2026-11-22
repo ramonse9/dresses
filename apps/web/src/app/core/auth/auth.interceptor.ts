@@ -5,7 +5,12 @@ import { API_BASE_URL } from '../config/api-config';
 import { AccessTokenStore } from './access-token.store';
 import { AuthStore } from './auth.store';
 
-const bearerExcludedPaths = ['/auth/login', '/auth/refresh'] as const;
+const bearerExcludedPaths = [
+  '/auth/login',
+  '/auth/refresh',
+  '/auth/invitaciones/verificar',
+  '/auth/invitaciones/aceptar',
+] as const;
 const refreshExcludedPaths = [...bearerExcludedPaths, '/auth/me'] as const;
 
 export const authInterceptor: HttpInterceptorFn = (request, next) => {

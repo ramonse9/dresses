@@ -5,6 +5,7 @@ export type MockRole = 'OWNER' | 'EMPLOYEE';
 export interface MockApiOptions {
   readonly authenticated?: boolean;
   readonly role?: MockRole;
+  readonly invitationAccountExists?: boolean;
 }
 
 export interface MockApiState {
@@ -18,6 +19,8 @@ export interface MockApiState {
   invitationRole: MockRole;
   invitationStatus: 'PENDIENTE' | 'EXPIRADA' | 'ACEPTADA' | 'REVOCADA';
   invitationSendCount: number;
+  invitationAccountExists: boolean;
+  invitationAccepted: boolean;
 }
 
 const now = '2026-11-20T15:00:00.000Z';
@@ -86,6 +89,8 @@ export async function installMockApi(
     invitationRole: 'EMPLOYEE',
     invitationStatus: 'PENDIENTE',
     invitationSendCount: 1,
+    invitationAccountExists: options.invitationAccountExists ?? false,
+    invitationAccepted: false,
   };
 
   await page.route('http://localhost:3000/api/**', async (route) => {
@@ -129,6 +134,32 @@ async function handleApiRoute(route: Route, state: MockApiState): Promise<void> 
     ]);
   }
   if (path === 'auth/select-empresa' && method === 'POST') return fulfill(route, 200, token());
+  if (path === 'auth/invitaciones/verificar' && method === 'POST') {
+    return fulfill(route, 200, {
+      empresaNombre: 'Atelier Norte',
+      email: 'i***@example.test',
+      rol: 'EMPLOYEE',
+      expiresAt: '2026-12-01T15:00:00.000Z',
+      accountExists: state.invitationAccountExists,
+    });
+  }
+  if (path === 'auth/invitaciones/aceptar' && method === 'POST') {
+    const input = request.postDataJSON() as Record<string, unknown>;
+    if (
+      'passwordConfirmation' in input ||
+      'rol' in input ||
+      'empresaId' in input ||
+      'schemaName' in input ||
+      (!state.invitationAccountExists && typeof input['nombre'] !== 'string')
+    ) {
+      return fulfill(route, 400, error('Payload inválido'));
+    }
+    state.invitationAccepted = true;
+    return fulfill(route, 200, {
+      accepted: true,
+      message: 'Invitación aceptada. Ya puedes iniciar sesión.',
+    });
+  }
 
   if (path === 'equipo/miembros' && method === 'GET') {
     if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));

@@ -18,6 +18,40 @@ test('login → empresa → catálogo → logout', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Inicia sesión' })).toBeVisible();
 });
 
+test('accepts a public invitation for a new account and removes the fragment', async ({ page }) => {
+  const state = await installMockApi(page, {
+    authenticated: false,
+    invitationAccountExists: false,
+  });
+  await page.goto('/aceptar-invitacion#token=test-only-opaque-invitation-token');
+  await expect(page).toHaveURL('http://127.0.0.1:4200/aceptar-invitacion');
+  await expect(page.getByText('Atelier Norte')).toBeVisible();
+  await expect(page.getByText('i***@example.test')).toBeVisible();
+
+  await page.getByLabel('Nombre').fill('Ana Invitada');
+  await page.getByLabel('Contraseña', { exact: true }).fill('test-only-password');
+  await page.getByLabel('Confirmar contraseña').fill('test-only-password');
+  await page.getByRole('button', { name: 'Aceptar invitación' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Invitación aceptada' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Iniciar sesión' })).toBeVisible();
+  expect(state.invitationAccepted).toBe(true);
+});
+
+test('accepts a public invitation for an existing account', async ({ page }) => {
+  const state = await installMockApi(page, {
+    authenticated: false,
+    invitationAccountExists: true,
+  });
+  await page.goto('/aceptar-invitacion#token=test-only-existing-account-token');
+  await expect(page.getByLabel('Nombre')).toHaveCount(0);
+  await expect(page.getByLabel('Confirmar contraseña')).toHaveCount(0);
+  await page.getByLabel('Contraseña actual').fill('current-test-password');
+  await page.getByRole('button', { name: 'Aceptar invitación' }).click();
+  await expect(page.getByRole('heading', { name: 'Invitación aceptada' })).toBeVisible();
+  expect(state.invitationAccepted).toBe(true);
+});
+
 test('creates a customer with test-only contact data', async ({ page }) => {
   await installMockApi(page);
   await page.goto('/app/clientes/nuevo');

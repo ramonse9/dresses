@@ -335,6 +335,10 @@ El backend crea el usuario con Argon2id y la membresía con el rol guardado en l
 
 La aceptación bloquea primero la empresa y después la invitación dentro de una única transacción de `public`. Un lock transaccional interno por email serializa la creación global del usuario. Solamente una solicitud concurrente puede consumir el token; cualquier error revierte usuario, membresía y aceptación. El endpoint no crea una sesión ni devuelve tokens JWT: al terminar, la persona debe usar `/api/auth/login`.
 
+El frontend ofrece la ruta pública `/aceptar-invitacion`, sin requerir autenticación ni una empresa seleccionada. La pantalla consume el token exclusivamente desde `#token=...`, reemplaza inmediatamente la URL para retirar el fragmento y conserva el valor solamente en memoria durante el flujo. No lo escribe en `localStorage`, `sessionStorage`, IndexedDB o cookies controladas por JavaScript. Los endpoints públicos de invitación están excluidos del interceptor JWT, por lo que tampoco reciben `Authorization` ni activan refresh ante un `401`.
+
+Después de verificar, la pantalla muestra únicamente empresa, email enmascarado, rol y expiración. Una cuenta nueva captura nombre, contraseña y confirmación local; la confirmación nunca se envía al API. Una cuenta existente solicita solamente la contraseña actual. Al completar la aceptación se limpian token, formulario y datos verificados, se muestra una confirmación y se ofrece navegación a `/login`, sin iniciar sesión automáticamente.
+
 ### Administración de equipo en Angular
 
 El frontend expone el feature lazy-loaded en `/app/equipo`, con listado filtrable y detalle administrativo. El listado conserva `page`, `limit`, `rol`, `activo` y `q` en los query parameters, aplica debounce a la búsqueda e ignora respuestas obsoletas. Su store está registrado en `TenantResetRegistry`, por lo que listado, detalle y solicitudes pendientes se limpian al cambiar de empresa.

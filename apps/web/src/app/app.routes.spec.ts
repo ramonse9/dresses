@@ -13,6 +13,7 @@ import { DressesStore } from './features/dresses/dresses.store';
 import { ReservationCreateStore } from './features/reservations/reservation-create.store';
 import { ReservationsStore } from './features/reservations/reservations.store';
 import { TeamStore } from './features/team/team.store';
+import { InvitationAcceptanceApiService } from './features/auth/invitation-acceptance/invitation-acceptance-api.service';
 
 describe('application routes', () => {
   const authenticated = signal(false);
@@ -245,6 +246,13 @@ describe('application routes', () => {
             changeStatus: () => of(member),
           },
         },
+        {
+          provide: InvitationAcceptanceApiService,
+          useValue: {
+            verify: () => of({}),
+            accept: () => of({ accepted: true, message: 'Accepted' }),
+          },
+        },
       ],
     });
   });
@@ -252,6 +260,7 @@ describe('application routes', () => {
   it.each([
     ['/', 'Cada vestido.'],
     ['/login', 'Inicia sesión'],
+    ['/aceptar-invitacion', 'Aceptar invitación'],
     ['/seleccionar-empresa', 'Seleccionar empresa'],
     ['/app', 'Panel de operación'],
     ['/app/dashboard', 'Panel de operación'],
