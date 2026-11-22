@@ -5,6 +5,7 @@ import { BehaviorSubject, of } from 'rxjs';
 import type { TeamListState, TeamMember } from './team.models';
 import { TeamListPageComponent } from './team-list-page.component';
 import { TeamStore } from './team.store';
+import { TenantStore } from '../../core/tenant/tenant.store';
 
 const member: TeamMember = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -47,6 +48,7 @@ describe('TeamListPageComponent', () => {
       providers: [
         provideRouter([]),
         { provide: TeamStore, useValue: store },
+        { provide: TenantStore, useValue: { role: signal('OWNER') } },
         { provide: ActivatedRoute, useValue: route },
       ],
     });

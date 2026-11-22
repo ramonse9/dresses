@@ -10,6 +10,13 @@ export const TEAM_ROUTES: Routes = [
       ),
   },
   {
+    path: 'invitaciones',
+    loadComponent: () =>
+      import('./team-invitations-page.component').then(
+        ({ TeamInvitationsPageComponent }) => TeamInvitationsPageComponent,
+      ),
+  },
+  {
     path: ':id',
     loadComponent: () =>
       import('./team-detail-page.component').then(

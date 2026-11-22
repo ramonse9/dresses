@@ -14,6 +14,10 @@ export interface MockApiState {
   cancellationReason: string | null;
   teamMemberRole: MockRole;
   teamMemberActive: boolean;
+  invitationEmail: string;
+  invitationRole: MockRole;
+  invitationStatus: 'PENDIENTE' | 'EXPIRADA' | 'ACEPTADA' | 'REVOCADA';
+  invitationSendCount: number;
 }
 
 const now = '2026-11-20T15:00:00.000Z';
@@ -26,6 +30,7 @@ export const ids = {
   reservation: '44444444-4444-4444-8444-444444444444',
   member: '55555555-5555-4555-8555-555555555555',
   memberUser: '99999999-9999-4999-8999-999999999999',
+  invitation: '12121212-1212-4212-8212-121212121212',
 } as const;
 
 const branch = {
@@ -77,6 +82,10 @@ export async function installMockApi(
     cancellationReason: null,
     teamMemberRole: 'EMPLOYEE',
     teamMemberActive: true,
+    invitationEmail: 'invitada@example.test',
+    invitationRole: 'EMPLOYEE',
+    invitationStatus: 'PENDIENTE',
+    invitationSendCount: 1,
   };
 
   await page.route('http://localhost:3000/api/**', async (route) => {
@@ -143,6 +152,32 @@ async function handleApiRoute(route: Route, state: MockApiState): Promise<void> 
     const input = request.postDataJSON() as { activo: boolean };
     state.teamMemberActive = input.activo;
     return fulfill(route, 200, teamMember(state));
+  }
+  if (path === 'equipo/invitaciones' && method === 'GET') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    return fulfill(route, 200, {
+      data: [teamInvitation(state)],
+      pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+    });
+  }
+  if (path === 'equipo/invitaciones' && method === 'POST') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    const input = request.postDataJSON() as { email: string; rol: MockRole };
+    state.invitationEmail = input.email;
+    state.invitationRole = input.rol;
+    state.invitationStatus = 'PENDIENTE';
+    state.invitationSendCount = 1;
+    return fulfill(route, 201, teamInvitation(state));
+  }
+  if (path === `equipo/invitaciones/${ids.invitation}/reenviar` && method === 'POST') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    state.invitationSendCount += 1;
+    return fulfill(route, 201, teamInvitation(state));
+  }
+  if (path === `equipo/invitaciones/${ids.invitation}` && method === 'DELETE') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    state.invitationStatus = 'REVOCADA';
+    return fulfill(route, 200, teamInvitation(state));
   }
 
   if (path === 'sucursales' && method === 'GET') return fulfill(route, 200, [branch]);
@@ -274,6 +309,19 @@ function teamMember(state: MockApiState) {
     },
     rol: state.teamMemberRole,
     activo: state.teamMemberActive,
+    createdAt: now,
+  };
+}
+
+function teamInvitation(state: MockApiState) {
+  return {
+    id: ids.invitation,
+    email: state.invitationEmail,
+    rol: state.invitationRole,
+    estado: state.invitationStatus,
+    expiresAt: '2026-12-01T15:00:00.000Z',
+    lastSentAt: now,
+    sendCount: state.invitationSendCount,
     createdAt: now,
   };
 }

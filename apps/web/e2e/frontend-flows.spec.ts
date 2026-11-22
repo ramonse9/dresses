@@ -129,6 +129,31 @@ test('OWNER administers team role and membership state', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Activar membresía' })).toBeVisible();
 });
 
+test('OWNER creates, resends and revokes an invitation', async ({ page }) => {
+  await installMockApi(page, { role: 'OWNER' });
+  await page.goto('/app/equipo');
+  await page.getByRole('link', { name: 'Invitaciones' }).click();
+  await expect(page).toHaveURL(/\/app\/equipo\/invitaciones/);
+
+  const creation = page.getByRole('region', { name: 'Nueva invitación' });
+  await creation.getByLabel('Email').fill('  NUEVA@EXAMPLE.TEST ');
+  await creation.getByLabel('Rol').selectOption('OWNER');
+  await creation.getByRole('button', { name: 'Enviar invitación' }).click();
+  await expect(page.getByText('nueva@example.test')).toBeVisible();
+  await expect(page.getByText('Invitación creada y enviada.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Reenviar' }).click();
+  await expect(page.getByRole('dialog')).toContainText('enlace anterior');
+  await page.getByRole('button', { name: 'Confirmar acción' }).click();
+  await expect(page.getByText(/enlace anterior ya no es válido/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Revocar' }).click();
+  await expect(page.getByRole('dialog')).toContainText('ya no podrá utilizar');
+  await page.getByRole('button', { name: 'Confirmar acción' }).click();
+  await expect(page.getByText('REVOCADA', { exact: true })).toBeVisible();
+  await expect(page.getByText(/tokenHash|schemaName/)).toHaveCount(0);
+});
+
 test('hides Equipo from EMPLOYEE and preserves a forced 403', async ({ page }) => {
   await installMockApi(page, { role: 'EMPLOYEE' });
   await page.goto('/app/dashboard');
@@ -137,6 +162,12 @@ test('hides Equipo from EMPLOYEE and preserves a forced 403', async ({ page }) =
   await page.goto('/app/equipo');
   await expect(page.getByText('No tienes autorización para administrar el equipo')).toBeVisible();
   await expect(page.getByText(/no existe o pertenece/)).toHaveCount(0);
+
+  await page.goto('/app/equipo/invitaciones');
+  await expect(
+    page.getByText('No tienes autorización para administrar invitaciones'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enviar invitación' })).toHaveCount(0);
 });
 
 async function runTransition(page: Page, action: string): Promise<void> {

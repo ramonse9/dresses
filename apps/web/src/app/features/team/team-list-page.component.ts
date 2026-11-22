@@ -2,11 +2,12 @@ import { Component, computed, DestroyRef, inject, type OnInit } from '@angular/c
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { debounceTime, distinctUntilChanged, map, switchMap, tap } from 'rxjs';
 import { EmptyStateComponent } from '../../shared/ui/empty-state/empty-state.component';
 import { ErrorMessageComponent } from '../../shared/ui/error-message/error-message.component';
 import { LoadingIndicatorComponent } from '../../shared/ui/loading-indicator/loading-indicator.component';
+import { TenantStore } from '../../core/tenant/tenant.store';
 import { teamErrorMessage } from './team-error-message';
 import {
   MAXIMUM_TEAM_SEARCH_LENGTH,
@@ -30,6 +31,7 @@ type ActiveFilter = 'all' | 'true' | 'false';
     LoadingIndicatorComponent,
     ReactiveFormsModule,
     RouterLink,
+    RouterLinkActive,
   ],
   templateUrl: './team-list-page.component.html',
 })
@@ -38,8 +40,10 @@ export class TeamListPageComponent implements OnInit {
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly tenantStore = inject(TenantStore);
   private readonly destroyRef = inject(DestroyRef);
   readonly maximumSearchLength = MAXIMUM_TEAM_SEARCH_LENGTH;
+  readonly isOwner = computed(() => this.tenantStore.role() === 'OWNER');
   readonly pageSizes = [10, 20, 50, 100] as const;
   readonly filtersForm = this.formBuilder.nonNullable.group({
     q: '',

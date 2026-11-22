@@ -350,6 +350,10 @@ La navegación y los controles se muestran según esta matriz visual:
 
 La interfaz solicita confirmación antes de degradar un `OWNER`, desactivar una membresía o modificar la membresía propia. Un `409` se presenta como protección del último propietario, mientras que `403` y `404` se mantienen diferenciados. Después de cada mutación, el store vuelve a consultar el registro autoritativo. La ocultación visual no sustituye los guards ni la autorización del API.
 
+La pestaña `Invitaciones`, disponible en `/app/equipo/invitaciones`, también se muestra exclusivamente a `OWNER`. Conserva `page`, `limit`, `estado`, `rol` y `q` en la URL, aplica debounce a la búsqueda y presenta los estados derivados `PENDIENTE`, `EXPIRADA`, `ACEPTADA` y `REVOCADA`. Cada registro muestra email, rol, expiración, último envío y cantidad de envíos; la respuesta se proyecta a un modelo visual que descarta cualquier campo ajeno a este contrato.
+
+El formulario normaliza el email antes de validarlo y permite invitar como `OWNER` o `EMPLOYEE`. Reenviar y revocar requieren confirmación explícita: la interfaz aclara que reenviar invalida el enlace anterior y que revocar impide utilizarlo. Tras cada operación se vuelve a consultar el listado conservando filtros y página. Los errores `403`, `409`, `429` y `503` tienen mensajes diferenciados sin mostrar detalles internos. `TeamInvitationsStore` está registrado en `TenantResetRegistry`, por lo que las solicitudes y datos se eliminan al cambiar de empresa.
+
 ## Correo transaccional
 
 `MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Las invitaciones utilizan esta infraestructura; todavía no existen correos de recuperación de contraseña.
