@@ -252,7 +252,57 @@ La prueba PostgreSQL crea y elimina una base aislada para comprobar una instalac
 npm run test:auth-database
 ```
 
-En este punto no existen endpoints, generación de tokens ni envío de correos para invitaciones.
+### Emisión y administración de invitaciones
+
+Las invitaciones son operaciones administrativas disponibles exclusivamente para `OWNER`:
+
+```text
+POST   /api/equipo/invitaciones
+GET    /api/equipo/invitaciones
+POST   /api/equipo/invitaciones/:id/reenviar
+DELETE /api/equipo/invitaciones/:id
+```
+
+Todas las rutas usan `JwtAuthGuard`, `TenantAuthGuard` y `RolesGuard`. La empresa y el rol se obtienen de la membresía vigente; los DTOs no aceptan `empresaId`, `empresaSlug`, `schemaName`, tokens ni hashes.
+
+Crear una invitación requiere únicamente email y rol:
+
+```bash
+curl --request POST http://localhost:3000/api/equipo/invitaciones \
+  --header 'Authorization: Bearer TOKEN_CON_EMPRESA' \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"persona@example.com","rol":"EMPLOYEE"}'
+```
+
+El backend normaliza el email, vuelve a comprobar que la empresa y el `OWNER` continúen activos, rechaza membresías activas e invitaciones vigentes con `409`, y revoca automáticamente una invitación expirada antes de crear su reemplazo.
+
+El token contiene 256 bits aleatorios. Solamente su SHA-256 se guarda en PostgreSQL y la URL se construye internamente con un fragmento:
+
+```text
+https://app.example.com/aceptar-invitacion#token=TOKEN
+```
+
+El fragmento evita que el token se envíe al servidor web durante la navegación inicial. Ni el token ni la URL aparecen en respuestas, excepciones o logs.
+
+La expiración y el cooldown se configuran en segundos:
+
+```env
+INVITATION_TTL_SECONDS=604800
+INVITATION_RESEND_COOLDOWN_SECONDS=300
+```
+
+El correo se envía después de confirmar la persistencia. `lastSentAt` y `sendCount` se actualizan únicamente después de una entrega exitosa. Si el proveedor falla, el API responde `503`, conserva la invitación con un hash seguro y permite usar posteriormente el endpoint de reenvío.
+
+Reenviar genera un token nuevo, sustituye el hash antes de enviar, invalida el token anterior, renueva `expiresAt` y responde `429` durante el cooldown. Revocar establece `revokedAt` sin eliminar el registro; una invitación aceptada responde `409`.
+
+El listado acepta `page`, `limit`, `estado`, `rol` y `q` por email:
+
+```bash
+curl 'http://localhost:3000/api/equipo/invitaciones?page=1&limit=20&estado=PENDIENTE&rol=EMPLOYEE&q=persona' \
+  --header 'Authorization: Bearer TOKEN_CON_EMPRESA'
+```
+
+La creación bloquea la empresa dentro de una transacción para serializar comprobaciones por email. Reenvío y revocación utilizan un lock advisory interno y estable por empresa–invitación, además del bloqueo de fila; ninguna clave de lock proviene del cliente. Todavía no existe un endpoint para aceptar invitaciones.
 
 ### Administración de equipo en Angular
 

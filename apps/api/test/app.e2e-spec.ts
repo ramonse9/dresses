@@ -32,6 +32,9 @@ import { EquipoService } from './../src/equipo/equipo.service.js';
 import { DevTenantAdminGuard } from './../src/empresas/dev-tenant-admin.guard.js';
 import { EmpresasController } from './../src/empresas/empresas.controller.js';
 import { EmpresasService } from './../src/empresas/empresas.service.js';
+import { EmpresaInvitacionEstado } from './../src/invitaciones/entities/empresa-invitacion.entity.js';
+import { InvitacionesController } from './../src/invitaciones/invitaciones.controller.js';
+import { InvitacionesService } from './../src/invitaciones/invitaciones.service.js';
 import { ReservacionEstado } from './../src/reservaciones/entities/reservacion.tenant-entity.js';
 import { ReservacionesController } from './../src/reservaciones/reservaciones.controller.js';
 import { ReservacionesService } from './../src/reservaciones/reservaciones.service.js';
@@ -67,6 +70,7 @@ describe('AppController (e2e)', () => {
   const clienteId = 'f18c2a56-d33f-4d88-a8e7-42931121e295';
   const reservacionId = '918c2a56-d33f-4d88-a8e7-42931121e295';
   const miembroId = '818c2a56-d33f-4d88-a8e7-42931121e295';
+  const invitationId = '718c2a56-d33f-4d88-a8e7-42931121e295';
   const authenticatedUserId = '019a6f33-82b7-7a22-971b-6a8d7c5e4f30';
   const miembroResponse = {
     id: miembroId,
@@ -79,6 +83,22 @@ describe('AppController (e2e)', () => {
     rol: EmpresaUsuarioRol.OWNER,
     activo: true,
     createdAt: new Date('2026-11-20T12:00:00.000Z'),
+  };
+  const invitationResponse = {
+    id: invitationId,
+    empresaId: selectedEmpresaId,
+    email: 'invited@example.com',
+    rol: EmpresaUsuarioRol.EMPLOYEE,
+    estado: EmpresaInvitacionEstado.PENDIENTE,
+    expiresAt: new Date('2026-12-01T12:00:00.000Z'),
+    acceptedAt: null,
+    acceptedByUsuarioId: null,
+    revokedAt: null,
+    createdByUsuarioId: authenticatedUserId,
+    lastSentAt: new Date('2026-11-22T12:00:00.000Z'),
+    sendCount: 1,
+    createdAt: new Date('2026-11-22T12:00:00.000Z'),
+    updatedAt: new Date('2026-11-22T12:00:00.000Z'),
   };
   const clienteResponse = {
     id: clienteId,
@@ -165,6 +185,7 @@ describe('AppController (e2e)', () => {
         ClientesController,
         EquipoController,
         EmpresasController,
+        InvitacionesController,
         ReservacionesController,
         SucursalesController,
         VestidosController,
@@ -281,6 +302,31 @@ describe('AppController (e2e)', () => {
             updateEstado: vi.fn().mockResolvedValue({
               ...miembroResponse,
               activo: false,
+            }),
+          },
+        },
+        {
+          provide: InvitacionesService,
+          useValue: {
+            create: vi.fn().mockResolvedValue(invitationResponse),
+            findAll: vi.fn().mockResolvedValue({
+              data: [invitationResponse],
+              pagination: {
+                page: 1,
+                limit: 20,
+                total: 1,
+                totalPages: 1,
+              },
+            }),
+            resend: vi.fn().mockResolvedValue({
+              ...invitationResponse,
+              expiresAt: new Date('2026-12-08T12:00:00.000Z'),
+              sendCount: 2,
+            }),
+            revoke: vi.fn().mockResolvedValue({
+              ...invitationResponse,
+              estado: EmpresaInvitacionEstado.REVOCADA,
+              revokedAt: new Date('2026-11-22T13:00:00.000Z'),
             }),
           },
         },
@@ -891,6 +937,135 @@ describe('AppController (e2e)', () => {
         .send(body)
         .expect(400);
     }
+  });
+
+  it('/api/equipo/invitaciones (POST) creates a safe invitation for OWNER', () => {
+    return request(app.getHttpServer())
+      .post('/api/equipo/invitaciones')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .set('x-schema-name', 'tenant_untrusted')
+      .send({ email: ' INVITED@EXAMPLE.COM ', rol: 'EMPLOYEE' })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: invitationId,
+          email: 'invited@example.com',
+          rol: EmpresaUsuarioRol.EMPLOYEE,
+          estado: EmpresaInvitacionEstado.PENDIENTE,
+          sendCount: 1,
+        });
+        expect(JSON.stringify(response.body)).not.toMatch(
+          /tokenHash|#token=|schemaName|tenant_/,
+        );
+      });
+  });
+
+  it('/api/equipo/invitaciones (GET) lists filtered invitations for OWNER', () => {
+    return request(app.getHttpServer())
+      .get(
+        '/api/equipo/invitaciones?page=1&limit=20&estado=PENDIENTE&rol=EMPLOYEE&q=invited',
+      )
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          data: [{ id: invitationId, email: 'invited@example.com' }],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        });
+        expect(JSON.stringify(response.body)).not.toMatch(
+          /tokenHash|#token=|schemaName|tenant_/,
+        );
+      });
+  });
+
+  it('resends and logically revokes invitations for OWNER', async () => {
+    await request(app.getHttpServer())
+      .post(`/api/equipo/invitaciones/${invitationId}/reenviar`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({})
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: invitationId,
+          sendCount: 2,
+          estado: EmpresaInvitacionEstado.PENDIENTE,
+        });
+      });
+
+    await request(app.getHttpServer())
+      .delete(`/api/equipo/invitaciones/${invitationId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({})
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: invitationId,
+          estado: EmpresaInvitacionEstado.REVOCADA,
+        });
+      });
+  });
+
+  it.each([
+    ['post', '/api/equipo/invitaciones'],
+    ['get', '/api/equipo/invitaciones'],
+    ['post', `/api/equipo/invitaciones/${invitationId}/reenviar`],
+    ['delete', `/api/equipo/invitaciones/${invitationId}`],
+  ] as const)('returns 403 when EMPLOYEE uses %s %s', (method, path) => {
+    const operation = request(app.getHttpServer())
+      [method](path)
+      .set('Authorization', 'Bearer employee.jwt.token');
+    if (method === 'post' && path === '/api/equipo/invitaciones') {
+      operation.send({ email: 'invited@example.com', rol: 'EMPLOYEE' });
+    } else if (method !== 'get') {
+      operation.send({});
+    }
+    return operation.expect(403);
+  });
+
+  it('/api/equipo/invitaciones rejects tenant selectors and protected fields', async () => {
+    for (const body of [
+      {
+        email: 'invited@example.com',
+        rol: 'EMPLOYEE',
+        empresaId: selectedEmpresaId,
+      },
+      {
+        email: 'invited@example.com',
+        rol: 'EMPLOYEE',
+        empresaSlug: 'atelier-norte',
+      },
+      {
+        email: 'invited@example.com',
+        rol: 'EMPLOYEE',
+        schemaName: 'tenant_untrusted',
+      },
+      {
+        email: 'invited@example.com',
+        rol: 'EMPLOYEE',
+        tokenHash: 'a'.repeat(64),
+      },
+    ]) {
+      await request(app.getHttpServer())
+        .post('/api/equipo/invitaciones')
+        .set('Authorization', 'Bearer selected.jwt.token')
+        .send(body)
+        .expect(400);
+    }
+
+    await request(app.getHttpServer())
+      .get('/api/equipo/invitaciones?schemaName=tenant_untrusted')
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/equipo/invitaciones/${invitationId}/reenviar`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ empresaId: selectedEmpresaId })
+      .expect(400);
+    await request(app.getHttpServer())
+      .delete(`/api/equipo/invitaciones/${invitationId}`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ schemaName: 'tenant_untrusted' })
+      .expect(400);
   });
 
   it('/api/clientes (POST) allows OWNER and normalizes email', () => {
