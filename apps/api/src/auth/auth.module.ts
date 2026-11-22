@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TenancyModule } from '../tenancy/tenancy.module.js';
 import { UsuariosModule } from '../usuarios/usuarios.module.js';
+import { MailModule } from '../mail/mail.module.js';
 import { AuthRateLimitModule } from '../security/auth-rate-limit/auth-rate-limit.module.js';
 import { AuthController } from './auth.controller.js';
 import { AuthOriginGuard } from './auth-origin.guard.js';
@@ -14,6 +15,10 @@ import { AuthSession } from './entities/auth-session.entity.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { PasswordHashService } from './password-hash.service.js';
+import { PasswordRecoveryController } from './password-recovery.controller.js';
+import { PasswordRecoveryMailService } from './password-recovery-mail.service.js';
+import { PasswordRecoveryService } from './password-recovery.service.js';
+import { PasswordResetTokenService } from './password-reset-token.service.js';
 import { RefreshTokenCookieService } from './refresh-token-cookie.service.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 import { RolesGuard } from './roles.guard.js';
@@ -38,16 +43,20 @@ import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.intercepto
       }),
     }),
     TypeOrmModule.forFeature([AuthSession, PasswordResetToken]),
+    MailModule,
     TenancyModule,
     UsuariosModule,
     AuthRateLimitModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, PasswordRecoveryController],
   providers: [
     AuthService,
     AuthOriginGuard,
     AuthSessionsService,
     PasswordHashService,
+    PasswordRecoveryService,
+    PasswordRecoveryMailService,
+    PasswordResetTokenService,
     RefreshTokenCookieService,
     RefreshTokenService,
     JwtAuthGuard,

@@ -283,7 +283,54 @@ La validación PostgreSQL crea una base temporal, aplica todas las migrations p�
 npm run test:auth-database
 ```
 
-Este paso define solamente el modelo. Todavía no existen endpoints para solicitar o completar una recuperación de contraseña.
+### Recuperación de contraseña
+
+El flujo público utiliza dos endpoints protegidos por `AuthOriginGuard` y políticas independientes de rate limiting:
+
+```text
+POST /api/auth/password/solicitar
+POST /api/auth/password/restablecer
+```
+
+Solicita un correo enviando únicamente el email:
+
+```bash
+curl --request POST http://localhost:3000/api/auth/password/solicitar \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"usuario@example.com"}'
+```
+
+La solicitud responde siempre con HTTP `202` y el mismo mensaje, sin revelar si la cuenta existe, está inactiva, se encuentra dentro del cooldown o falló temporalmente el envío. Solamente los usuarios activos reciben un token. El backend revoca tokens anteriores, genera 256 bits aleatorios, persiste únicamente su hash SHA-256 y construye internamente una URL con fragmento:
+
+```text
+WEB_APP_URL/restablecer-password#token=<token-opaco>
+```
+
+Si el proveedor de correo falla, el token que no pudo entregarse se revoca y la respuesta pública permanece genérica. Ni el token ni la URL completa se registran o devuelven en JSON.
+
+Para completar el cambio:
+
+```bash
+curl --request POST http://localhost:3000/api/auth/password/restablecer \
+  --header 'Content-Type: application/json' \
+  --data '{"token":"TOKEN_OPACO","password":"nueva-contraseña-segura"}'
+```
+
+El token se busca por hash y se bloquea dentro de una transacción sobre `public`. La operación exige un usuario activo y un token vigente, no usado y no revocado. La contraseña nueva no puede coincidir con la actual; se guarda con Argon2id y se actualiza `passwordChangedAt`. En la misma transacción se marca `usedAt`, se revocan los demás tokens de recuperación y todas las filas de `AuthSession` del usuario. Por ello, los access y refresh tokens emitidos antes del cambio dejan de funcionar inmediatamente. El flujo no inicia una nueva sesión.
+
+Configuración:
+
+```dotenv
+PASSWORD_RESET_TTL_SECONDS=3600
+PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS=300
+AUTH_RATE_LIMIT_RECOVERY_REQUEST_LIMIT=3
+AUTH_RATE_LIMIT_RECOVERY_REQUEST_WINDOW_SECONDS=900
+AUTH_RATE_LIMIT_PASSWORD_RESET_LIMIT=5
+AUTH_RATE_LIMIT_PASSWORD_RESET_WINDOW_SECONDS=900
+WEB_APP_URL=http://localhost:4200
+```
+
+`PASSWORD_RESET_TTL_SECONDS` admite de 5 minutos a 24 horas. El cooldown admite de 1 segundo a 24 horas. Los cuerpos son estrictos y rechazan campos como `empresaId`, `rol` o `schemaName`.
 
 ### Emisión y administración de invitaciones
 
