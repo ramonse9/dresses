@@ -11,6 +11,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { AuthSession } from '../../auth/entities/auth-session.entity.js';
+import { EmpresaInvitacion } from '../../invitaciones/entities/empresa-invitacion.entity.js';
 import { normalizeEmail } from '../email.js';
 import { EmpresaUsuario } from './empresa-usuario.entity.js';
 
@@ -44,6 +45,18 @@ export class Usuario {
 
   @OneToMany(() => AuthSession, (session) => session.usuario)
   authSessions!: AuthSession[];
+
+  @OneToMany(
+    () => EmpresaInvitacion,
+    (invitacion) => invitacion.createdByUsuario,
+  )
+  invitacionesCreadas!: EmpresaInvitacion[];
+
+  @OneToMany(
+    () => EmpresaInvitacion,
+    (invitacion) => invitacion.acceptedByUsuario,
+  )
+  invitacionesAceptadas!: EmpresaInvitacion[];
 
   @BeforeInsert()
   @BeforeUpdate()

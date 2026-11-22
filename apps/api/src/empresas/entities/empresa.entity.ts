@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { EmpresaUsuario } from '../../usuarios/entities/empresa-usuario.entity.js';
+import { EmpresaInvitacion } from '../../invitaciones/entities/empresa-invitacion.entity.js';
 
 @Entity({ name: 'empresas', schema: 'public' })
 @Index('UQ_empresas_slug', ['slug'], { unique: true })
@@ -34,4 +35,7 @@ export class Empresa {
 
   @OneToMany(() => EmpresaUsuario, (membresia) => membresia.empresa)
   membresias!: EmpresaUsuario[];
+
+  @OneToMany(() => EmpresaInvitacion, (invitacion) => invitacion.empresa)
+  invitaciones!: EmpresaInvitacion[];
 }

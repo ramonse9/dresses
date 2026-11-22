@@ -217,6 +217,43 @@ Toda mutación se ejecuta en una transacción sobre `public`. El servicio bloque
 
 Todavía no se crean usuarios ni invitaciones desde estas rutas.
 
+### Modelo global de invitaciones
+
+Las invitaciones a empresas se almacenan exclusivamente en `public.empresa_invitaciones`; no existe una tabla equivalente dentro de los schemas tenant. Cada registro conserva:
+
+- empresa, email normalizado y rol `OWNER` o `EMPLOYEE`;
+- hash SHA-256 del token, expiración y datos de envío;
+- usuario creador y usuario que aceptó, cuando corresponda;
+- timestamps de aceptación, revocación, creación y actualización.
+
+El token original nunca se persiste. `token_hash` exige exactamente 64 caracteres hexadecimales en minúsculas, tiene un índice único, utiliza `select: false` en TypeORM y se omite de `toJSON()`. Las relaciones con empresa, usuario creador y usuario aceptante utilizan `ON DELETE RESTRICT`.
+
+El estado no se duplica en una columna. Se deriva de los timestamps:
+
+| Estado derivado | Condición                                         |
+| --------------- | ------------------------------------------------- |
+| `PENDIENTE`     | No fue aceptada ni revocada y todavía no expira   |
+| `ACEPTADA`      | `acceptedAt` tiene valor                          |
+| `REVOCADA`      | No fue aceptada y `revokedAt` tiene valor         |
+| `EXPIRADA`      | No fue aceptada ni revocada y `expiresAt` ya pasó |
+
+Una invitación solamente es utilizable cuando está pendiente y la empresa sigue activa. El índice único parcial por empresa y email impide dos invitaciones sin aceptar ni revocar simultáneamente. Una invitación expirada continúa ocupando esa restricción hasta que el flujo futuro la marque como revocada. `sendCount` debe ser no negativo.
+
+La migration pública es `CreateEmpresaInvitaciones1795561200000` y se ejecuta con las migrations normales:
+
+```bash
+npm run migration:show
+npm run migration:run
+```
+
+La prueba PostgreSQL crea y elimina una base aislada para comprobar una instalación nueva, `down` y reaplicación sobre una base existente. El usuario de pruebas necesita permiso `CREATEDB`:
+
+```bash
+npm run test:auth-database
+```
+
+En este punto no existen endpoints, generación de tokens ni envío de correos para invitaciones.
+
 ### Administración de equipo en Angular
 
 El frontend expone el feature lazy-loaded en `/app/equipo`, con listado filtrable y detalle administrativo. El listado conserva `page`, `limit`, `rol`, `activo` y `q` en los query parameters, aplica debounce a la búsqueda e ignora respuestas obsoletas. Su store está registrado en `TenantResetRegistry`, por lo que listado, detalle y solicitudes pendientes se limpian al cambiar de empresa.

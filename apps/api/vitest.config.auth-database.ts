@@ -10,6 +10,7 @@ export default defineConfig({
       'test/auth-company-selection.integration.ts',
       'test/equipo-miembros.integration.ts',
       'test/equipo-membresias.integration.ts',
+      'test/empresa-invitaciones-migration.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,
