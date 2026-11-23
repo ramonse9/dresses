@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
@@ -8,6 +12,10 @@ import { getRefreshTokenTtlSeconds } from './auth.config.js';
 import { AuthSession } from './entities/auth-session.entity.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 import type { SessionMetadata } from './session-metadata.js';
+import type {
+  AuthSessionResponseDto,
+  ListAuthSessionsQueryDto,
+} from './dto/auth-session.dto.js';
 
 export interface IssuedSession {
   session: AuthSession;
@@ -92,10 +100,81 @@ export class AuthSessionsService {
     }
   }
 
+  async findOwned(
+    usuarioId: string,
+    currentSessionId: string,
+    input: ListAuthSessionsQueryDto,
+  ): Promise<AuthSessionResponseDto[]> {
+    const query = this.sessionsRepository
+      .createQueryBuilder('session')
+      .select([
+        'session.id',
+        'session.createdAt',
+        'session.lastSeenAt',
+        'session.expiresAt',
+        'session.revokedAt',
+        'session.ipAddress',
+        'session.userAgent',
+      ])
+      .where('session.usuarioId = :usuarioId', { usuarioId })
+      .andWhere(
+        input.revoked
+          ? 'session.revokedAt IS NOT NULL'
+          : 'session.revokedAt IS NULL',
+      )
+      .orderBy('session.lastSeenAt', 'DESC')
+      .addOrderBy('session.id', 'DESC')
+      .take(input.limit);
+
+    const sessions = await query.getMany();
+    return sessions.map((session) =>
+      this.toResponse(session, session.id === currentSessionId),
+    );
+  }
+
+  revokeOwned(
+    sessionId: string,
+    usuarioId: string,
+    revokedByUsuarioId: string,
+  ): Promise<void> {
+    return this.revokeSession(sessionId, usuarioId, revokedByUsuarioId, true);
+  }
+
+  async revokeOthers(
+    usuarioId: string,
+    currentSessionId: string,
+  ): Promise<number> {
+    return this.dataSource.transaction(async (manager) => {
+      const result = await manager
+        .getRepository(AuthSession)
+        .createQueryBuilder()
+        .update(AuthSession)
+        .set({
+          revokedAt: new Date(),
+          revokedByUsuarioId: usuarioId,
+        })
+        .where('usuario_id = :usuarioId', { usuarioId })
+        .andWhere('id <> :currentSessionId', { currentSessionId })
+        .andWhere('revoked_at IS NULL')
+        .execute();
+
+      return result.affected ?? 0;
+    });
+  }
+
   async revoke(
     sessionId: string,
     usuarioId: string,
     revokedByUsuarioId: string = usuarioId,
+  ): Promise<void> {
+    await this.revokeSession(sessionId, usuarioId, revokedByUsuarioId, false);
+  }
+
+  private async revokeSession(
+    sessionId: string,
+    usuarioId: string,
+    revokedByUsuarioId: string,
+    requireOwnedSession: boolean,
   ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(AuthSession);
@@ -106,7 +185,13 @@ export class AuthSessionsService {
         .setLock('pessimistic_write')
         .getOne();
 
-      if (!session || session.revokedAt) {
+      if (!session) {
+        if (requireOwnedSession) {
+          throw new NotFoundException('Sesión no encontrada');
+        }
+        return;
+      }
+      if (session.revokedAt) {
         return;
       }
 
@@ -114,6 +199,22 @@ export class AuthSessionsService {
       session.revokedByUsuarioId = revokedByUsuarioId;
       await repository.save(session);
     });
+  }
+
+  private toResponse(
+    session: AuthSession,
+    current: boolean,
+  ): AuthSessionResponseDto {
+    return {
+      id: session.id,
+      current,
+      createdAt: session.createdAt,
+      lastSeenAt: session.lastSeenAt,
+      expiresAt: session.expiresAt,
+      revokedAt: session.revokedAt,
+      ipAddress: session.ipAddress,
+      userAgent: session.userAgent,
+    };
   }
 
   private findForRotation(

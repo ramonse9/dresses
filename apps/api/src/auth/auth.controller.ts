@@ -1,10 +1,14 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -13,9 +17,16 @@ import type { Request, Response } from 'express';
 import { AuthRateLimit } from '../security/auth-rate-limit/auth-rate-limit.decorator.js';
 import { AUTH_RATE_LIMIT_POLICIES } from '../security/auth-rate-limit/auth-rate-limit.config.js';
 import { AuthOriginGuard } from './auth-origin.guard.js';
+import { AuthSessionsService } from './auth-sessions.service.js';
 import { AccessTokenResponse, AuthService } from './auth.service.js';
 import { CurrentUser } from './current-user.decorator.js';
 import { assertEmptyAuthBody } from './dto/empty-auth-body.js';
+import {
+  assertEmptyAuthSessionsQuery,
+  parseListAuthSessionsQuery,
+  type AuthSessionResponseDto,
+  type RevokeOtherSessionsResponseDto,
+} from './dto/auth-session.dto.js';
 import type { EmpresaAccessDto } from './dto/empresa-access.dto.js';
 import { parseLoginBody } from './dto/login.dto.js';
 import { parseSelectEmpresaBody } from './dto/select-empresa.dto.js';
@@ -29,6 +40,7 @@ import { sessionMetadataFromRequest } from './session-metadata.js';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly authSessionsService: AuthSessionsService,
     private readonly refreshTokenCookie: RefreshTokenCookieService,
   ) {}
 
@@ -75,6 +87,55 @@ export class AuthController {
   ): Promise<void> {
     await this.authService.logout(user);
     this.refreshTokenCookie.clear(response);
+  }
+
+  @Get('sessions')
+  @UseGuards(JwtAuthGuard)
+  sessions(
+    @CurrentUser() user: AccessTokenPayload,
+    @Query() query: unknown,
+  ): Promise<AuthSessionResponseDto[]> {
+    return this.authSessionsService.findOwned(
+      user.sub,
+      user.sessionId,
+      parseListAuthSessionsQuery(query),
+    );
+  }
+
+  @Post('sessions/revocar-otras')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async revokeOtherSessions(
+    @CurrentUser() user: AccessTokenPayload,
+    @Body() body: unknown,
+    @Query() query: unknown,
+  ): Promise<RevokeOtherSessionsResponseDto> {
+    assertEmptyAuthBody(body);
+    assertEmptyAuthSessionsQuery(query);
+    return {
+      revokedCount: await this.authSessionsService.revokeOthers(
+        user.sub,
+        user.sessionId,
+      ),
+    };
+  }
+
+  @Delete('sessions/:id')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async revokeSession(
+    @CurrentUser() user: AccessTokenPayload,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: unknown,
+    @Query() query: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    assertEmptyAuthBody(body);
+    assertEmptyAuthSessionsQuery(query);
+    await this.authSessionsService.revokeOwned(id, user.sub, user.sub);
+    if (id === user.sessionId) {
+      this.refreshTokenCookie.clear(response);
+    }
   }
 
   @Get('empresas')

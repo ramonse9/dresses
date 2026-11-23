@@ -16,6 +16,7 @@ export default defineConfig({
       'test/password-reset-tokens-migration.integration.ts',
       'test/password-recovery.integration.ts',
       'test/auth-session-metadata-migration.integration.ts',
+      'test/auth-session-administration.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,

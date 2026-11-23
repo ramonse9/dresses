@@ -573,6 +573,46 @@ El IP siempre proviene de `request.ip`. Con `TRUST_PROXY=false`, un header `X-Fo
 
 Cuando una sesión se revoca por logout o por cambio de contraseña, `revoked_by_usuario_id` registra al usuario que originó la revocación. La relación usa `ON DELETE SET NULL`, mientras la relación principal sesión–usuario conserva su borrado en cascada. `refresh_token_hash` continúa con `select: false` y nunca aparece en la serialización.
 
+### Administración de sesiones propias
+
+Las rutas de administración son globales para el usuario autenticado: requieren `JwtAuthGuard`, pero no una empresa seleccionada ni `TenantAuthGuard`.
+
+```text
+GET    /api/auth/sessions
+DELETE /api/auth/sessions/:id
+POST   /api/auth/sessions/revocar-otras
+```
+
+El listado devuelve por defecto hasta 50 sesiones no revocadas, con un máximo configurable por solicitud de 100 mediante `limit`. `revoked=true` consulta solamente sesiones revocadas y `revoked=false` mantiene el comportamiento predeterminado. Cualquier otro query parameter, incluidos selectores tenant, se rechaza. El orden es `lastSeenAt DESC, id DESC`.
+
+```bash
+curl 'http://localhost:3000/api/auth/sessions?revoked=false&limit=50' \
+  --header 'Authorization: Bearer eyJ...'
+```
+
+Cada elemento contiene exclusivamente `id`, `current`, `createdAt`, `lastSeenAt`, `expiresAt`, `revokedAt`, `ipAddress` y `userAgent`. No incluye hashes, usuario revocador, empresa, tenant ni schema. `current` se calcula comparando el identificador con el `sessionId` del JWT verificado.
+
+Para revocar una sesión concreta:
+
+```bash
+curl --request DELETE \
+  http://localhost:3000/api/auth/sessions/47ecf96a-8f2c-4e07-bd1f-93936f2cdb90 \
+  --header 'Authorization: Bearer eyJ...'
+```
+
+La operación solamente encuentra sesiones del usuario autenticado; un UUID ajeno responde `404`. Es idempotente para una sesión propia ya revocada. Si el UUID corresponde a la sesión actual, también se elimina la cookie refresh y el access token deja de funcionar en la siguiente petición. Revocar una sesión remota no altera la cookie ni la sesión desde la que se ejecuta la acción.
+
+Para cerrar todas las demás sesiones sin afectar la actual:
+
+```bash
+curl --request POST http://localhost:3000/api/auth/sessions/revocar-otras \
+  --header 'Authorization: Bearer eyJ...' \
+  --header 'Content-Type: application/json' \
+  --data '{}'
+```
+
+La respuesta es `{ "revokedCount": 2 }`. A diferencia de `logout`, que revoca exclusivamente la sesión actual y elimina su cookie, esta operación conserva la sesión actual y revoca transaccionalmente todas las demás sesiones activas del usuario.
+
 Verifica el token mediante el guard reutilizable en el endpoint protegido:
 
 ```bash

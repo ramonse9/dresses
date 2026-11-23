@@ -14,6 +14,7 @@ import { AppController } from './../src/app.controller.js';
 import { AppService } from './../src/app.service.js';
 import { AuthController } from './../src/auth/auth.controller.js';
 import { AuthOriginGuard } from './../src/auth/auth-origin.guard.js';
+import { AuthSessionsService } from './../src/auth/auth-sessions.service.js';
 import { AuthService } from './../src/auth/auth.service.js';
 import { CurrentTenant } from './../src/auth/current-tenant.decorator.js';
 import { JwtAuthGuard } from './../src/auth/jwt-auth.guard.js';
@@ -175,6 +176,17 @@ describe('AppController (e2e)', () => {
     email: 'owner@example.com',
     sessionId: '47ecf96a-8f2c-4e07-bd1f-93936f2cdb90',
   };
+  const otherSessionId = '57ecf96a-8f2c-4e07-bd1f-93936f2cdb91';
+  const sessionResponse = {
+    id: authenticatedUser.sessionId,
+    current: true,
+    createdAt: new Date('2026-11-20T12:00:00.000Z'),
+    lastSeenAt: new Date('2026-11-23T12:00:00.000Z'),
+    expiresAt: new Date('2026-12-20T12:00:00.000Z'),
+    revokedAt: null,
+    ipAddress: '203.0.113.10',
+    userAgent: 'Browser/1.0',
+  };
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -204,6 +216,14 @@ describe('AppController (e2e)', () => {
         AuthOriginGuard,
         AuthRateLimitGuard,
         RefreshTokenCookieService,
+        {
+          provide: AuthSessionsService,
+          useValue: {
+            findOwned: vi.fn().mockResolvedValue([sessionResponse]),
+            revokeOwned: vi.fn().mockResolvedValue(undefined),
+            revokeOthers: vi.fn().mockResolvedValue(2),
+          },
+        },
         {
           provide: AuthService,
           useValue: {
@@ -647,6 +667,92 @@ describe('AppController (e2e)', () => {
         expect(cookie).toContain('Path=/api/auth');
         expect(cookie).toContain('Expires=Thu, 01 Jan 1970 00:00:00 GMT');
       });
+  });
+
+  it('/api/auth/sessions (GET) returns only the safe global session projection', async () => {
+    const sessionsService = app.get(AuthSessionsService) as unknown as {
+      findOwned: ReturnType<typeof vi.fn>;
+    };
+    const response = await request(app.getHttpServer())
+      .get('/api/auth/sessions?revoked=false&limit=25')
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .expect(200);
+
+    expect(response.body).toEqual([
+      {
+        ...sessionResponse,
+        createdAt: sessionResponse.createdAt.toISOString(),
+        lastSeenAt: sessionResponse.lastSeenAt.toISOString(),
+        expiresAt: sessionResponse.expiresAt.toISOString(),
+      },
+    ]);
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /refreshTokenHash|schemaName|tenant_/,
+    );
+    expect(sessionsService.findOwned).toHaveBeenCalledWith(
+      authenticatedUser.sub,
+      authenticatedUser.sessionId,
+      { revoked: false, limit: 25 },
+    );
+  });
+
+  it('/api/auth/sessions rejects tenant selectors', async () => {
+    await request(app.getHttpServer())
+      .get('/api/auth/sessions?schemaName=tenant_untrusted')
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/auth/sessions/revocar-otras?empresaId=untrusted')
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .send({})
+      .expect(400);
+  });
+
+  it('/api/auth/sessions/:id (DELETE) revokes an owned remote session', async () => {
+    const sessionsService = app.get(AuthSessionsService) as unknown as {
+      revokeOwned: ReturnType<typeof vi.fn>;
+    };
+    await request(app.getHttpServer())
+      .delete(`/api/auth/sessions/${otherSessionId}`)
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .expect(204);
+
+    expect(sessionsService.revokeOwned).toHaveBeenCalledWith(
+      otherSessionId,
+      authenticatedUser.sub,
+      authenticatedUser.sub,
+    );
+  });
+
+  it('/api/auth/sessions/:id (DELETE) clears the cookie for the current session', async () => {
+    const response = await request(app.getHttpServer())
+      .delete(`/api/auth/sessions/${authenticatedUser.sessionId}`)
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .expect(204);
+
+    expect(response.headers['set-cookie']?.[0]).toContain(
+      `${AUTH_REFRESH_COOKIE_NAME}=`,
+    );
+    expect(response.headers['set-cookie']?.[0]).toContain(
+      'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+    );
+  });
+
+  it('/api/auth/sessions/revocar-otras (POST) preserves the current session', async () => {
+    const sessionsService = app.get(AuthSessionsService) as unknown as {
+      revokeOthers: ReturnType<typeof vi.fn>;
+    };
+    await request(app.getHttpServer())
+      .post('/api/auth/sessions/revocar-otras')
+      .set('Authorization', 'Bearer signed.jwt.token')
+      .send({})
+      .expect(200)
+      .expect({ revokedCount: 2 });
+
+    expect(sessionsService.revokeOthers).toHaveBeenCalledWith(
+      authenticatedUser.sub,
+      authenticatedUser.sessionId,
+    );
   });
 
   it('allows configured and absent Origins but rejects untrusted auth Origins', async () => {

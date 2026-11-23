@@ -230,6 +230,131 @@ describe('AuthSessionsService', () => {
     expect(session.lastSeenAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
   });
 
+  it('lists only the safe projection in stable order and marks the current session', async () => {
+    const current = Object.assign(sessionWith(), {
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      lastSeenAt: new Date('2026-01-02T00:00:00.000Z'),
+      userAgent: 'Current Browser',
+    });
+    const select = vi.fn();
+    const where = vi.fn();
+    const andWhere = vi.fn();
+    const orderBy = vi.fn();
+    const addOrderBy = vi.fn();
+    const take = vi.fn();
+    const getMany = vi.fn().mockResolvedValue([current]);
+    const builder = {
+      select,
+      where,
+      andWhere,
+      orderBy,
+      addOrderBy,
+      take,
+      getMany,
+    };
+    for (const method of [select, where, andWhere, orderBy, addOrderBy, take]) {
+      method.mockReturnValue(builder);
+    }
+    const repository = {
+      createQueryBuilder: vi.fn().mockReturnValue(builder),
+    } as unknown as Repository<AuthSession>;
+    const service = new AuthSessionsService(
+      repository,
+      {} as DataSource,
+      {} as RefreshTokenService,
+      {} as ConfigService,
+    );
+
+    await expect(
+      service.findOwned(usuarioId, sessionId, {
+        revoked: false,
+        limit: 50,
+      }),
+    ).resolves.toEqual([
+      {
+        id: sessionId,
+        current: true,
+        createdAt: current.createdAt,
+        lastSeenAt: current.lastSeenAt,
+        expiresAt: current.expiresAt,
+        revokedAt: null,
+        ipAddress: current.ipAddress,
+        userAgent: 'Current Browser',
+      },
+    ]);
+    expect(select).toHaveBeenCalledWith(
+      expect.not.arrayContaining([
+        'session.refreshTokenHash',
+        'session.revokedByUsuarioId',
+      ]),
+    );
+    expect(andWhere).toHaveBeenCalledWith('session.revokedAt IS NULL');
+    expect(orderBy).toHaveBeenCalledWith('session.lastSeenAt', 'DESC');
+    expect(addOrderBy).toHaveBeenCalledWith('session.id', 'DESC');
+    expect(take).toHaveBeenCalledWith(50);
+  });
+
+  it('returns 404 for a session outside the authenticated user scope', async () => {
+    const { builder } = queryBuilderReturning(null);
+    const repository = {
+      createQueryBuilder: vi.fn().mockReturnValue(builder),
+    } as unknown as Repository<AuthSession>;
+    const manager = {
+      getRepository: vi.fn().mockReturnValue(repository),
+    } as unknown as EntityManager;
+    const service = new AuthSessionsService(
+      {} as Repository<AuthSession>,
+      {
+        transaction: vi.fn((callback) => callback(manager)),
+      } as unknown as DataSource,
+      {} as RefreshTokenService,
+      {} as ConfigService,
+    );
+
+    await expect(
+      service.revokeOwned(sessionId, usuarioId, usuarioId),
+    ).rejects.toThrow('Sesión no encontrada');
+  });
+
+  it('revokes every other active session in one transaction', async () => {
+    const update = vi.fn();
+    const set = vi.fn();
+    const where = vi.fn();
+    const andWhere = vi.fn();
+    const execute = vi.fn().mockResolvedValue({ affected: 2 });
+    const builder = { update, set, where, andWhere, execute };
+    for (const method of [update, set, where, andWhere]) {
+      method.mockReturnValue(builder);
+    }
+    const repository = {
+      createQueryBuilder: vi.fn().mockReturnValue(builder),
+    } as unknown as Repository<AuthSession>;
+    const manager = {
+      getRepository: vi.fn().mockReturnValue(repository),
+    } as unknown as EntityManager;
+    const transaction = vi.fn((callback) => callback(manager));
+    const service = new AuthSessionsService(
+      {} as Repository<AuthSession>,
+      { transaction } as unknown as DataSource,
+      {} as RefreshTokenService,
+      {} as ConfigService,
+    );
+
+    await expect(service.revokeOthers(usuarioId, sessionId)).resolves.toBe(2);
+    expect(set).toHaveBeenCalledWith({
+      revokedAt: expect.any(Date),
+      revokedByUsuarioId: usuarioId,
+    });
+    expect(where).toHaveBeenCalledWith('usuario_id = :usuarioId', {
+      usuarioId,
+    });
+    expect(andWhere).toHaveBeenCalledWith('id <> :currentSessionId', {
+      currentSessionId: sessionId,
+    });
+    expect(andWhere).toHaveBeenCalledWith('revoked_at IS NULL');
+    expect(transaction).toHaveBeenCalledOnce();
+  });
+
   it('sets revokedAt on the current session', async () => {
     const session = sessionWith();
     const { builder } = queryBuilderReturning(session);
