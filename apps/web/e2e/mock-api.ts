@@ -21,6 +21,8 @@ export interface MockApiState {
   invitationSendCount: number;
   invitationAccountExists: boolean;
   invitationAccepted: boolean;
+  passwordRecoveryRequested: boolean;
+  passwordReset: boolean;
 }
 
 const now = '2026-11-20T15:00:00.000Z';
@@ -91,6 +93,8 @@ export async function installMockApi(
     invitationSendCount: 1,
     invitationAccountExists: options.invitationAccountExists ?? false,
     invitationAccepted: false,
+    passwordRecoveryRequested: false,
+    passwordReset: false,
   };
 
   await page.route('http://localhost:3000/api/**', async (route) => {
@@ -158,6 +162,35 @@ async function handleApiRoute(route: Route, state: MockApiState): Promise<void> 
     return fulfill(route, 200, {
       accepted: true,
       message: 'Invitación aceptada. Ya puedes iniciar sesión.',
+    });
+  }
+  if (path === 'auth/password/solicitar' && method === 'POST') {
+    const input = request.postDataJSON() as Record<string, unknown>;
+    if (
+      typeof input['email'] !== 'string' ||
+      input['email'] !== input['email'].trim().toLowerCase() ||
+      Object.keys(input).some((key) => key !== 'email')
+    ) {
+      return fulfill(route, 400, error('Payload inválido'));
+    }
+    state.passwordRecoveryRequested = true;
+    return fulfill(route, 202, {
+      message: 'Si la cuenta existe y está activa, recibirás instrucciones por correo.',
+    });
+  }
+  if (path === 'auth/password/restablecer' && method === 'POST') {
+    const input = request.postDataJSON() as Record<string, unknown>;
+    if (
+      typeof input['token'] !== 'string' ||
+      typeof input['password'] !== 'string' ||
+      Object.keys(input).some((key) => !['token', 'password'].includes(key))
+    ) {
+      return fulfill(route, 400, error('Payload inválido'));
+    }
+    state.passwordReset = true;
+    state.authenticated = false;
+    return fulfill(route, 200, {
+      message: 'Contraseña restablecida. Ya puedes iniciar sesión.',
     });
   }
 

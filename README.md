@@ -332,6 +332,17 @@ WEB_APP_URL=http://localhost:4200
 
 `PASSWORD_RESET_TTL_SECONDS` admite de 5 minutos a 24 horas. El cooldown admite de 1 segundo a 24 horas. Los cuerpos son estrictos y rechazan campos como `empresaId`, `rol` o `schemaName`.
 
+El frontend expone dos rutas públicas lazy-loaded:
+
+```text
+/olvide-password
+/restablecer-password
+```
+
+El login enlaza a `/olvide-password`. Su formulario normaliza el email a minúsculas, bloquea envíos duplicados y presenta siempre el mensaje genérico devuelto por el backend. Un `429` muestra el tiempo de espera indicado por `Retry-After` sin revelar información sobre la cuenta.
+
+`/restablecer-password` obtiene el token exclusivamente desde `#token=...`, limpia inmediatamente el fragmento de la barra de direcciones y conserva el valor solo en memoria. Solicita contraseña y confirmación local, pero envía al API únicamente token y contraseña. Después del éxito limpia formulario y token, navega a `/login` y muestra que las sesiones anteriores fueron cerradas. Los endpoints públicos de recuperación están excluidos del interceptor JWT y nunca provocan un refresh automático.
+
 ### Emisión y administración de invitaciones
 
 Las invitaciones son operaciones administrativas disponibles exclusivamente para `OWNER`:
@@ -440,7 +451,7 @@ El formulario normaliza el email antes de validarlo y permite invitar como `OWNE
 
 ## Correo transaccional
 
-`MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Las invitaciones utilizan esta infraestructura; todavía no existen correos de recuperación de contraseña.
+`MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Las invitaciones y la recuperación de contraseña utilizan esta infraestructura.
 
 Configuración local segura:
 

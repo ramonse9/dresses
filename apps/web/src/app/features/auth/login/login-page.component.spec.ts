@@ -69,6 +69,13 @@ describe('LoginPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Ingresa un correo electrónico válido.');
   });
 
+  it('links to the public password recovery flow', () => {
+    const link = fixture.nativeElement.querySelector(
+      'a[href="/olvide-password"]',
+    ) as HTMLAnchorElement | null;
+    expect(link?.textContent).toContain('Olvidé mi contraseña');
+  });
+
   it('logs in once and navigates to the next authentication step', () => {
     component.form.setValue({
       email: ' Owner@Example.COM ',

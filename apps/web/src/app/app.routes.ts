@@ -34,6 +34,20 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'olvide-password',
+        loadComponent: () =>
+          import('./features/auth/password-recovery/request-password-page.component').then(
+            ({ RequestPasswordPageComponent }) => RequestPasswordPageComponent,
+          ),
+      },
+      {
+        path: 'restablecer-password',
+        loadComponent: () =>
+          import('./features/auth/password-recovery/reset-password-page.component').then(
+            ({ ResetPasswordPageComponent }) => ResetPasswordPageComponent,
+          ),
+      },
+      {
         path: 'seleccionar-empresa',
         canActivate: [authGuard],
         loadComponent: () =>

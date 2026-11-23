@@ -10,6 +10,8 @@ const bearerExcludedPaths = [
   '/auth/refresh',
   '/auth/invitaciones/verificar',
   '/auth/invitaciones/aceptar',
+  '/auth/password/solicitar',
+  '/auth/password/restablecer',
 ] as const;
 const refreshExcludedPaths = [...bearerExcludedPaths, '/auth/me'] as const;
 

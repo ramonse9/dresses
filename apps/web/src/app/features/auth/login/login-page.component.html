@@ -84,7 +84,23 @@
             La contraseña es obligatoria.
           </p>
         }
+        <a
+          routerLink="/olvide-password"
+          class="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-rose-200 underline-offset-4 hover:underline"
+        >
+          Olvidé mi contraseña
+        </a>
       </div>
+
+      @if (successMessage) {
+        <div
+          class="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 p-4 text-sm leading-6 text-emerald-50"
+          role="status"
+          aria-live="polite"
+        >
+          {{ successMessage }}
+        </div>
+      }
 
       @if (errorMessage()) {
         <div

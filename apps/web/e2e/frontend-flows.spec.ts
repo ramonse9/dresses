@@ -52,6 +52,42 @@ test('accepts a public invitation for an existing account', async ({ page }) => 
   expect(state.invitationAccepted).toBe(true);
 });
 
+test('requests password recovery without revealing account existence', async ({ page }) => {
+  const state = await installMockApi(page, { authenticated: false });
+  await page.goto('/login');
+  await page.getByRole('link', { name: 'Olvidé mi contraseña' }).click();
+  await expect(page).toHaveURL('http://127.0.0.1:4200/olvide-password');
+  await page.getByLabel('Correo electrónico').fill('  PERSON@EXAMPLE.TEST  ');
+  await page.getByRole('button', { name: 'Enviar instrucciones' }).click();
+
+  await expect(
+    page.getByText('Si la cuenta existe y está activa, recibirás instrucciones por correo.'),
+  ).toBeVisible();
+  expect(state.passwordRecoveryRequested).toBe(true);
+});
+
+test('resets a password from a memory-only fragment and returns to login', async ({ page }) => {
+  const resetToken = 'test-only-opaque-password-reset-token';
+  const state = await installMockApi(page, { authenticated: false });
+  await page.goto(`/restablecer-password#token=${resetToken}`);
+  await expect(page).toHaveURL('http://127.0.0.1:4200/restablecer-password');
+
+  await page.getByLabel('Nueva contraseña').fill('new-test-only-password');
+  await page.getByLabel('Confirmar contraseña').fill('new-test-only-password');
+  await page.getByRole('button', { name: 'Restablecer contraseña' }).click();
+
+  await expect(page).toHaveURL(/\/login\?passwordRestablecida=true$/);
+  await expect(page.getByText(/Cerramos las sesiones anteriores/)).toBeVisible();
+  expect(state.passwordReset).toBe(true);
+  const browserState = await page.evaluate(() => ({
+    url: window.location.href,
+    local: Object.values(localStorage),
+    session: Object.values(sessionStorage),
+    cookie: document.cookie,
+  }));
+  expect(JSON.stringify(browserState)).not.toContain(resetToken);
+});
+
 test('creates a customer with test-only contact data', async ({ page }) => {
   await installMockApi(page);
   await page.goto('/app/clientes/nuevo');

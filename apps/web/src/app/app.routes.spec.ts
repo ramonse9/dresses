@@ -14,6 +14,7 @@ import { ReservationCreateStore } from './features/reservations/reservation-crea
 import { ReservationsStore } from './features/reservations/reservations.store';
 import { TeamStore } from './features/team/team.store';
 import { InvitationAcceptanceApiService } from './features/auth/invitation-acceptance/invitation-acceptance-api.service';
+import { PasswordRecoveryApiService } from './features/auth/password-recovery/password-recovery-api.service';
 
 describe('application routes', () => {
   const authenticated = signal(false);
@@ -253,6 +254,13 @@ describe('application routes', () => {
             accept: () => of({ accepted: true, message: 'Accepted' }),
           },
         },
+        {
+          provide: PasswordRecoveryApiService,
+          useValue: {
+            request: () => of({ message: 'Respuesta genérica' }),
+            reset: () => of({ message: 'Contraseña restablecida' }),
+          },
+        },
       ],
     });
   });
@@ -261,6 +269,8 @@ describe('application routes', () => {
     ['/', 'Cada vestido.'],
     ['/login', 'Inicia sesión'],
     ['/aceptar-invitacion', 'Aceptar invitación'],
+    ['/olvide-password', 'Recupera tu contraseña'],
+    ['/restablecer-password', 'Crea una contraseña nueva'],
     ['/seleccionar-empresa', 'Seleccionar empresa'],
     ['/app', 'Panel de operación'],
     ['/app/dashboard', 'Panel de operación'],

@@ -24,6 +24,10 @@ export class LoginPageComponent {
 
   readonly submitting = signal(false);
   readonly errorMessage = signal<string | null>(null);
+  readonly successMessage =
+    this.route.snapshot.queryParamMap.get('passwordRestablecida') === 'true'
+      ? 'Tu contraseña fue actualizada. Cerramos las sesiones anteriores; inicia sesión nuevamente.'
+      : null;
   readonly form = this.formBuilder.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required],
