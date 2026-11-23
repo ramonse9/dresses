@@ -266,6 +266,12 @@ describe('PostgreSQL password recovery', () => {
         revokedAt: IsNull(),
       }),
     ).toBe(0);
+    await expect(
+      sessions.findOneByOrFail({ usuarioId: activeUser.id }),
+    ).resolves.toMatchObject({
+      revokedAt: expect.any(Date),
+      revokedByUsuarioId: activeUser.id,
+    });
 
     await request(app.getHttpServer())
       .get('/api/auth/me')

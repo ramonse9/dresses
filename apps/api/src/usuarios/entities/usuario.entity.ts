@@ -50,6 +50,9 @@ export class Usuario {
   @OneToMany(() => AuthSession, (session) => session.usuario)
   authSessions!: AuthSession[];
 
+  @OneToMany(() => AuthSession, (session) => session.revokedByUsuario)
+  authSessionsRevocadas!: AuthSession[];
+
   @OneToMany(() => PasswordResetToken, (token) => token.usuario)
   passwordResetTokens!: PasswordResetToken[];
 

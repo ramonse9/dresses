@@ -15,6 +15,7 @@ export default defineConfig({
       'test/empresa-invitaciones-aceptacion.integration.ts',
       'test/password-reset-tokens-migration.integration.ts',
       'test/password-recovery.integration.ts',
+      'test/auth-session-metadata-migration.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,

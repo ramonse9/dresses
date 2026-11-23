@@ -138,7 +138,7 @@ export class PasswordRecoveryService {
         .getRepository(AuthSession)
         .update(
           { usuarioId: usuario.id, revokedAt: IsNull() },
-          { revokedAt: now },
+          { revokedAt: now, revokedByUsuarioId: usuario.id },
         );
     });
 

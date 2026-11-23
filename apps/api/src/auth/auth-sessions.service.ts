@@ -7,6 +7,7 @@ import { Usuario } from '../usuarios/entities/usuario.entity.js';
 import { getRefreshTokenTtlSeconds } from './auth.config.js';
 import { AuthSession } from './entities/auth-session.entity.js';
 import { RefreshTokenService } from './refresh-token.service.js';
+import type { SessionMetadata } from './session-metadata.js';
 
 export interface IssuedSession {
   session: AuthSession;
@@ -24,22 +25,33 @@ export class AuthSessionsService {
     private readonly configService: ConfigService,
   ) {}
 
-  async create(usuarioId: string): Promise<IssuedSession> {
+  async create(
+    usuarioId: string,
+    metadata: SessionMetadata = { ipAddress: null, userAgent: null },
+  ): Promise<IssuedSession> {
     const issuedToken = this.refreshTokenService.issue();
     const ttlSeconds = getRefreshTokenTtlSeconds(this.configService);
+    const now = new Date();
     const session = this.sessionsRepository.create({
       id: randomUUID(),
       usuarioId,
       refreshTokenHash: issuedToken.hash,
       expiresAt: new Date(Date.now() + ttlSeconds * 1_000),
       revokedAt: null,
+      ipAddress: metadata.ipAddress,
+      userAgent: metadata.userAgent,
+      lastSeenAt: now,
+      revokedByUsuarioId: null,
     });
 
     await this.sessionsRepository.save(session);
     return { session, refreshToken: issuedToken.token };
   }
 
-  async rotate(refreshToken: string): Promise<Required<IssuedSession>> {
+  async rotate(
+    refreshToken: string,
+    metadata: SessionMetadata = { ipAddress: null, userAgent: null },
+  ): Promise<Required<IssuedSession>> {
     const presentedHash = this.refreshTokenService.hash(refreshToken);
 
     return this.dataSource.transaction(async (manager) => {
@@ -51,6 +63,9 @@ export class AuthSessionsService {
 
       const issuedToken = this.refreshTokenService.issue();
       session.refreshTokenHash = issuedToken.hash;
+      session.ipAddress = metadata.ipAddress;
+      session.userAgent = metadata.userAgent;
+      session.lastSeenAt = new Date();
       await manager.getRepository(AuthSession).save(session);
 
       return {
@@ -77,7 +92,11 @@ export class AuthSessionsService {
     }
   }
 
-  async revoke(sessionId: string, usuarioId: string): Promise<void> {
+  async revoke(
+    sessionId: string,
+    usuarioId: string,
+    revokedByUsuarioId: string = usuarioId,
+  ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(AuthSession);
       const session = await repository
@@ -92,6 +111,7 @@ export class AuthSessionsService {
       }
 
       session.revokedAt = new Date();
+      session.revokedByUsuarioId = revokedByUsuarioId;
       await repository.save(session);
     });
   }

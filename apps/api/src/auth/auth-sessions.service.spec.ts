@@ -60,6 +60,10 @@ describe('AuthSessionsService', () => {
         Date.now() + (options?.expired ? -3_600_000 : 3_600_000),
       ),
       revokedAt: options?.revoked ? new Date() : null,
+      ipAddress: '192.0.2.1',
+      userAgent: 'Old Browser',
+      lastSeenAt: new Date('2026-01-01T00:00:00.000Z'),
+      revokedByUsuarioId: null,
       usuario,
     });
   }
@@ -85,7 +89,10 @@ describe('AuthSessionsService', () => {
       configService,
     );
 
-    const result = await service.create(usuarioId);
+    const result = await service.create(usuarioId, {
+      ipAddress: '203.0.113.10',
+      userAgent: 'Test Browser',
+    });
 
     expect(result.refreshToken).toBe(token);
     expect(create).toHaveBeenCalledWith(
@@ -93,6 +100,10 @@ describe('AuthSessionsService', () => {
         usuarioId,
         refreshTokenHash: tokenHash,
         revokedAt: null,
+        ipAddress: '203.0.113.10',
+        userAgent: 'Test Browser',
+        lastSeenAt: expect.any(Date),
+        revokedByUsuarioId: null,
       }),
     );
     expect(JSON.stringify(create.mock.calls[0][0])).not.toContain(token);
@@ -126,12 +137,22 @@ describe('AuthSessionsService', () => {
       {} as ConfigService,
     );
 
-    await expect(service.rotate('presented-token')).resolves.toEqual({
+    await expect(
+      service.rotate('presented-token', {
+        ipAddress: '203.0.113.20',
+        userAgent: 'New Browser',
+      }),
+    ).resolves.toEqual({
       session,
       usuario: session.usuario,
       refreshToken: 'rotated-token',
     });
     expect(session.refreshTokenHash).toBe('rotated-hash');
+    expect(session.ipAddress).toBe('203.0.113.20');
+    expect(session.userAgent).toBe('New Browser');
+    expect(session.lastSeenAt.getTime()).toBeGreaterThan(
+      new Date('2026-01-01T00:00:00.000Z').getTime(),
+    );
     expect(save).toHaveBeenCalledWith(session);
     expect(transaction).toHaveBeenCalledOnce();
   });
@@ -187,6 +208,28 @@ describe('AuthSessionsService', () => {
     );
   });
 
+  it('does not update lastSeenAt while validating a protected request', async () => {
+    const session = sessionWith();
+    const { builder } = queryBuilderReturning(session);
+    const save = vi.fn();
+    const repository = {
+      createQueryBuilder: vi.fn().mockReturnValue(builder),
+      save,
+    } as unknown as Repository<AuthSession>;
+    const service = new AuthSessionsService(
+      repository,
+      {} as DataSource,
+      {} as RefreshTokenService,
+      {} as ConfigService,
+    );
+
+    await expect(
+      service.assertActive(sessionId, usuarioId),
+    ).resolves.toBeUndefined();
+    expect(save).not.toHaveBeenCalled();
+    expect(session.lastSeenAt).toEqual(new Date('2026-01-01T00:00:00.000Z'));
+  });
+
   it('sets revokedAt on the current session', async () => {
     const session = sessionWith();
     const { builder } = queryBuilderReturning(session);
@@ -211,6 +254,7 @@ describe('AuthSessionsService', () => {
     await service.revoke(sessionId, usuarioId);
 
     expect(session.revokedAt).toBeInstanceOf(Date);
+    expect(session.revokedByUsuarioId).toBe(usuarioId);
     expect(save).toHaveBeenCalledWith(session);
   });
 });

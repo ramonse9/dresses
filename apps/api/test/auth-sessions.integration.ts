@@ -57,7 +57,11 @@ describe('PostgreSQL auth sessions', () => {
   });
 
   it('stores only hashes, allows one concurrent rotation and revokes access', async () => {
-    const login = await authService.login({ email, password });
+    const loginMetadata = {
+      ipAddress: '203.0.113.10',
+      userAgent: 'Auth integration browser',
+    };
+    const login = await authService.login({ email, password }, loginMetadata);
     const loginPayload = await jwtService.verifyAsync<AccessTokenPayload>(
       login.accessToken,
     );
@@ -71,10 +75,27 @@ describe('PostgreSQL auth sessions', () => {
       refreshTokenService.hash(login.refreshToken),
     );
     expect(storedSession.refreshTokenHash).not.toContain(login.refreshToken);
+    expect(storedSession).toMatchObject(loginMetadata);
+    expect(storedSession.lastSeenAt).toBeInstanceOf(Date);
+    expect(storedSession.revokedByUsuarioId).toBeNull();
+    expect(JSON.stringify(storedSession)).not.toMatch(
+      /refreshTokenHash|sensitive-refresh-token|authorization|cookie/i,
+    );
+
+    const loginLastSeenAt = storedSession.lastSeenAt;
+    await sessionsRepository.update(storedSession.id, {
+      lastSeenAt: new Date(loginLastSeenAt.getTime() - 60_000),
+    });
 
     const rotations = await Promise.allSettled([
-      authService.refresh(login.refreshToken),
-      authService.refresh(login.refreshToken),
+      authService.refresh(login.refreshToken, {
+        ipAddress: '2001:db8::10',
+        userAgent: 'Rotated integration browser',
+      }),
+      authService.refresh(login.refreshToken, {
+        ipAddress: '2001:db8::10',
+        userAgent: 'Rotated integration browser',
+      }),
     ]);
     const successfulRotations = rotations.filter(
       (result) => result.status === 'fulfilled',
@@ -97,7 +118,21 @@ describe('PostgreSQL auth sessions', () => {
     expect(rotated.value.refreshToken).not.toBe(login.refreshToken);
     expect(rotatedPayload.sessionId).toBe(loginPayload.sessionId);
 
+    const refreshedSession = await sessionsRepository.findOneByOrFail({
+      id: loginPayload.sessionId,
+    });
+    expect(refreshedSession.ipAddress).toBe('2001:db8::10');
+    expect(refreshedSession.userAgent).toBe('Rotated integration browser');
+    expect(refreshedSession.lastSeenAt.getTime()).toBeGreaterThan(
+      loginLastSeenAt.getTime() - 60_000,
+    );
+
     await authService.logout(rotatedPayload);
+
+    const revokedSession = await sessionsRepository.findOneByOrFail({
+      id: loginPayload.sessionId,
+    });
+    expect(revokedSession.revokedByUsuarioId).toBe(usuario.id);
 
     await expect(
       authService.refresh(rotated.value.refreshToken),

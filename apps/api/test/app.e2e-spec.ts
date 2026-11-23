@@ -512,26 +512,62 @@ describe('AppController (e2e)', () => {
       });
   });
 
-  it('/api/auth/login (POST) sets the HttpOnly cookie without exposing it in JSON', () => {
-    return request(app.getHttpServer())
+  it('/api/auth/login (POST) stores bounded request metadata and sets the HttpOnly cookie', async () => {
+    const authService = app.get(AuthService) as AuthService & {
+      login: ReturnType<typeof vi.fn>;
+    };
+    const response = await request(app.getHttpServer())
       .post('/api/auth/login')
+      .set('User-Agent', 'Metadata Browser/1.0')
+      .set('X-Forwarded-For', '203.0.113.10')
+      .set('Cookie', 'unrelated_cookie=must-not-be-stored')
       .send({ email: 'Owner@Example.COM', password: 'correct-password' })
       .expect(201)
       .expect({
         accessToken: 'signed.jwt.token',
         tokenType: 'Bearer',
         expiresIn: 900,
-      })
-      .expect((response) => {
-        const cookie = response.headers['set-cookie']?.[0];
-        expect(cookie).toContain(`${AUTH_REFRESH_COOKIE_NAME}=${refreshToken}`);
-        expect(cookie).toContain('HttpOnly');
-        expect(cookie).toContain('SameSite=Lax');
-        expect(cookie).toContain('Path=/api/auth');
-        expect(cookie).toContain('Max-Age=2592000');
-        expect(cookie).not.toContain('Secure');
-        expect(response.body).not.toHaveProperty('refreshToken');
       });
+
+    const cookie = response.headers['set-cookie']?.[0];
+    expect(cookie).toContain(`${AUTH_REFRESH_COOKIE_NAME}=${refreshToken}`);
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Lax');
+    expect(cookie).toContain('Path=/api/auth');
+    expect(cookie).toContain('Max-Age=2592000');
+    expect(cookie).not.toContain('Secure');
+    expect(response.body).not.toHaveProperty('refreshToken');
+
+    const metadata = authService.login.mock.calls[0]?.[1];
+    expect(metadata).toEqual({
+      ipAddress: expect.any(String),
+      userAgent: 'Metadata Browser/1.0',
+    });
+    expect(metadata.ipAddress).not.toBe('203.0.113.10');
+    expect(metadata).not.toHaveProperty('cookie');
+    expect(metadata).not.toHaveProperty('authorization');
+  });
+
+  it('uses forwarded IP only when trust proxy is explicitly enabled and bounds user-agent', async () => {
+    const expressApplication = app.getHttpAdapter().getInstance() as {
+      set(name: string, value: boolean): void;
+    };
+    expressApplication.set('trust proxy', true);
+    const authService = app.get(AuthService) as AuthService & {
+      login: ReturnType<typeof vi.fn>;
+    };
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '203.0.113.20')
+      .set('User-Agent', 'x'.repeat(600))
+      .send({ email: 'Owner@Example.COM', password: 'correct-password' })
+      .expect(201);
+
+    expect(authService.login.mock.calls[0]?.[1]).toEqual({
+      ipAddress: '203.0.113.20',
+      userAgent: 'x'.repeat(512),
+    });
   });
 
   it('/api/auth/login (POST) applies its rate limit without blocking refresh', async () => {
@@ -565,22 +601,29 @@ describe('AppController (e2e)', () => {
       .expect(200);
   });
 
-  it('/api/auth/refresh (POST) rotates the cookie and returns only an access token', () => {
-    return request(app.getHttpServer())
+  it('/api/auth/refresh (POST) rotates the cookie, updates metadata and returns only an access token', async () => {
+    const authService = app.get(AuthService) as AuthService & {
+      refresh: ReturnType<typeof vi.fn>;
+    };
+    const response = await request(app.getHttpServer())
       .post('/api/auth/refresh')
       .set('Cookie', `${AUTH_REFRESH_COOKIE_NAME}=${refreshToken}`)
+      .set('User-Agent', 'Refresh Browser/2.0')
       .expect(200)
       .expect({
         accessToken: 'rotated.jwt.token',
         tokenType: 'Bearer',
         expiresIn: 900,
-      })
-      .expect((response) => {
-        expect(response.headers['set-cookie']?.[0]).toContain(
-          `${AUTH_REFRESH_COOKIE_NAME}=${rotatedRefreshToken}`,
-        );
-        expect(response.body).not.toHaveProperty('refreshToken');
       });
+
+    expect(response.headers['set-cookie']?.[0]).toContain(
+      `${AUTH_REFRESH_COOKIE_NAME}=${rotatedRefreshToken}`,
+    );
+    expect(response.body).not.toHaveProperty('refreshToken');
+    expect(authService.refresh).toHaveBeenCalledWith(refreshToken, {
+      ipAddress: expect.any(String),
+      userAgent: 'Refresh Browser/2.0',
+    });
   });
 
   it('/api/auth/refresh (POST) rejects missing cookies and body tokens', async () => {

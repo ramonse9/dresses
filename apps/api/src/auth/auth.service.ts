@@ -18,6 +18,7 @@ import type {
   AccessTokenPayload,
   TenantAccessTokenPayload,
 } from './types/access-token-payload.js';
+import type { SessionMetadata } from './session-metadata.js';
 
 export interface AccessTokenResponse {
   accessToken: string;
@@ -41,7 +42,10 @@ export class AuthService {
     private readonly tenantResolverService: TenantResolverService,
   ) {}
 
-  async login(input: LoginDto): Promise<IssuedAuthTokens> {
+  async login(
+    input: LoginDto,
+    metadata?: SessionMetadata,
+  ): Promise<IssuedAuthTokens> {
     const usuario = await this.usuariosService.findByEmailForAuthentication(
       input.email,
     );
@@ -54,7 +58,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    const issuedSession = await this.authSessionsService.create(usuario.id);
+    const issuedSession = await this.authSessionsService.create(
+      usuario.id,
+      metadata,
+    );
 
     return this.issueTokens(
       usuario.id,
@@ -64,8 +71,14 @@ export class AuthService {
     );
   }
 
-  async refresh(refreshToken: string): Promise<IssuedAuthTokens> {
-    const issuedSession = await this.authSessionsService.rotate(refreshToken);
+  async refresh(
+    refreshToken: string,
+    metadata?: SessionMetadata,
+  ): Promise<IssuedAuthTokens> {
+    const issuedSession = await this.authSessionsService.rotate(
+      refreshToken,
+      metadata,
+    );
 
     return this.issueTokens(
       issuedSession.usuario.id,
@@ -76,7 +89,11 @@ export class AuthService {
   }
 
   async logout(payload: AccessTokenPayload): Promise<void> {
-    await this.authSessionsService.revoke(payload.sessionId, payload.sub);
+    await this.authSessionsService.revoke(
+      payload.sessionId,
+      payload.sub,
+      payload.sub,
+    );
   }
 
   async listEmpresas(payload: AccessTokenPayload): Promise<EmpresaAccessDto[]> {

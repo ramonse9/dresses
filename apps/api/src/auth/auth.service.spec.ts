@@ -132,9 +132,16 @@ describe('AuthService', () => {
 
   it('returns a short-lived token with only identity and session claims', async () => {
     const { service, signAsync, createSession } = createService();
+    const metadata = {
+      ipAddress: '203.0.113.10',
+      userAgent: 'Test Browser',
+    };
 
     await expect(
-      service.login({ email: activeUser.email, password: 'correct-password' }),
+      service.login(
+        { email: activeUser.email, password: 'correct-password' },
+        metadata,
+      ),
     ).resolves.toEqual({
       accessToken: 'signed.jwt.token',
       refreshToken: 'new-refresh-token',
@@ -143,7 +150,7 @@ describe('AuthService', () => {
     });
 
     expect(signAsync).toHaveBeenCalledOnce();
-    expect(createSession).toHaveBeenCalledWith(activeUser.id);
+    expect(createSession).toHaveBeenCalledWith(activeUser.id, metadata);
     const payload = signAsync.mock.calls[0][0] as Record<string, unknown>;
     expect(payload).toMatchObject({
       sub: activeUser.id,
@@ -156,14 +163,20 @@ describe('AuthService', () => {
 
   it('rotates the refresh token and issues a new access token', async () => {
     const { service, rotate, signAsync } = createService();
+    const metadata = {
+      ipAddress: '203.0.113.20',
+      userAgent: 'Refreshed Browser',
+    };
 
-    await expect(service.refresh('current-refresh-token')).resolves.toEqual({
+    await expect(
+      service.refresh('current-refresh-token', metadata),
+    ).resolves.toEqual({
       accessToken: 'signed.jwt.token',
       refreshToken: 'rotated-refresh-token',
       tokenType: 'Bearer',
       expiresIn: 900,
     });
-    expect(rotate).toHaveBeenCalledWith('current-refresh-token');
+    expect(rotate).toHaveBeenCalledWith('current-refresh-token', metadata);
     expect(signAsync).toHaveBeenCalledWith({
       sub: activeUser.id,
       email: activeUser.email,
@@ -180,7 +193,11 @@ describe('AuthService', () => {
       sessionId,
     });
 
-    expect(revoke).toHaveBeenCalledWith(sessionId, activeUser.id);
+    expect(revoke).toHaveBeenCalledWith(
+      sessionId,
+      activeUser.id,
+      activeUser.id,
+    );
   });
 
   it('lists multiple active empresas without exposing schemaName', async () => {

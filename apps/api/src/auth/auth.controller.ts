@@ -22,6 +22,7 @@ import { parseSelectEmpresaBody } from './dto/select-empresa.dto.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { RefreshTokenCookieService } from './refresh-token-cookie.service.js';
 import type { AccessTokenPayload } from './types/access-token-payload.js';
+import { sessionMetadataFromRequest } from './session-metadata.js';
 
 @Controller('auth')
 @UseGuards(AuthOriginGuard)
@@ -35,10 +36,12 @@ export class AuthController {
   @AuthRateLimit(AUTH_RATE_LIMIT_POLICIES.LOGIN)
   async login(
     @Body() body: unknown,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AccessTokenResponse> {
     const { refreshToken, ...accessToken } = await this.authService.login(
       parseLoginBody(body),
+      sessionMetadataFromRequest(request),
     );
 
     this.refreshTokenCookie.write(response, refreshToken);
@@ -54,8 +57,10 @@ export class AuthController {
   ): Promise<AccessTokenResponse> {
     assertEmptyAuthBody(body);
     const currentRefreshToken = this.refreshTokenCookie.read(request);
-    const { refreshToken, ...accessToken } =
-      await this.authService.refresh(currentRefreshToken);
+    const { refreshToken, ...accessToken } = await this.authService.refresh(
+      currentRefreshToken,
+      sessionMetadataFromRequest(request),
+    );
 
     this.refreshTokenCookie.write(response, refreshToken);
     return accessToken;

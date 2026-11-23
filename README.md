@@ -135,7 +135,7 @@ El email se normaliza con `trim().toLowerCase()` antes de persistir. PostgreSQL 
 
 La migration global correspondiente es `CreateUsuariosMemberships1794442297164` y crea las llaves foráneas hacia `public.usuarios` y `public.empresas` con eliminación restringida.
 
-Las sesiones también son globales y viven en `public.auth_sessions`. Cada registro pertenece a un usuario y contiene únicamente el hash del refresh token, su expiración y el momento opcional de revocación. La migration `CreateAuthSessions1794528000000` crea esta tabla y sus índices.
+Las sesiones también son globales y viven en `public.auth_sessions`. Cada registro pertenece a un usuario y contiene únicamente el hash del refresh token, su expiración, metadata técnica acotada y el momento opcional de revocación. Las migrations `CreateAuthSessions1794528000000` y `AddAuthSessionMetadata1795734000000` crean y amplían esta tabla; `synchronize` permanece deshabilitado.
 
 ### Consulta administrativa de miembros
 
@@ -565,6 +565,14 @@ curl --request POST http://localhost:3000/api/auth/refresh \
 
 Cada refresh rota el token dentro de una transacción con bloqueo de fila, reemplaza la cookie y devuelve solamente el access token nuevo. El hash anterior se sustituye antes de confirmar la transacción, por lo que el token anterior deja de funcionar inmediatamente. La fecha de expiración absoluta de la sesión no se extiende al rotar.
 
+### Metadata de sesiones
+
+Al crear una sesión durante el login, `public.auth_sessions` conserva `ip_address`, un `user_agent` saneado de hasta 512 caracteres y `last_seen_at`. El IP utiliza el tipo PostgreSQL `inet`; tanto el IP como el user-agent pueden ser `null`. `last_seen_at` se inicializa al crear la sesión y solamente se actualiza al rotar correctamente el refresh token, no en cada petición protegida. Las sesiones anteriores a la migration reciben como valor inicial su `updated_at`, o `created_at` como respaldo.
+
+El IP siempre proviene de `request.ip`. Con `TRUST_PROXY=false`, un header `X-Forwarded-For` enviado directamente por un cliente no se considera. `TRUST_PROXY=true` debe habilitarse únicamente detrás de un proxy controlado que reemplace ese header. La aplicación extrae solamente estos dos campos: no persiste cookies, tokens, `Authorization`, contraseñas ni cuerpos HTTP como metadata.
+
+Cuando una sesión se revoca por logout o por cambio de contraseña, `revoked_by_usuario_id` registra al usuario que originó la revocación. La relación usa `ON DELETE SET NULL`, mientras la relación principal sesión–usuario conserva su borrado en cascada. `refresh_token_hash` continúa con `select: false` y nunca aparece en la serialización.
+
 Verifica el token mediante el guard reutilizable en el endpoint protegido:
 
 ```bash
@@ -631,11 +639,12 @@ curl --request POST http://localhost:3000/api/auth/logout \
 Puedes inspeccionar las sesiones sin exponer tokens completos:
 
 ```sql
-SELECT id, usuario_id, expires_at, revoked_at, created_at, updated_at
+SELECT id, usuario_id, ip_address, user_agent, last_seen_at,
+       expires_at, revoked_at, revoked_by_usuario_id, created_at, updated_at
 FROM public.auth_sessions;
 ```
 
-La prueba PostgreSQL de autenticación comprueba el hash de refresh tokens, la rotación concurrente y la revocación. También crea dos usuarios y dos empresas temporales para validar acceso a múltiples empresas, roles, membresías inactivas y rechazo de selección cruzada. Todos los datos y schemas de prueba se eliminan al finalizar:
+La prueba PostgreSQL de autenticación comprueba el hash de refresh tokens, la metadata, la actualización de `last_seen_at`, la rotación concurrente, la revocación y la migration sobre sesiones existentes. También crea dos usuarios y dos empresas temporales para validar acceso a múltiples empresas, roles, membresías inactivas y rechazo de selección cruzada. Todos los datos, schemas y bases temporales de prueba se eliminan al finalizar:
 
 ```bash
 npm run test:auth-database
