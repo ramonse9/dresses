@@ -171,9 +171,7 @@ export class TenantStore {
   }
 
   clearTenant(options: { readonly forgetPreference?: boolean } = {}): void {
-    if (this.selectedTenantValue()) {
-      this.resetRegistry.resetAll();
-    }
+    this.resetRegistry.resetAll();
     if (options.forgetPreference) {
       this.preference.clearCompanyId();
     }

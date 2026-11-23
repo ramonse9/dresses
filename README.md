@@ -1365,13 +1365,17 @@ layouts/    contenedores de rutas
 features/   funcionalidades por dominio
 ```
 
-Las rutas base son `/`, `/login`, `/seleccionar-empresa` y `/app`. Login y selección de empresa son funcionales; `/app` exige una sesión autenticada y un tenant seleccionado mediante `authGuard` y `tenantGuard`.
+Las rutas base son `/`, `/login`, `/seleccionar-empresa`, `/cuenta` y `/app`. Login y selección de empresa son funcionales; `/cuenta` exige únicamente `authGuard`, mientras `/app` exige además un tenant seleccionado mediante `tenantGuard`.
 
 La URL del API se inyecta mediante `API_BASE_URL`: desarrollo usa `http://localhost:3000/api` y producción usa `/api`. Los servicios futuros deben consumir el `ApiClient` genérico con rutas relativas; no deben duplicar URLs absolutas ni aceptar nombres de schemas. Los errores se normalizan como `ApiError` y los estados comunes de carga, error, vacío y envío están disponibles en `shared/ui`.
 
 El estado de autenticación frontend vive en `core/auth` y utiliza un `AuthStore` basado en signals. Al arrancar, Angular intenta rotar la cookie HttpOnly y consulta `/auth/me`; si la sesión es válida mantiene únicamente el access token y su expiración en memoria. La inicialización está deduplicada y limitada a 10 segundos. El interceptor agrega Bearer solo a solicitudes dirigidas al API configurado, comparte un único refresh ante solicitudes `401` concurrentes y nunca persiste tokens en almacenamiento del navegador. Un token obtenido por refresh se considera global, sin tenant seleccionado.
 
 El formulario `/login` usa Reactive Forms y mensajes accesibles. `guestGuard` y `authGuard` separan rutas invitadas y autenticadas, conservando únicamente `returnUrl` internas. Login y refresh nunca reciben el header Bearer. El logout revoca la sesión, limpia siempre el estado local y navega de regreso a `/login`, aun si la llamada remota falla.
+
+La seguridad global de cuenta está disponible en `/cuenta/sesiones`, incluso cuando el usuario no tiene empresas activas. El layout de cuenta no depende de `TenantScope` y enlaza de regreso a `/app` solamente cuando ya existe una empresa seleccionada; en otro caso vuelve a `/seleccionar-empresa`. También se puede abrir desde el menú de usuario del shell o desde la pantalla de selección de empresa.
+
+La pantalla muestra exclusivamente la metadata segura entregada por `GET /auth/sessions`: dispositivo o user-agent, IP, última actividad, creación, expiración, estado e indicador de sesión actual. Cada revocación requiere confirmación. `DELETE /auth/sessions/:id` actualiza el listado si se trata de una sesión remota; si se revoca la sesión actual, limpia `AuthStore`, `TenantStore` y todos los stores registrados en `TenantResetRegistry` antes de navegar a `/login`. `POST /auth/sessions/revocar-otras` conserva la sesión actual y vuelve a cargar el estado autoritativo. La interfaz no persiste esta metadata ni muestra tokens, cookies, hashes o nombres de schemas.
 
 La selección tenant vive en `core/tenant` y utiliza un `TenantStore` basado en signals. Después de restaurar la sesión global, Angular consulta `GET /auth/empresas` y selecciona mediante `POST /auth/select-empresa` enviando exclusivamente `empresaId`. Una sola empresa se selecciona automáticamente; con varias, `/seleccionar-empresa` muestra únicamente las opciones devueltas por el backend. La respuesta reemplaza en memoria el access token global por el token tenant y conserva el rol validado de la membresía.
 

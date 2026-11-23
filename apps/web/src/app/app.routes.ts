@@ -58,6 +58,24 @@ export const routes: Routes = [
     ],
   },
   {
+    path: 'cuenta',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./layouts/account-layout/account-layout.component').then(
+        ({ AccountLayoutComponent }) => AccountLayoutComponent,
+      ),
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'sesiones' },
+      {
+        path: 'sesiones',
+        loadComponent: () =>
+          import('./features/account/sessions/account-sessions-page.component').then(
+            ({ AccountSessionsPageComponent }) => AccountSessionsPageComponent,
+          ),
+      },
+    ],
+  },
+  {
     path: 'app',
     canActivate: [authGuard, tenantGuard],
     loadComponent: () =>

@@ -18,6 +18,61 @@ test('login → empresa → catálogo → logout', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Inicia sesión' })).toBeVisible();
 });
 
+test('opens account security without companies and revokes a remote session', async ({ page }) => {
+  const state = await installMockApi(page, { hasCompanies: false });
+  await page.goto('/seleccionar-empresa');
+  await expect(page.getByText('Aún no tienes empresas disponibles')).toBeVisible();
+  await page.getByRole('link', { name: 'Seguridad de la cuenta' }).click();
+
+  await expect(page).toHaveURL('http://127.0.0.1:4200/cuenta/sesiones');
+  await expect(page.getByRole('heading', { name: 'Tus sesiones' })).toBeVisible();
+  await expect(page.getByText('Chromium de prueba')).toBeVisible();
+  await expect(page.getByText('Navegador remoto de prueba')).toBeVisible();
+  await expect(page.getByText('Esta sesión', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Revocar sesión', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmar revocación' }).click();
+  await expect(page.getByText('Navegador remoto de prueba')).toHaveCount(0);
+  await expect(page.getByText('La sesión remota fue revocada.')).toBeVisible();
+  expect(state.authenticated).toBe(true);
+
+  const exposed = await page.locator('body').textContent();
+  expect(exposed).not.toMatch(/refreshToken|tokenHash|schemaName|vestidos_refresh/);
+});
+
+test('revokes all other sessions while preserving the current one', async ({ page }) => {
+  const state = await installMockApi(page);
+  await page.goto('/cuenta/sesiones');
+
+  await page.getByRole('button', { name: 'Revocar todas las demás' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Esta sesión permanecerá activa');
+  await page.getByRole('button', { name: 'Confirmar revocación' }).click();
+
+  await expect(page.getByText('Navegador remoto de prueba')).toHaveCount(0);
+  await expect(page.getByText('Chromium de prueba')).toBeVisible();
+  expect(state.remoteSessionActive).toBe(false);
+  expect(state.authenticated).toBe(true);
+});
+
+test('revoking the current session clears local state and returns to login', async ({ page }) => {
+  const state = await installMockApi(page);
+  await page.goto('/cuenta/sesiones');
+
+  await page.getByRole('button', { name: 'Cerrar esta sesión' }).click();
+  await expect(page.getByRole('dialog')).toContainText('volverás a la pantalla');
+  await page.getByRole('button', { name: 'Confirmar revocación' }).click();
+
+  await expect(page).toHaveURL('http://127.0.0.1:4200/login');
+  await expect(page.getByRole('heading', { name: 'Inicia sesión' })).toBeVisible();
+  expect(state.authenticated).toBe(false);
+  const browserState = await page.evaluate(() => ({
+    local: Object.values(localStorage),
+    session: Object.values(sessionStorage),
+    cookie: document.cookie,
+  }));
+  expect(JSON.stringify(browserState)).not.toMatch(/jwt|tokenHash|schemaName|vestidos_refresh/);
+});
+
 test('accepts a public invitation for a new account and removes the fragment', async ({ page }) => {
   const state = await installMockApi(page, {
     authenticated: false,

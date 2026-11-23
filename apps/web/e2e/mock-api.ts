@@ -6,6 +6,7 @@ export interface MockApiOptions {
   readonly authenticated?: boolean;
   readonly role?: MockRole;
   readonly invitationAccountExists?: boolean;
+  readonly hasCompanies?: boolean;
 }
 
 export interface MockApiState {
@@ -23,6 +24,8 @@ export interface MockApiState {
   invitationAccepted: boolean;
   passwordRecoveryRequested: boolean;
   passwordReset: boolean;
+  hasCompanies: boolean;
+  remoteSessionActive: boolean;
 }
 
 const now = '2026-11-20T15:00:00.000Z';
@@ -36,6 +39,8 @@ export const ids = {
   member: '55555555-5555-4555-8555-555555555555',
   memberUser: '99999999-9999-4999-8999-999999999999',
   invitation: '12121212-1212-4212-8212-121212121212',
+  currentSession: '88888888-8888-4888-8888-888888888888',
+  remoteSession: '13131313-1313-4313-8313-131313131313',
 } as const;
 
 const branch = {
@@ -95,6 +100,8 @@ export async function installMockApi(
     invitationAccepted: false,
     passwordRecoveryRequested: false,
     passwordReset: false,
+    hasCompanies: options.hasCompanies ?? true,
+    remoteSessionActive: true,
   };
 
   await page.route('http://localhost:3000/api/**', async (route) => {
@@ -124,7 +131,7 @@ async function handleApiRoute(route: Route, state: MockApiState): Promise<void> 
       ? fulfill(route, 200, {
           sub: '77777777-7777-4777-8777-777777777777',
           email: `${state.role.toLowerCase()}@example.test`,
-          sessionId: '88888888-8888-4888-8888-888888888888',
+          sessionId: ids.currentSession,
         })
       : fulfill(route, 401, error('Sesión inválida'));
   }
@@ -132,10 +139,37 @@ async function handleApiRoute(route: Route, state: MockApiState): Promise<void> 
     state.authenticated = false;
     return fulfill(route, 204, null);
   }
+  if (path === 'auth/sessions' && method === 'GET') {
+    if (!state.authenticated) return fulfill(route, 401, error('Sesión inválida'));
+    return fulfill(route, 200, accountSessions(state));
+  }
+  if (path === 'auth/sessions/revocar-otras' && method === 'POST') {
+    if (!state.authenticated) return fulfill(route, 401, error('Sesión inválida'));
+    const revokedCount = state.remoteSessionActive ? 1 : 0;
+    state.remoteSessionActive = false;
+    return fulfill(route, 200, { revokedCount });
+  }
+  if (path.startsWith('auth/sessions/') && method === 'DELETE') {
+    if (!state.authenticated) return fulfill(route, 401, error('Sesión inválida'));
+    const sessionId = decodeURIComponent(path.slice('auth/sessions/'.length));
+    if (sessionId === ids.currentSession) {
+      state.authenticated = false;
+      return fulfill(route, 204, null);
+    }
+    if (sessionId === ids.remoteSession && state.remoteSessionActive) {
+      state.remoteSessionActive = false;
+      return fulfill(route, 204, null);
+    }
+    return fulfill(route, 404, error('Recurso no encontrado'));
+  }
   if (path === 'auth/empresas') {
-    return fulfill(route, 200, [
-      { id: ids.company, nombre: 'Atelier Norte', slug: 'atelier-norte', rol: state.role },
-    ]);
+    return fulfill(
+      route,
+      200,
+      state.hasCompanies
+        ? [{ id: ids.company, nombre: 'Atelier Norte', slug: 'atelier-norte', rol: state.role }]
+        : [],
+    );
   }
   if (path === 'auth/select-empresa' && method === 'POST') return fulfill(route, 200, token());
   if (path === 'auth/invitaciones/verificar' && method === 'POST') {
@@ -388,6 +422,30 @@ function teamInvitation(state: MockApiState) {
     sendCount: state.invitationSendCount,
     createdAt: now,
   };
+}
+
+function accountSessions(state: MockApiState) {
+  const currentSession = {
+    id: ids.currentSession,
+    current: true,
+    createdAt: '2026-11-20T15:00:00.000Z',
+    lastSeenAt: '2026-11-23T15:00:00.000Z',
+    expiresAt: '2027-01-20T15:00:00.000Z',
+    revokedAt: null,
+    ipAddress: '203.0.113.10',
+    userAgent: 'Chromium de prueba',
+  };
+  const remoteSession = {
+    id: ids.remoteSession,
+    current: false,
+    createdAt: '2026-11-19T15:00:00.000Z',
+    lastSeenAt: '2026-11-22T15:00:00.000Z',
+    expiresAt: '2027-01-19T15:00:00.000Z',
+    revokedAt: null,
+    ipAddress: '198.51.100.20',
+    userAgent: 'Navegador remoto de prueba',
+  };
+  return state.remoteSessionActive ? [currentSession, remoteSession] : [currentSession];
 }
 
 function token() {

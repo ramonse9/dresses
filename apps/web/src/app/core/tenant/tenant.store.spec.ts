@@ -143,6 +143,15 @@ describe('TenantStore', () => {
     expect(store.role()).toBe('EMPLOYEE');
   });
 
+  it('clears registered feature state even when no tenant is selected', () => {
+    const store = TestBed.inject(TenantStore);
+
+    store.clearTenant();
+
+    expect(resetRegistry.resetAll).toHaveBeenCalledOnce();
+    expect(store.hasSelectedTenant()).toBe(false);
+  });
+
   it('invalidates the current tenant when a refreshed membership list removes it', async () => {
     api.listCompanies.mockReturnValueOnce(of([ownerCompany, employeeCompany]));
     const store = TestBed.inject(TenantStore);

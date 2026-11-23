@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { AuthLogoutService } from '../../../core/auth/auth-logout.service';
 import type { AvailableCompany } from '../../../core/tenant/tenant.models';
@@ -35,6 +36,7 @@ describe('SelectCompanyPageComponent', () => {
     TestBed.configureTestingModule({
       imports: [SelectCompanyPageComponent],
       providers: [
+        provideRouter([]),
         { provide: TenantStore, useValue: tenantStore },
         { provide: AuthLogoutService, useValue: authLogout },
         { provide: Router, useValue: router },
@@ -74,6 +76,7 @@ describe('SelectCompanyPageComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Aún no tienes empresas disponibles');
     expect(fixture.nativeElement.textContent).not.toContain('error');
+    expect(fixture.nativeElement.textContent).toContain('Seguridad de la cuenta');
   });
 
   it('selects a company and navigates to the private area', async () => {

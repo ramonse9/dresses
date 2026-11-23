@@ -7,6 +7,7 @@ import { routes } from './app.routes';
 import { AuthStore } from './core/auth/auth.store';
 import { API_BASE_URL } from './core/config/api-config';
 import { TenantStore } from './core/tenant/tenant.store';
+import { AccountSessionsApiService } from './features/account/sessions/account-sessions-api.service';
 import { BranchesStore } from './features/branches/branches.store';
 import { CustomersStore } from './features/customers/customers.store';
 import { DressesStore } from './features/dresses/dresses.store';
@@ -261,6 +262,26 @@ describe('application routes', () => {
             reset: () => of({ message: 'Contraseña restablecida' }),
           },
         },
+        {
+          provide: AccountSessionsApiService,
+          useValue: {
+            list: () =>
+              of([
+                {
+                  id: '88888888-8888-4888-8888-888888888888',
+                  current: true,
+                  createdAt: '2026-11-20T12:00:00.000Z',
+                  lastSeenAt: '2026-11-23T12:00:00.000Z',
+                  expiresAt: '2027-01-20T12:00:00.000Z',
+                  revokedAt: null,
+                  ipAddress: '203.0.113.10',
+                  userAgent: 'Test Browser',
+                },
+              ]),
+            revoke: () => of(undefined),
+            revokeOthers: () => of({ revokedCount: 0 }),
+          },
+        },
       ],
     });
   });
@@ -272,6 +293,7 @@ describe('application routes', () => {
     ['/olvide-password', 'Recupera tu contraseña'],
     ['/restablecer-password', 'Crea una contraseña nueva'],
     ['/seleccionar-empresa', 'Seleccionar empresa'],
+    ['/cuenta/sesiones', 'Tus sesiones'],
     ['/app', 'Panel de operación'],
     ['/app/dashboard', 'Panel de operación'],
     ['/app/sucursales', 'Sucursales'],
@@ -292,12 +314,25 @@ describe('application routes', () => {
     ['/app/equipo', 'Equipo'],
     [`/app/equipo/${member.id}`, 'Owner Principal'],
   ])('renders %s', async (url, expectedText) => {
-    authenticated.set(url === '/seleccionar-empresa' || url.startsWith('/app'));
+    authenticated.set(
+      url === '/seleccionar-empresa' || url.startsWith('/cuenta') || url.startsWith('/app'),
+    );
     selectedTenant.set(url.startsWith('/app'));
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(url);
 
     expect(harness.routeNativeElement?.textContent).toContain(expectedText);
+  });
+
+  it('opens account sessions without a selected company', async () => {
+    authenticated.set(true);
+    selectedTenant.set(false);
+    const harness = await RouterTestingHarness.create();
+
+    await harness.navigateByUrl('/cuenta/sesiones');
+
+    expect(TestBed.inject(Router).url).toBe('/cuenta/sesiones');
+    expect(harness.routeNativeElement?.textContent).toContain('Tus sesiones');
   });
 
   it('redirects the app root to the dashboard child route', async () => {

@@ -127,6 +127,10 @@ describe('AppLayoutComponent', () => {
     expect(link.getAttribute('href')).toContain('change=true');
   });
 
+  it('links the user menu to global account security', () => {
+    expect(fixture.nativeElement.querySelector('a[href="/cuenta/sesiones"]')).not.toBeNull();
+  });
+
   it('logs out through the shared logout service', () => {
     const buttons = fixture.nativeElement.querySelectorAll(
       'button',

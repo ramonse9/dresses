@@ -1,0 +1,31 @@
+<div class="min-h-screen bg-stone-100 text-stone-950">
+  <a
+    href="#account-content"
+    class="sr-only z-50 rounded-lg bg-stone-950 px-4 py-3 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+  >
+    Saltar al contenido principal
+  </a>
+
+  <header class="border-b border-stone-200 bg-white">
+    <div
+      class="mx-auto flex min-h-20 max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8"
+    >
+      <div>
+        <a
+          [routerLink]="returnRoute()"
+          class="text-sm font-semibold text-rose-700 underline decoration-rose-300 underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2"
+        >
+          {{ returnLabel() }}
+        </a>
+        <p class="mt-1 font-serif text-2xl">Seguridad de la cuenta</p>
+      </div>
+      <p class="max-w-64 truncate text-sm font-semibold text-stone-600">
+        {{ authStore.user()?.email }}
+      </p>
+    </div>
+  </header>
+
+  <main id="account-content" tabindex="-1">
+    <router-outlet />
+  </main>
+</div>

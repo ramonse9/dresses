@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, type OnInit, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthLogoutService } from '../../../core/auth/auth-logout.service';
 import { TenantStore } from '../../../core/tenant/tenant.store';
@@ -11,7 +11,7 @@ import { LoadingIndicatorComponent } from '../../../shared/ui/loading-indicator/
 @Component({
   selector: 'app-select-company-page',
   standalone: true,
-  imports: [EmptyStateComponent, ErrorMessageComponent, LoadingIndicatorComponent],
+  imports: [EmptyStateComponent, ErrorMessageComponent, LoadingIndicatorComponent, RouterLink],
   templateUrl: './select-company-page.component.html',
 })
 export class SelectCompanyPageComponent implements OnInit {
