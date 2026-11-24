@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EntityManager, Repository } from 'typeorm';
+import type { AuditService } from '../audit/audit.service.js';
 import { TenantContextService } from '../database/tenant-context.service.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import { Sucursal } from './entities/sucursal.tenant-entity.js';
@@ -21,9 +22,12 @@ function buildService(repository: Partial<Repository<Sucursal>>) {
     ) => operation(manager),
   );
   const tenantContext = { run } as unknown as TenantContextService;
-  const service = new SucursalesService(tenantContext);
+  const record = vi.fn().mockResolvedValue({});
+  const service = new SucursalesService(tenantContext, {
+    record,
+  } as unknown as AuditService);
 
-  return { service, run, tenant };
+  return { service, run, tenant, record };
 }
 
 describe('SucursalesService', () => {
@@ -36,7 +40,11 @@ describe('SucursalesService', () => {
     const findOne = vi.fn().mockResolvedValue(null);
     const create = vi.fn().mockReturnValue(sucursal);
     const save = vi.fn().mockResolvedValue(sucursal);
-    const { service, run, tenant } = buildService({ findOne, create, save });
+    const { service, run, tenant, record } = buildService({
+      findOne,
+      create,
+      save,
+    });
 
     await expect(service.create(tenant, { nombre: 'Centro' })).resolves.toBe(
       sucursal,
@@ -48,6 +56,13 @@ describe('SucursalesService', () => {
       telefono: null,
       activo: true,
     });
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        empresaId: tenant.empresaId,
+        resourceId: sucursal.id,
+      }),
+      expect.anything(),
+    );
   });
 
   it('rejects duplicate names inside the same tenant', async () => {

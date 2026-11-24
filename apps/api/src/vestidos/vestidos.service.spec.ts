@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EntityManager, QueryFailedError, Repository } from 'typeorm';
+import type { AuditService } from '../audit/audit.service.js';
 import { TenantContextService } from '../database/tenant-context.service.js';
 import { Sucursal } from '../sucursales/entities/sucursal.tenant-entity.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
@@ -14,6 +15,9 @@ import {
 import { VestidosService } from './vestidos.service.js';
 
 describe('VestidosService', () => {
+  const auditService = {
+    record: vi.fn().mockResolvedValue({}),
+  } as unknown as AuditService;
   const tenant = {
     empresaId: '019a6f33-82b7-4a22-971b-6a8d7c5e4f30',
     empresaSlug: 'atelier-norte',
@@ -74,9 +78,12 @@ describe('VestidosService', () => {
         return operation(manager);
       },
     );
-    const service = new VestidosService({
-      run,
-    } as unknown as TenantContextService);
+    const service = new VestidosService(
+      {
+        run,
+      } as unknown as TenantContextService,
+      auditService,
+    );
 
     return {
       service,
@@ -144,9 +151,12 @@ describe('VestidosService', () => {
         return operation(manager);
       },
     );
-    const service = new VestidosService({
-      run,
-    } as unknown as TenantContextService);
+    const service = new VestidosService(
+      {
+        run,
+      } as unknown as TenantContextService,
+      auditService,
+    );
 
     return {
       service,
@@ -218,7 +228,10 @@ describe('VestidosService', () => {
     );
 
     return {
-      service: new VestidosService({ run } as unknown as TenantContextService),
+      service: new VestidosService(
+        { run } as unknown as TenantContextService,
+        auditService,
+      ),
       existing,
       findOne,
       save,
@@ -294,7 +307,10 @@ describe('VestidosService', () => {
     );
 
     return {
-      service: new VestidosService({ run } as unknown as TenantContextService),
+      service: new VestidosService(
+        { run } as unknown as TenantContextService,
+        auditService,
+      ),
       run,
       sucursalFindOne,
       createQueryBuilder,

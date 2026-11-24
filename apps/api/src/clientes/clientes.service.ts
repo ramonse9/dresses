@@ -4,6 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EntityManager, Repository } from 'typeorm';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../audit/audit.constants.js';
+import {
+  AuditService,
+  type AuthenticatedAuditActor,
+} from '../audit/audit.service.js';
 import { TenantContextService } from '../database/tenant-context.service.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import type {
@@ -16,11 +24,19 @@ import { Cliente } from './entities/cliente.tenant-entity.js';
 
 @Injectable()
 export class ClientesService {
-  constructor(private readonly tenantContext: TenantContextService) {}
+  constructor(
+    private readonly tenantContext: TenantContextService,
+    private readonly auditService: AuditService,
+  ) {}
 
-  create(tenant: TenantScope, input: CreateClienteDto): Promise<Cliente> {
-    return this.withTenantRepository(tenant, (repository) =>
-      repository.save(
+  create(
+    tenant: TenantScope,
+    input: CreateClienteDto,
+    actor?: AuthenticatedAuditActor,
+  ): Promise<Cliente> {
+    return this.withTenantManager(tenant, async (manager) => {
+      const repository = manager.getRepository(Cliente);
+      const saved = await repository.save(
         repository.create({
           nombre: input.nombre,
           telefono: input.telefono ?? null,
@@ -29,8 +45,22 @@ export class ClientesService {
           notas: input.notas ?? null,
           activo: true,
         }),
-      ),
-    );
+      );
+      await this.auditService.record(
+        {
+          empresaId: tenant.empresaId,
+          actorUsuarioId: actor?.actorUsuarioId ?? null,
+          sessionId: actor?.sessionId ?? null,
+          action: AUDIT_ACTIONS.CUSTOMER_CREATED,
+          resourceType: AUDIT_RESOURCE_TYPES.CUSTOMER,
+          resourceId: saved.id,
+          metadata: { initialActive: true },
+          safeMetadataFields: ['initialActive'],
+        },
+        manager,
+      );
+      return saved;
+    });
   }
 
   findAll(
@@ -79,8 +109,10 @@ export class ClientesService {
     tenant: TenantScope,
     id: string,
     input: UpdateClienteDto,
+    actor?: AuthenticatedAuditActor,
   ): Promise<Cliente> {
-    return this.withTenantRepository(tenant, async (repository) => {
+    return this.withTenantManager(tenant, async (manager) => {
+      const repository = manager.getRepository(Cliente);
       const cliente = await this.requireCliente(repository, id);
       const telefono =
         input.telefono !== undefined ? input.telefono : cliente.telefono;
@@ -90,23 +122,52 @@ export class ClientesService {
         throw new BadRequestException('Se requiere telefono o email');
       }
 
-      if (input.nombre !== undefined) {
+      const changedFields: string[] = [];
+      const changes: Record<string, unknown> = {};
+
+      if (input.nombre !== undefined && input.nombre !== cliente.nombre) {
+        changedFields.push('nombre');
+        changes.nombre = { previous: cliente.nombre, new: input.nombre };
         cliente.nombre = input.nombre;
       }
-      if (input.telefono !== undefined) {
+      if (input.telefono !== undefined && input.telefono !== cliente.telefono) {
+        changedFields.push('telefono');
         cliente.telefono = input.telefono;
       }
-      if (input.email !== undefined) {
+      if (input.email !== undefined && input.email !== cliente.email) {
+        changedFields.push('email');
         cliente.email = input.email;
       }
-      if (input.direccion !== undefined) {
+      if (
+        input.direccion !== undefined &&
+        input.direccion !== cliente.direccion
+      ) {
+        changedFields.push('direccion');
         cliente.direccion = input.direccion;
       }
-      if (input.notas !== undefined) {
+      if (input.notas !== undefined && input.notas !== cliente.notas) {
+        changedFields.push('notas');
         cliente.notas = input.notas;
       }
 
-      return repository.save(cliente);
+      if (changedFields.length === 0) {
+        return cliente;
+      }
+      const saved = await repository.save(cliente);
+      await this.auditService.record(
+        {
+          empresaId: tenant.empresaId,
+          actorUsuarioId: actor?.actorUsuarioId ?? null,
+          sessionId: actor?.sessionId ?? null,
+          action: AUDIT_ACTIONS.CUSTOMER_UPDATED,
+          resourceType: AUDIT_RESOURCE_TYPES.CUSTOMER,
+          resourceId: saved.id,
+          metadata: { changedFields, changes },
+          safeMetadataFields: ['changedFields', 'changes'],
+        },
+        manager,
+      );
+      return saved;
     });
   }
 
@@ -114,25 +175,58 @@ export class ClientesService {
     tenant: TenantScope,
     id: string,
     activo: boolean,
+    actor?: AuthenticatedAuditActor,
   ): Promise<Cliente> {
-    return this.withTenantRepository(tenant, async (repository) => {
+    return this.withTenantManager(tenant, async (manager) => {
+      const repository = manager.getRepository(Cliente);
       const cliente = await this.requireCliente(repository, id);
+      if (cliente.activo === activo) {
+        return cliente;
+      }
+      const previousActive = cliente.activo;
       cliente.activo = activo;
-      return repository.save(cliente);
+      const saved = await repository.save(cliente);
+      await this.auditService.record(
+        {
+          empresaId: tenant.empresaId,
+          actorUsuarioId: actor?.actorUsuarioId ?? null,
+          sessionId: actor?.sessionId ?? null,
+          action: activo
+            ? AUDIT_ACTIONS.CUSTOMER_ACTIVATED
+            : AUDIT_ACTIONS.CUSTOMER_DEACTIVATED,
+          resourceType: AUDIT_RESOURCE_TYPES.CUSTOMER,
+          resourceId: saved.id,
+          metadata: { previousActive, newActive: activo },
+          safeMetadataFields: ['previousActive', 'newActive'],
+        },
+        manager,
+      );
+      return saved;
     });
   }
 
-  deactivate(tenant: TenantScope, id: string): Promise<Cliente> {
-    return this.updateEstado(tenant, id, false);
+  deactivate(
+    tenant: TenantScope,
+    id: string,
+    actor?: AuthenticatedAuditActor,
+  ): Promise<Cliente> {
+    return this.updateEstado(tenant, id, false, actor);
   }
 
   private withTenantRepository<T>(
     tenant: TenantScope,
     operation: (repository: Repository<Cliente>) => Promise<T>,
   ): Promise<T> {
-    return this.tenantContext.run(tenant, (manager: EntityManager) =>
+    return this.withTenantManager(tenant, (manager) =>
       operation(manager.getRepository(Cliente)),
     );
+  }
+
+  private withTenantManager<T>(
+    tenant: TenantScope,
+    operation: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    return this.tenantContext.run(tenant, operation);
   }
 
   private async requireCliente(

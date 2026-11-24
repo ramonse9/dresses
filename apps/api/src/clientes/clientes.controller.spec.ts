@@ -1,4 +1,5 @@
 import type { TenantScope } from '../tenancy/tenant-scope.js';
+import type { AccessTokenPayload } from '../auth/types/access-token-payload.js';
 import { ClientesController } from './clientes.controller.js';
 import { ClientesService } from './clientes.service.js';
 import { Cliente } from './entities/cliente.tenant-entity.js';
@@ -9,6 +10,12 @@ describe('ClientesController', () => {
     empresaSlug: 'atelier-norte',
     schemaName: 'tenant_019a6f3382b74a22971b6a8d7c5e4f30',
   } as TenantScope;
+  const user = {
+    sub: 'b18c2a56-d33f-4d88-a8e7-42931121e295',
+    email: 'owner@example.com',
+    sessionId: 'c18c2a56-d33f-4d88-a8e7-42931121e295',
+  } as AccessTokenPayload;
+  const actor = { actorUsuarioId: user.sub, sessionId: user.sessionId };
 
   it('forwards normalized creation input and authenticated tenant', async () => {
     const cliente = { id: 'cliente-id' } as Cliente;
@@ -18,17 +25,21 @@ describe('ClientesController', () => {
     } as unknown as ClientesService);
 
     await expect(
-      controller.create(tenant, {
+      controller.create(tenant, user, {
         nombre: ' Ana ',
         telefono: ' ',
         email: ' ANA@EXAMPLE.COM ',
       }),
     ).resolves.toBe(cliente);
-    expect(create).toHaveBeenCalledWith(tenant, {
-      nombre: 'Ana',
-      telefono: null,
-      email: 'ana@example.com',
-    });
+    expect(create).toHaveBeenCalledWith(
+      tenant,
+      {
+        nombre: 'Ana',
+        telefono: null,
+        email: 'ana@example.com',
+      },
+      actor,
+    );
   });
 
   it('forwards strict list filters', async () => {
@@ -65,15 +76,17 @@ describe('ClientesController', () => {
     } as unknown as ClientesService);
 
     await expect(
-      controller.update(tenant, 'cliente-id', {
+      controller.update(tenant, user, 'cliente-id', {
         telefono: ' 555-0100 ',
         email: '',
       }),
     ).resolves.toBe(cliente);
-    expect(update).toHaveBeenCalledWith(tenant, 'cliente-id', {
-      telefono: '555-0100',
-      email: null,
-    });
+    expect(update).toHaveBeenCalledWith(
+      tenant,
+      'cliente-id',
+      { telefono: '555-0100', email: null },
+      actor,
+    );
   });
 
   it('forwards owner-only status changes and soft deletion', async () => {
@@ -86,12 +99,17 @@ describe('ClientesController', () => {
     } as unknown as ClientesService);
 
     await expect(
-      controller.updateEstado(tenant, 'cliente-id', { activo: false }),
+      controller.updateEstado(tenant, user, 'cliente-id', { activo: false }),
     ).resolves.toBe(cliente);
-    await expect(controller.deactivate(tenant, 'cliente-id')).resolves.toBe(
-      cliente,
+    await expect(
+      controller.deactivate(tenant, user, 'cliente-id'),
+    ).resolves.toBe(cliente);
+    expect(updateEstado).toHaveBeenCalledWith(
+      tenant,
+      'cliente-id',
+      false,
+      actor,
     );
-    expect(updateEstado).toHaveBeenCalledWith(tenant, 'cliente-id', false);
-    expect(deactivate).toHaveBeenCalledWith(tenant, 'cliente-id');
+    expect(deactivate).toHaveBeenCalledWith(tenant, 'cliente-id', actor);
   });
 });

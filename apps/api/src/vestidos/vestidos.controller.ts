@@ -12,9 +12,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentTenant } from '../auth/current-tenant.decorator.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Roles } from '../auth/roles.decorator.js';
 import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
+import type { AccessTokenPayload } from '../auth/types/access-token-payload.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { parseCreateVestidoBody } from './dto/create-vestido.dto.js';
 import { parseDisponibilidadVestidosQuery } from './dto/disponibilidad-vestidos-query.dto.js';
@@ -37,9 +39,14 @@ export class VestidosController {
   @Roles(EmpresaUsuarioRol.OWNER)
   create(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Body() body: unknown,
   ): Promise<Vestido> {
-    return this.vestidosService.create(tenant, parseCreateVestidoBody(body));
+    return this.vestidosService.create(
+      tenant,
+      parseCreateVestidoBody(body),
+      this.auditActor(user),
+    );
   }
 
   @Get()
@@ -76,6 +83,7 @@ export class VestidosController {
   @Roles(EmpresaUsuarioRol.OWNER)
   update(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() body: unknown,
   ): Promise<Vestido> {
@@ -83,6 +91,7 @@ export class VestidosController {
       tenant,
       id,
       parseUpdateVestidoBody(body),
+      this.auditActor(user),
     );
   }
 
@@ -91,8 +100,13 @@ export class VestidosController {
   @HttpCode(HttpStatus.OK)
   deactivate(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<Vestido> {
-    return this.vestidosService.deactivate(tenant, id);
+    return this.vestidosService.deactivate(tenant, id, this.auditActor(user));
+  }
+
+  private auditActor(user: AccessTokenPayload) {
+    return { actorUsuarioId: user.sub, sessionId: user.sessionId };
   }
 }

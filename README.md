@@ -484,18 +484,27 @@ await auditService.record(
 
 La integración inicial cubre exclusivamente equipo y seguridad. Se registran los siguientes eventos exitosos:
 
-| Área         | Acciones                                                                               |
-| ------------ | -------------------------------------------------------------------------------------- |
-| Membresías   | `MEMBERSHIP_ROLE_CHANGED`, `MEMBERSHIP_ACTIVATED`, `MEMBERSHIP_DEACTIVATED`            |
-| Invitaciones | `INVITATION_CREATED`, `INVITATION_RESENT`, `INVITATION_REVOKED`, `INVITATION_ACCEPTED` |
-| Contraseña   | `PASSWORD_RESET_COMPLETED`                                                             |
-| Sesiones     | `SESSION_REVOKED`, `OTHER_SESSIONS_REVOKED`                                            |
+| Área         | Acciones                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Membresías   | `MEMBERSHIP_ROLE_CHANGED`, `MEMBERSHIP_ACTIVATED`, `MEMBERSHIP_DEACTIVATED`                                                       |
+| Invitaciones | `INVITATION_CREATED`, `INVITATION_RESENT`, `INVITATION_REVOKED`, `INVITATION_ACCEPTED`                                            |
+| Contraseña   | `PASSWORD_RESET_COMPLETED`                                                                                                        |
+| Sesiones     | `SESSION_REVOKED`, `OTHER_SESSIONS_REVOKED`                                                                                       |
+| Sucursales   | `BRANCH_CREATED`, `BRANCH_UPDATED`, `BRANCH_ACTIVATED`, `BRANCH_DEACTIVATED`                                                      |
+| Clientes     | `CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_ACTIVATED`, `CUSTOMER_DEACTIVATED`                                              |
+| Vestidos     | `DRESS_CREATED`, `DRESS_UPDATED`, `DRESS_TRANSFERRED`, `DRESS_ACTIVATED`, `DRESS_DEACTIVATED`, `DRESS_OPERATIONAL_STATUS_CHANGED` |
 
 Las mutaciones de base de datos y su evento utilizan el mismo `EntityManager`. Si `AuditService.record()` falla, la transacción sensible se revierte. Los cambios de membresía conservan únicamente el valor anterior y el nuevo; las invitaciones solo conservan el rol; el restablecimiento y la revocación múltiple pueden guardar la cantidad de sesiones revocadas. Nunca se copian tokens, hashes, contraseñas, cookies, headers ni nombres de schemas.
 
 En rutas autenticadas, `actorUsuarioId` y `sessionId` proceden del JWT ya verificado, mientras `empresaId` se toma del `TenantScope` o de la relación global bloqueada por el servicio. La aceptación de invitaciones y el restablecimiento de contraseña son operaciones públicas sin sesión autenticada: su actor se determina internamente a partir del usuario afectado y `sessionId` permanece en `null`. Los eventos de contraseña y sesiones son globales, por lo que `empresaId` es `null`.
 
-Los módulos tenant de sucursales, clientes, vestidos y reservaciones permanecen fuera de esta integración.
+El módulo tenant de reservaciones permanece fuera de esta integración.
+
+Las mutaciones de sucursales, clientes y vestidos también escriben en `public.audit_events` utilizando el mismo `EntityManager` y la misma transacción abierta por `TenantContextService`. `empresaId` proviene del `TenantScope` verificado; actor y sesión proceden del access token ya validado por los guards. Una consulta no genera eventos y una operación sin cambios efectivos tampoco crea entradas.
+
+Los cambios de estado registran siempre `previousActive` y `newActive`. Los traslados de vestidos conservan exclusivamente los identificadores de sucursal anterior y nueva; el estado operativo conserva sus valores anterior y nuevo. Un traslado aislado genera `DRESS_TRANSFERRED`, no un `DRESS_UPDATED` adicional. Cuando el mismo `PATCH` contiene otros cambios de catálogo, esos campos sí generan un evento `DRESS_UPDATED` independiente y explícito.
+
+Para actualizaciones generales se registra `changedFields`. Los valores anterior y nuevo solamente se conservan para campos seguros, como nombres y atributos de catálogo. Emails, teléfonos, direcciones, notas de clientes y descripciones completas no se copian a metadata. Ningún evento contiene bodies HTTP, información sensible o nombres de schemas. Las reservaciones continúan fuera del alcance de auditoría en esta fase.
 
 ## Correo transaccional
 

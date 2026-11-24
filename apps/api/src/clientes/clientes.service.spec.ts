@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EntityManager, Repository } from 'typeorm';
+import type { AuditService } from '../audit/audit.service.js';
 import { TenantContextService } from '../database/tenant-context.service.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
 import { ClientesService } from './clientes.service.js';
@@ -76,9 +77,13 @@ describe('ClientesService', () => {
         return operation(manager);
       },
     );
+    const record = vi.fn().mockResolvedValue({});
 
     return {
-      service: new ClientesService({ run } as unknown as TenantContextService),
+      service: new ClientesService(
+        { run } as unknown as TenantContextService,
+        { record } as unknown as AuditService,
+      ),
       existing,
       create,
       save,
@@ -90,6 +95,7 @@ describe('ClientesService', () => {
       take,
       getManyAndCount,
       run,
+      record,
     };
   }
 

@@ -12,9 +12,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentTenant } from '../auth/current-tenant.decorator.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Roles } from '../auth/roles.decorator.js';
 import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
+import type { AccessTokenPayload } from '../auth/types/access-token-payload.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { ClientesService } from './clientes.service.js';
 import {
@@ -35,9 +37,14 @@ export class ClientesController {
   @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   create(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Body() body: unknown,
   ): Promise<Cliente> {
-    return this.clientesService.create(tenant, parseCreateClienteBody(body));
+    return this.clientesService.create(
+      tenant,
+      parseCreateClienteBody(body),
+      this.auditActor(user),
+    );
   }
 
   @Get()
@@ -62,17 +69,24 @@ export class ClientesController {
   @Roles(EmpresaUsuarioRol.OWNER)
   updateEstado(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() body: unknown,
   ): Promise<Cliente> {
     const input = parseUpdateClienteEstadoBody(body);
-    return this.clientesService.updateEstado(tenant, id, input.activo);
+    return this.clientesService.updateEstado(
+      tenant,
+      id,
+      input.activo,
+      this.auditActor(user),
+    );
   }
 
   @Patch(':id')
   @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   update(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() body: unknown,
   ): Promise<Cliente> {
@@ -80,6 +94,7 @@ export class ClientesController {
       tenant,
       id,
       parseUpdateClienteBody(body),
+      this.auditActor(user),
     );
   }
 
@@ -88,8 +103,13 @@ export class ClientesController {
   @HttpCode(HttpStatus.OK)
   deactivate(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<Cliente> {
-    return this.clientesService.deactivate(tenant, id);
+    return this.clientesService.deactivate(tenant, id, this.auditActor(user));
+  }
+
+  private auditActor(user: AccessTokenPayload) {
+    return { actorUsuarioId: user.sub, sessionId: user.sessionId };
   }
 }
