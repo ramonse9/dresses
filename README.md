@@ -482,7 +482,20 @@ await auditService.record(
 );
 ```
 
-En esta fase solamente se creó la infraestructura. Los módulos de autenticación, equipo y negocio todavía no emiten eventos.
+La integración inicial cubre exclusivamente equipo y seguridad. Se registran los siguientes eventos exitosos:
+
+| Área         | Acciones                                                                               |
+| ------------ | -------------------------------------------------------------------------------------- |
+| Membresías   | `MEMBERSHIP_ROLE_CHANGED`, `MEMBERSHIP_ACTIVATED`, `MEMBERSHIP_DEACTIVATED`            |
+| Invitaciones | `INVITATION_CREATED`, `INVITATION_RESENT`, `INVITATION_REVOKED`, `INVITATION_ACCEPTED` |
+| Contraseña   | `PASSWORD_RESET_COMPLETED`                                                             |
+| Sesiones     | `SESSION_REVOKED`, `OTHER_SESSIONS_REVOKED`                                            |
+
+Las mutaciones de base de datos y su evento utilizan el mismo `EntityManager`. Si `AuditService.record()` falla, la transacción sensible se revierte. Los cambios de membresía conservan únicamente el valor anterior y el nuevo; las invitaciones solo conservan el rol; el restablecimiento y la revocación múltiple pueden guardar la cantidad de sesiones revocadas. Nunca se copian tokens, hashes, contraseñas, cookies, headers ni nombres de schemas.
+
+En rutas autenticadas, `actorUsuarioId` y `sessionId` proceden del JWT ya verificado, mientras `empresaId` se toma del `TenantScope` o de la relación global bloqueada por el servicio. La aceptación de invitaciones y el restablecimiento de contraseña son operaciones públicas sin sesión autenticada: su actor se determina internamente a partir del usuario afectado y `sessionId` permanece en `null`. Los eventos de contraseña y sesiones son globales, por lo que `empresaId` es `null`.
+
+Los módulos tenant de sucursales, clientes, vestidos y reservaciones permanecen fuera de esta integración.
 
 ## Correo transaccional
 

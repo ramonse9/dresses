@@ -5,6 +5,11 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../src/audit/audit.constants.js';
+import { AuditEvent } from '../src/audit/entities/audit-event.entity.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { AuthSession } from '../src/auth/entities/auth-session.entity.js';
 import { PasswordResetToken } from '../src/auth/entities/password-reset-token.entity.js';
@@ -46,6 +51,7 @@ describe('PostgreSQL password recovery', () => {
   let users: Repository<Usuario>;
   let tokens: Repository<PasswordResetToken>;
   let sessions: Repository<AuthSession>;
+  let auditEvents: Repository<AuditEvent>;
   let passwordHashService: PasswordHashService;
   let authService: AuthService;
   let mail: ControllableMailTransport;
@@ -72,6 +78,7 @@ describe('PostgreSQL password recovery', () => {
     users = dataSource.getRepository(Usuario);
     tokens = dataSource.getRepository(PasswordResetToken);
     sessions = dataSource.getRepository(AuthSession);
+    auditEvents = dataSource.getRepository(AuditEvent);
     passwordHashService = moduleRef.get(PasswordHashService);
     authService = moduleRef.get(AuthService);
 
@@ -282,6 +289,21 @@ describe('PostgreSQL password recovery', () => {
       .set('Cookie', `vestidos_refresh=${login.refreshToken}`)
       .send({})
       .expect(401);
+
+    const audit = await auditEvents.findOneByOrFail({
+      action: AUDIT_ACTIONS.PASSWORD_RESET_COMPLETED,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: activeUser.id,
+    });
+    expect(audit).toMatchObject({
+      empresaId: null,
+      actorUsuarioId: activeUser.id,
+      sessionId: null,
+      metadata: { revokedSessionCount: 1 },
+    });
+    expect(JSON.stringify(audit.metadata)).not.toMatch(
+      /token|hash|password|cookie|authorization|schemaName|tenant_/i,
+    );
   });
 
   it('rejects the current password and rolls back token and session changes', async () => {

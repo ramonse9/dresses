@@ -5,6 +5,11 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../src/audit/audit.constants.js';
+import { AuditEvent } from '../src/audit/entities/audit-event.entity.js';
 import { PasswordHashService } from '../src/auth/password-hash.service.js';
 import { Empresa } from '../src/empresas/entities/empresa.entity.js';
 import { EmpresasService } from '../src/empresas/empresas.service.js';
@@ -27,6 +32,7 @@ describe('PostgreSQL aceptación de invitaciones', () => {
   let memberships: Repository<EmpresaUsuario>;
   let users: Repository<Usuario>;
   let companies: Repository<Empresa>;
+  let auditEvents: Repository<AuditEvent>;
   let passwordHashService: PasswordHashService;
   let empresa: Empresa;
   let creator: Usuario;
@@ -54,6 +60,7 @@ describe('PostgreSQL aceptación de invitaciones', () => {
     memberships = dataSource.getRepository(EmpresaUsuario);
     users = dataSource.getRepository(Usuario);
     companies = dataSource.getRepository(Empresa);
+    auditEvents = dataSource.getRepository(AuditEvent);
     passwordHashService = moduleRef.get(PasswordHashService);
 
     empresa = await moduleRef.get(EmpresasService).create({
@@ -221,6 +228,21 @@ describe('PostgreSQL aceptación de invitaciones', () => {
       acceptedAt: expect.any(Date),
       acceptedByUsuarioId: usuario.id,
     });
+
+    const audit = await auditEvents.findOneByOrFail({
+      action: AUDIT_ACTIONS.INVITATION_ACCEPTED,
+      resourceType: AUDIT_RESOURCE_TYPES.INVITATION,
+      resourceId: invitation.id,
+    });
+    expect(audit).toMatchObject({
+      empresaId: empresa.id,
+      actorUsuarioId: usuario.id,
+      sessionId: null,
+      metadata: { role: EmpresaUsuarioRol.OWNER },
+    });
+    expect(JSON.stringify(audit)).not.toMatch(
+      /token|hash|password|cookie|authorization|schemaName|tenant_/i,
+    );
   });
 
   it('accepts an existing active account without changing its profile or password', async () => {
@@ -351,7 +373,7 @@ describe('PostgreSQL aceptación de invitaciones', () => {
   it('allows only one concurrent acceptance and makes the token single-use', async () => {
     const token = opaqueToken('concurrent');
     const email = `concurrent-${suffix}@example.com`;
-    await createInvitation(token, email);
+    const invitation = await createInvitation(token, email);
 
     const responses = await Promise.all([
       request(app.getHttpServer())
@@ -371,6 +393,12 @@ describe('PostgreSQL aceptación de invitaciones', () => {
       await memberships.countBy({
         usuarioId: usuario.id,
         empresaId: empresa.id,
+      }),
+    ).toBe(1);
+    expect(
+      await auditEvents.countBy({
+        action: AUDIT_ACTIONS.INVITATION_ACCEPTED,
+        resourceId: invitation.id,
       }),
     ).toBe(1);
 

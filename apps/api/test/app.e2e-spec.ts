@@ -721,6 +721,7 @@ describe('AppController (e2e)', () => {
       otherSessionId,
       authenticatedUser.sub,
       authenticatedUser.sub,
+      authenticatedUser.sessionId,
     );
   });
 

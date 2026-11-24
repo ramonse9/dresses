@@ -5,6 +5,11 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { DataSource, IsNull, Not, Repository } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../src/audit/audit.constants.js';
+import { AuditEvent } from '../src/audit/entities/audit-event.entity.js';
 import { AuthSessionsService } from '../src/auth/auth-sessions.service.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { AuthSession } from '../src/auth/entities/auth-session.entity.js';
@@ -19,6 +24,7 @@ describe('PostgreSQL auth session administration', () => {
   let dataSource: DataSource;
   let users: Repository<Usuario>;
   let sessions: Repository<AuthSession>;
+  let auditEvents: Repository<AuditEvent>;
   let authService: AuthService;
   let authSessionsService: AuthSessionsService;
   let jwtService: JwtService;
@@ -39,6 +45,7 @@ describe('PostgreSQL auth session administration', () => {
     dataSource = moduleRef.get(DataSource);
     users = dataSource.getRepository(Usuario);
     sessions = dataSource.getRepository(AuthSession);
+    auditEvents = dataSource.getRepository(AuditEvent);
     authService = moduleRef.get(AuthService);
     authSessionsService = moduleRef.get(AuthSessionsService);
     jwtService = moduleRef.get(JwtService);
@@ -179,6 +186,21 @@ describe('PostgreSQL auth session administration', () => {
       .get('/api/auth/sessions')
       .set('Authorization', `Bearer ${current.accessToken}`)
       .expect(401);
+
+    const audit = await auditEvents.findOneByOrFail({
+      action: AUDIT_ACTIONS.SESSION_REVOKED,
+      resourceType: AUDIT_RESOURCE_TYPES.AUTH_SESSION,
+      resourceId: current.payload.sessionId,
+    });
+    expect(audit).toMatchObject({
+      empresaId: null,
+      actorUsuarioId: owner.id,
+      sessionId: current.payload.sessionId,
+      metadata: { current: true },
+    });
+    expect(JSON.stringify(audit)).not.toMatch(
+      /refreshToken|hash|cookie|authorization|schemaName|tenant_/i,
+    );
   });
 
   it('revokes every other session exactly once while preserving the current one', async () => {
@@ -218,6 +240,27 @@ describe('PostgreSQL auth session administration', () => {
       .get('/api/auth/sessions')
       .set('Authorization', `Bearer ${current.accessToken}`)
       .expect(200);
+
+    const audits = await auditEvents.findBy({
+      action: AUDIT_ACTIONS.OTHER_SESSIONS_REVOKED,
+      actorUsuarioId: owner.id,
+      sessionId: current.payload.sessionId,
+    });
+    expect(audits).toHaveLength(2);
+    expect(
+      audits.reduce(
+        (total, audit) =>
+          total + Number(audit.metadata.revokedSessionCount ?? 0),
+        0,
+      ),
+    ).toBe(3);
+    for (const audit of audits) {
+      expect(audit).toMatchObject({
+        empresaId: null,
+        resourceType: AUDIT_RESOURCE_TYPES.AUTH_SESSION,
+        resourceId: null,
+      });
+    }
   });
 
   it('rejects session administration immediately for an inactive user', async () => {

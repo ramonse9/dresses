@@ -6,11 +6,15 @@ import {
   SelectQueryBuilder,
 } from 'typeorm';
 import { Usuario } from '../usuarios/entities/usuario.entity.js';
+import type { AuditService } from '../audit/audit.service.js';
 import { AuthSessionsService } from './auth-sessions.service.js';
 import { AuthSession } from './entities/auth-session.entity.js';
 import { RefreshTokenService } from './refresh-token.service.js';
 
 describe('AuthSessionsService', () => {
+  const auditService = {
+    record: vi.fn().mockResolvedValue({}),
+  } as unknown as AuditService;
   const usuarioId = '019a6f33-82b7-7a22-971b-6a8d7c5e4f30';
   const sessionId = '47ecf96a-8f2c-4e07-bd1f-93936f2cdb90';
 
@@ -87,6 +91,7 @@ describe('AuthSessionsService', () => {
       {} as DataSource,
       refreshTokenService,
       configService,
+      auditService,
     );
 
     const result = await service.create(usuarioId, {
@@ -135,6 +140,7 @@ describe('AuthSessionsService', () => {
       dataSource,
       refreshTokenService,
       {} as ConfigService,
+      auditService,
     );
 
     await expect(
@@ -183,6 +189,7 @@ describe('AuthSessionsService', () => {
       dataSource,
       refreshTokenService,
       {} as ConfigService,
+      auditService,
     );
 
     await expect(service.rotate('presented-token')).rejects.toThrow(
@@ -201,6 +208,7 @@ describe('AuthSessionsService', () => {
       {} as DataSource,
       {} as RefreshTokenService,
       {} as ConfigService,
+      auditService,
     );
 
     await expect(service.assertActive(sessionId, usuarioId)).rejects.toThrow(
@@ -221,6 +229,7 @@ describe('AuthSessionsService', () => {
       {} as DataSource,
       {} as RefreshTokenService,
       {} as ConfigService,
+      auditService,
     );
 
     await expect(
@@ -263,6 +272,7 @@ describe('AuthSessionsService', () => {
       {} as DataSource,
       {} as RefreshTokenService,
       {} as ConfigService,
+      auditService,
     );
 
     await expect(
@@ -309,6 +319,7 @@ describe('AuthSessionsService', () => {
       } as unknown as DataSource,
       {} as RefreshTokenService,
       {} as ConfigService,
+      auditService,
     );
 
     await expect(
@@ -338,6 +349,7 @@ describe('AuthSessionsService', () => {
       { transaction } as unknown as DataSource,
       {} as RefreshTokenService,
       {} as ConfigService,
+      auditService,
     );
 
     await expect(service.revokeOthers(usuarioId, sessionId)).resolves.toBe(2);
@@ -374,6 +386,7 @@ describe('AuthSessionsService', () => {
       dataSource,
       {} as RefreshTokenService,
       {} as ConfigService,
+      auditService,
     );
 
     await service.revoke(sessionId, usuarioId);

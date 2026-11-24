@@ -40,6 +40,7 @@ export class InvitacionesController {
       tenant.empresaId,
       user.sub,
       parseCreateInvitacionBody(body),
+      user.sessionId,
     );
   }
 
@@ -62,7 +63,12 @@ export class InvitacionesController {
     @Body() body: unknown,
   ): Promise<InvitacionResponseDto> {
     assertEmptyInvitacionBody(body);
-    return this.invitacionesService.resend(tenant.empresaId, user.sub, id);
+    return this.invitacionesService.resend(
+      tenant.empresaId,
+      user.sub,
+      id,
+      user.sessionId,
+    );
   }
 
   @Delete(':id')
@@ -73,6 +79,11 @@ export class InvitacionesController {
     @Body() body: unknown,
   ): Promise<InvitacionResponseDto> {
     assertEmptyInvitacionBody(body);
-    return this.invitacionesService.revoke(tenant.empresaId, user.sub, id);
+    return this.invitacionesService.revoke(
+      tenant.empresaId,
+      user.sub,
+      id,
+      user.sessionId,
+    );
   }
 }

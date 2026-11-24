@@ -15,6 +15,14 @@ import {
   EmpresaUsuarioRol,
 } from '../usuarios/entities/empresa-usuario.entity.js';
 import { Empresa } from '../empresas/entities/empresa.entity.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../audit/audit.constants.js';
+import {
+  AuditService,
+  type AuthenticatedAuditActor,
+} from '../audit/audit.service.js';
 
 @Injectable()
 export class EquipoService {
@@ -22,6 +30,7 @@ export class EquipoService {
     @InjectRepository(EmpresaUsuario)
     private readonly membresiasRepository: Repository<EmpresaUsuario>,
     private readonly dataSource: DataSource,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(
@@ -83,6 +92,7 @@ export class EquipoService {
     empresaId: string,
     id: string,
     rol: EmpresaUsuarioRol,
+    actor?: AuthenticatedAuditActor,
   ): Promise<MiembroResponseDto> {
     return this.dataSource.transaction(async (manager) => {
       await this.lockActiveEmpresa(manager, empresaId);
@@ -101,8 +111,25 @@ export class EquipoService {
       }
 
       if (membresia.rol !== rol) {
+        const previousRole = membresia.rol;
         membresia.rol = rol;
         await manager.getRepository(EmpresaUsuario).save(membresia);
+        await this.auditService.record(
+          {
+            empresaId,
+            actorUsuarioId: actor?.actorUsuarioId ?? null,
+            sessionId: actor?.sessionId ?? null,
+            action: AUDIT_ACTIONS.MEMBERSHIP_ROLE_CHANGED,
+            resourceType: AUDIT_RESOURCE_TYPES.MEMBERSHIP,
+            resourceId: membresia.id,
+            metadata: {
+              previousRole,
+              newRole: rol,
+            },
+            safeMetadataFields: ['previousRole', 'newRole'],
+          },
+          manager,
+        );
       }
 
       return this.toResponse(membresia);
@@ -113,6 +140,7 @@ export class EquipoService {
     empresaId: string,
     id: string,
     activo: boolean,
+    actor?: AuthenticatedAuditActor,
   ): Promise<MiembroResponseDto> {
     return this.dataSource.transaction(async (manager) => {
       const empresa = await this.lockActiveEmpresa(manager, empresaId);
@@ -139,8 +167,27 @@ export class EquipoService {
       }
 
       if (membresia.activo !== activo) {
+        const previousActive = membresia.activo;
         membresia.activo = activo;
         await manager.getRepository(EmpresaUsuario).save(membresia);
+        await this.auditService.record(
+          {
+            empresaId,
+            actorUsuarioId: actor?.actorUsuarioId ?? null,
+            sessionId: actor?.sessionId ?? null,
+            action: activo
+              ? AUDIT_ACTIONS.MEMBERSHIP_ACTIVATED
+              : AUDIT_ACTIONS.MEMBERSHIP_DEACTIVATED,
+            resourceType: AUDIT_RESOURCE_TYPES.MEMBERSHIP,
+            resourceId: membresia.id,
+            metadata: {
+              previousActive,
+              newActive: activo,
+            },
+            safeMetadataFields: ['previousActive', 'newActive'],
+          },
+          manager,
+        );
       }
 
       return this.toResponse(membresia);

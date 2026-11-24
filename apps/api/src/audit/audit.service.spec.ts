@@ -5,7 +5,7 @@ import { AuditEvent } from './entities/audit-event.entity.js';
 
 describe('AuditService', () => {
   const baseInput = {
-    action: AUDIT_ACTIONS.AUTH_SESSION_REVOKED,
+    action: AUDIT_ACTIONS.SESSION_REVOKED,
     resourceType: AUDIT_RESOURCE_TYPES.AUTH_SESSION,
   } as const;
 

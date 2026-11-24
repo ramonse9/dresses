@@ -17,6 +17,11 @@ export interface RecordAuditEventInput {
   readonly userAgent?: string | null;
 }
 
+export interface AuthenticatedAuditActor {
+  readonly actorUsuarioId: string;
+  readonly sessionId: string;
+}
+
 @Injectable()
 export class AuditService {
   constructor(private readonly dataSource: DataSource) {}

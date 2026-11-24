@@ -112,7 +112,7 @@ describe('PostgreSQL audit events', () => {
     });
     const companyEvent = await auditService.record({
       empresaId,
-      action: AUDIT_ACTIONS.MEMBERSHIP_STATUS_CHANGED,
+      action: AUDIT_ACTIONS.MEMBERSHIP_DEACTIVATED,
       resourceType: AUDIT_RESOURCE_TYPES.MEMBERSHIP,
       resourceId: randomUUID(),
       metadata: { active: false },

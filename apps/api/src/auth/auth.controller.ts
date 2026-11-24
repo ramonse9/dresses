@@ -132,7 +132,12 @@ export class AuthController {
   ): Promise<void> {
     assertEmptyAuthBody(body);
     assertEmptyAuthSessionsQuery(query);
-    await this.authSessionsService.revokeOwned(id, user.sub, user.sub);
+    await this.authSessionsService.revokeOwned(
+      id,
+      user.sub,
+      user.sub,
+      user.sessionId,
+    );
     if (id === user.sessionId) {
       this.refreshTokenCookie.clear(response);
     }

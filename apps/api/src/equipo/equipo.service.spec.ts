@@ -1,11 +1,15 @@
 import { NotFoundException } from '@nestjs/common';
 import type { DataSource, Repository } from 'typeorm';
+import type { AuditService } from '../audit/audit.service.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { EmpresaUsuario } from '../usuarios/entities/empresa-usuario.entity.js';
 import { Usuario } from '../usuarios/entities/usuario.entity.js';
 import { EquipoService } from './equipo.service.js';
 
 describe('EquipoService', () => {
+  const auditService = {
+    record: vi.fn().mockResolvedValue({}),
+  } as unknown as AuditService;
   const empresaId = 'a18c2a56-d33f-4d88-a8e7-42931121e295';
   const createdAt = new Date('2026-11-20T12:00:00.000Z');
   const usuario = Object.assign(new Usuario(), {
@@ -65,7 +69,11 @@ describe('EquipoService', () => {
     const repository = {
       createQueryBuilder: vi.fn().mockReturnValue(builder),
     } as unknown as Repository<EmpresaUsuario>;
-    const service = new EquipoService(repository, {} as DataSource);
+    const service = new EquipoService(
+      repository,
+      {} as DataSource,
+      auditService,
+    );
 
     const result = await service.findAll(empresaId, {
       page: 2,
@@ -121,7 +129,11 @@ describe('EquipoService', () => {
     const repository = {
       createQueryBuilder: vi.fn().mockReturnValue(builder),
     } as unknown as Repository<EmpresaUsuario>;
-    const service = new EquipoService(repository, {} as DataSource);
+    const service = new EquipoService(
+      repository,
+      {} as DataSource,
+      auditService,
+    );
 
     await expect(
       service.findOne(empresaId, membresia.id),
@@ -140,7 +152,11 @@ describe('EquipoService', () => {
     const repository = {
       createQueryBuilder: vi.fn().mockReturnValue(builder),
     } as unknown as Repository<EmpresaUsuario>;
-    const service = new EquipoService(repository, {} as DataSource);
+    const service = new EquipoService(
+      repository,
+      {} as DataSource,
+      auditService,
+    );
 
     await expect(
       service.findOne(empresaId, membresia.id),

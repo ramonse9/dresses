@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuditModule } from '../audit/audit.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { MailModule } from '../mail/mail.module.js';
 import { AuthRateLimitModule } from '../security/auth-rate-limit/auth-rate-limit.module.js';
@@ -16,6 +17,7 @@ import { InvitacionesService } from './invitaciones.service.js';
 @Module({
   imports: [
     AuthModule,
+    AuditModule,
     MailModule,
     TenancyModule,
     UsuariosModule,

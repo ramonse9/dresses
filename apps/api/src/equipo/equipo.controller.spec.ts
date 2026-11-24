@@ -1,4 +1,5 @@
 import type { TenantScope } from '../tenancy/tenant-scope.js';
+import type { AccessTokenPayload } from '../auth/types/access-token-payload.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { EquipoController } from './equipo.controller.js';
 import { EquipoService } from './equipo.service.js';
@@ -9,6 +10,11 @@ describe('EquipoController', () => {
     empresaSlug: 'atelier-norte',
     schemaName: 'tenant_a18c2a56d33f4d88a8e742931121e295',
   } as TenantScope;
+  const user: AccessTokenPayload = {
+    sub: 'b18c2a56-d33f-4d88-a8e7-42931121e295',
+    email: 'owner@example.test',
+    sessionId: 'd18c2a56-d33f-4d88-a8e7-42931121e295',
+  };
 
   it('forwards only the verified empresa id and parsed filters', async () => {
     const response = {
@@ -61,12 +67,13 @@ describe('EquipoController', () => {
     } as unknown as EquipoService);
 
     await expect(
-      controller.updateRol(tenant, 'membership-id', { rol: 'EMPLOYEE' }),
+      controller.updateRol(tenant, user, 'membership-id', { rol: 'EMPLOYEE' }),
     ).resolves.toBe(response);
     expect(updateRol).toHaveBeenCalledWith(
       tenant.empresaId,
       'membership-id',
       EmpresaUsuarioRol.EMPLOYEE,
+      { actorUsuarioId: user.sub, sessionId: user.sessionId },
     );
   });
 
@@ -78,12 +85,13 @@ describe('EquipoController', () => {
     } as unknown as EquipoService);
 
     await expect(
-      controller.updateEstado(tenant, 'membership-id', { activo: false }),
+      controller.updateEstado(tenant, user, 'membership-id', { activo: false }),
     ).resolves.toBe(response);
     expect(updateEstado).toHaveBeenCalledWith(
       tenant.empresaId,
       'membership-id',
       false,
+      { actorUsuarioId: user.sub, sessionId: user.sessionId },
     );
   });
 });

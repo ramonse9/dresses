@@ -8,9 +8,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentTenant } from '../auth/current-tenant.decorator.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Roles } from '../auth/roles.decorator.js';
 import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
+import type { AccessTokenPayload } from '../auth/types/access-token-payload.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import {
   parseListMiembrosQuery,
@@ -49,20 +51,28 @@ export class EquipoController {
   @Patch(':id/rol')
   updateRol(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() body: unknown,
   ): Promise<MiembroResponseDto> {
     const input = parseUpdateMiembroRolBody(body);
-    return this.equipoService.updateRol(tenant.empresaId, id, input.rol);
+    return this.equipoService.updateRol(tenant.empresaId, id, input.rol, {
+      actorUsuarioId: user.sub,
+      sessionId: user.sessionId,
+    });
   }
 
   @Patch(':id/estado')
   updateEstado(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() body: unknown,
   ): Promise<MiembroResponseDto> {
     const input = parseUpdateMiembroEstadoBody(body);
-    return this.equipoService.updateEstado(tenant.empresaId, id, input.activo);
+    return this.equipoService.updateEstado(tenant.empresaId, id, input.activo, {
+      actorUsuarioId: user.sub,
+      sessionId: user.sessionId,
+    });
   }
 }

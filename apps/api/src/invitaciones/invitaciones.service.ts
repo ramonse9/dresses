@@ -17,6 +17,11 @@ import {
   Repository,
 } from 'typeorm';
 import { Empresa } from '../empresas/entities/empresa.entity.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../audit/audit.constants.js';
+import { AuditService } from '../audit/audit.service.js';
 import { MailDeliveryError } from '../mail/mail.errors.js';
 import {
   EmpresaUsuario,
@@ -55,6 +60,7 @@ export class InvitacionesService {
     configService: ConfigService,
     private readonly tokenService: InvitacionTokenService,
     private readonly mailService: InvitacionMailService,
+    private readonly auditService: AuditService,
   ) {
     this.configuration = getInvitacionesConfiguration(configService);
   }
@@ -63,6 +69,7 @@ export class InvitacionesService {
     empresaId: string,
     creatorUsuarioId: string,
     input: CreateInvitacionDto,
+    actorSessionId?: string,
   ): Promise<InvitacionResponseDto> {
     const generated = this.tokenService.generate();
     let invitation: EmpresaInvitacion;
@@ -97,7 +104,7 @@ export class InvitacionesService {
           await manager.getRepository(EmpresaInvitacion).save(existing);
         }
 
-        return manager.getRepository(EmpresaInvitacion).save(
+        const created = await manager.getRepository(EmpresaInvitacion).save(
           manager.getRepository(EmpresaInvitacion).create({
             empresaId,
             email: input.email,
@@ -112,6 +119,20 @@ export class InvitacionesService {
             sendCount: 0,
           }),
         );
+        await this.auditService.record(
+          {
+            empresaId,
+            actorUsuarioId: creatorUsuarioId,
+            sessionId: actorSessionId ?? null,
+            action: AUDIT_ACTIONS.INVITATION_CREATED,
+            resourceType: AUDIT_RESOURCE_TYPES.INVITATION,
+            resourceId: created.id,
+            metadata: { role: created.rol },
+            safeMetadataFields: ['role'],
+          },
+          manager,
+        );
+        return created;
       });
     } catch (error) {
       if (error instanceof HttpException) {
@@ -178,6 +199,7 @@ export class InvitacionesService {
     empresaId: string,
     requesterUsuarioId: string,
     invitationId: string,
+    actorSessionId?: string,
   ): Promise<InvitacionResponseDto> {
     return this.withInvitationLock(
       empresaId,
@@ -202,6 +224,19 @@ export class InvitacionesService {
           invitation.tokenHash = generated.hash;
           invitation.expiresAt = this.expirationFrom(new Date());
           await manager.getRepository(EmpresaInvitacion).save(invitation);
+          await this.auditService.record(
+            {
+              empresaId,
+              actorUsuarioId: requesterUsuarioId,
+              sessionId: actorSessionId ?? null,
+              action: AUDIT_ACTIONS.INVITATION_RESENT,
+              resourceType: AUDIT_RESOURCE_TYPES.INVITATION,
+              resourceId: invitation.id,
+              metadata: { role: invitation.rol },
+              safeMetadataFields: ['role'],
+            },
+            manager,
+          );
         });
 
         return this.deliverAndRecord(
@@ -219,6 +254,7 @@ export class InvitacionesService {
     empresaId: string,
     requesterUsuarioId: string,
     invitationId: string,
+    actorSessionId?: string,
   ): Promise<InvitacionResponseDto> {
     return this.withInvitationLock(empresaId, invitationId, (queryRunner) =>
       this.runQueryRunnerTransaction(queryRunner, async (manager) => {
@@ -241,6 +277,19 @@ export class InvitacionesService {
         if (invitation.revokedAt === null) {
           invitation.revokedAt = new Date();
           await manager.getRepository(EmpresaInvitacion).save(invitation);
+          await this.auditService.record(
+            {
+              empresaId,
+              actorUsuarioId: requesterUsuarioId,
+              sessionId: actorSessionId ?? null,
+              action: AUDIT_ACTIONS.INVITATION_REVOKED,
+              resourceType: AUDIT_RESOURCE_TYPES.INVITATION,
+              resourceId: invitation.id,
+              metadata: { role: invitation.rol },
+              safeMetadataFields: ['role'],
+            },
+            manager,
+          );
         }
         return this.toResponse(invitation);
       }),

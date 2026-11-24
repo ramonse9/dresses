@@ -93,6 +93,7 @@ export class AuthService {
       payload.sessionId,
       payload.sub,
       payload.sub,
+      payload.sessionId,
     );
   }
 

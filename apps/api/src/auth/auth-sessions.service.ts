@@ -8,6 +8,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Usuario } from '../usuarios/entities/usuario.entity.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../audit/audit.constants.js';
+import { AuditService } from '../audit/audit.service.js';
 import { getRefreshTokenTtlSeconds } from './auth.config.js';
 import { AuthSession } from './entities/auth-session.entity.js';
 import { RefreshTokenService } from './refresh-token.service.js';
@@ -31,6 +36,7 @@ export class AuthSessionsService {
     private readonly dataSource: DataSource,
     private readonly refreshTokenService: RefreshTokenService,
     private readonly configService: ConfigService,
+    private readonly auditService: AuditService,
   ) {}
 
   async create(
@@ -136,8 +142,15 @@ export class AuthSessionsService {
     sessionId: string,
     usuarioId: string,
     revokedByUsuarioId: string,
+    actorSessionId: string = sessionId,
   ): Promise<void> {
-    return this.revokeSession(sessionId, usuarioId, revokedByUsuarioId, true);
+    return this.revokeSession(
+      sessionId,
+      usuarioId,
+      revokedByUsuarioId,
+      actorSessionId,
+      true,
+    );
   }
 
   async revokeOthers(
@@ -158,6 +171,20 @@ export class AuthSessionsService {
         .andWhere('revoked_at IS NULL')
         .execute();
 
+      await this.auditService.record(
+        {
+          empresaId: null,
+          actorUsuarioId: usuarioId,
+          sessionId: currentSessionId,
+          action: AUDIT_ACTIONS.OTHER_SESSIONS_REVOKED,
+          resourceType: AUDIT_RESOURCE_TYPES.AUTH_SESSION,
+          resourceId: null,
+          metadata: { revokedSessionCount: result.affected ?? 0 },
+          safeMetadataFields: ['revokedSessionCount'],
+        },
+        manager,
+      );
+
       return result.affected ?? 0;
     });
   }
@@ -166,14 +193,22 @@ export class AuthSessionsService {
     sessionId: string,
     usuarioId: string,
     revokedByUsuarioId: string = usuarioId,
+    actorSessionId: string = sessionId,
   ): Promise<void> {
-    await this.revokeSession(sessionId, usuarioId, revokedByUsuarioId, false);
+    await this.revokeSession(
+      sessionId,
+      usuarioId,
+      revokedByUsuarioId,
+      actorSessionId,
+      false,
+    );
   }
 
   private async revokeSession(
     sessionId: string,
     usuarioId: string,
     revokedByUsuarioId: string,
+    actorSessionId: string,
     requireOwnedSession: boolean,
   ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
@@ -198,6 +233,19 @@ export class AuthSessionsService {
       session.revokedAt = new Date();
       session.revokedByUsuarioId = revokedByUsuarioId;
       await repository.save(session);
+      await this.auditService.record(
+        {
+          empresaId: null,
+          actorUsuarioId: revokedByUsuarioId,
+          sessionId: actorSessionId,
+          action: AUDIT_ACTIONS.SESSION_REVOKED,
+          resourceType: AUDIT_RESOURCE_TYPES.AUTH_SESSION,
+          resourceId: session.id,
+          metadata: { current: session.id === actorSessionId },
+          safeMetadataFields: ['current'],
+        },
+        manager,
+      );
     });
   }
 

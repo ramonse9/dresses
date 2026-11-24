@@ -29,10 +29,15 @@ describe('InvitacionesController', () => {
       rol: 'EMPLOYEE',
     });
 
-    expect(create).toHaveBeenCalledWith(tenant.empresaId, user.sub, {
-      email: 'person@example.com',
-      rol: EmpresaUsuarioRol.EMPLOYEE,
-    });
+    expect(create).toHaveBeenCalledWith(
+      tenant.empresaId,
+      user.sub,
+      {
+        email: 'person@example.com',
+        rol: EmpresaUsuarioRol.EMPLOYEE,
+      },
+      user.sessionId,
+    );
     expect(JSON.stringify(create.mock.calls)).not.toContain('schemaName');
     expect(JSON.stringify(create.mock.calls)).not.toContain('tenant_');
   });
@@ -65,11 +70,13 @@ describe('InvitacionesController', () => {
       tenant.empresaId,
       user.sub,
       'invitation-id',
+      user.sessionId,
     );
     expect(revoke).toHaveBeenCalledWith(
       tenant.empresaId,
       user.sub,
       'invitation-id',
+      user.sessionId,
     );
   });
 });

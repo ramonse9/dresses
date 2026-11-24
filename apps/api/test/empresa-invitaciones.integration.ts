@@ -6,6 +6,11 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../src/audit/audit.constants.js';
+import { AuditEvent } from '../src/audit/entities/audit-event.entity.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { PasswordHashService } from '../src/auth/password-hash.service.js';
 import type { AccessTokenPayload } from '../src/auth/types/access-token-payload.js';
@@ -57,6 +62,7 @@ describe('PostgreSQL administración de invitaciones', () => {
   let memberships: Repository<EmpresaUsuario>;
   let users: Repository<Usuario>;
   let companies: Repository<Empresa>;
+  let auditEvents: Repository<AuditEvent>;
   let mail: ControllableMailTransport;
   let empresaA: Empresa;
   let empresaB: Empresa;
@@ -68,6 +74,7 @@ describe('PostgreSQL administración de invitaciones', () => {
   let employeeMembershipA: EmpresaUsuario;
   let ownerMembershipB: EmpresaUsuario;
   let ownerTokenA: string;
+  let ownerSessionA: string;
   let employeeTokenA: string;
   let ownerTokenB: string;
 
@@ -88,6 +95,7 @@ describe('PostgreSQL administración de invitaciones', () => {
     memberships = dataSource.getRepository(EmpresaUsuario);
     users = dataSource.getRepository(Usuario);
     companies = dataSource.getRepository(Empresa);
+    auditEvents = dataSource.getRepository(AuditEvent);
 
     const empresasService = moduleRef.get(EmpresasService);
     const passwordHashService = moduleRef.get(PasswordHashService);
@@ -163,6 +171,9 @@ describe('PostgreSQL administración de invitaciones', () => {
     );
 
     ownerTokenA = await tenantToken(authService, jwtService, ownerA, empresaA);
+    ownerSessionA = (
+      await jwtService.verifyAsync<AccessTokenPayload>(ownerTokenA)
+    ).sessionId;
     employeeTokenA = await tenantToken(
       authService,
       jwtService,
@@ -256,6 +267,21 @@ describe('PostgreSQL administración de invitaciones', () => {
     expect(url.search).toBe('');
     expect(url.pathname).toBe('/aceptar-invitacion');
     expect(url.hash).toBe(`#token=${token}`);
+
+    const audit = await auditEvents.findOneByOrFail({
+      action: AUDIT_ACTIONS.INVITATION_CREATED,
+      resourceType: AUDIT_RESOURCE_TYPES.INVITATION,
+      resourceId: response.body.id,
+    });
+    expect(audit).toMatchObject({
+      empresaId: empresaA.id,
+      actorUsuarioId: ownerA.id,
+      sessionId: ownerSessionA,
+      metadata: { role: EmpresaUsuarioRol.EMPLOYEE },
+    });
+    expect(JSON.stringify(audit)).not.toMatch(
+      /token|hash|password|cookie|authorization|schemaName|tenant_/i,
+    );
   });
 
   it('rejects EMPLOYEE, active memberships and a current duplicate', async () => {
@@ -440,6 +466,17 @@ describe('PostgreSQL administración de invitaciones', () => {
       old.expiresAt.getTime(),
     );
     expect(resent.body).toMatchObject({ sendCount: 2, estado: 'PENDIENTE' });
+    await expect(
+      auditEvents.findOneByOrFail({
+        action: AUDIT_ACTIONS.INVITATION_RESENT,
+        resourceId: invitationId,
+      }),
+    ).resolves.toMatchObject({
+      empresaId: empresaA.id,
+      actorUsuarioId: ownerA.id,
+      sessionId: ownerSessionA,
+      metadata: { role: EmpresaUsuarioRol.EMPLOYEE },
+    });
 
     await request(app.getHttpServer())
       .post(`/api/equipo/invitaciones/${invitationId}/reenviar`)
@@ -466,6 +503,17 @@ describe('PostgreSQL administración de invitaciones', () => {
       estado: EmpresaInvitacionEstado.REVOCADA,
     });
     expect(await invitations.countBy({ id: invitationId })).toBe(1);
+    await expect(
+      auditEvents.findOneByOrFail({
+        action: AUDIT_ACTIONS.INVITATION_REVOKED,
+        resourceId: invitationId,
+      }),
+    ).resolves.toMatchObject({
+      empresaId: empresaA.id,
+      actorUsuarioId: ownerA.id,
+      sessionId: ownerSessionA,
+      metadata: { role: EmpresaUsuarioRol.EMPLOYEE },
+    });
     await request(app.getHttpServer())
       .post(`/api/equipo/invitaciones/${invitationId}/reenviar`)
       .set('Authorization', `Bearer ${ownerTokenA}`)

@@ -5,6 +5,12 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../src/audit/audit.constants.js';
+import { AuditEvent } from '../src/audit/entities/audit-event.entity.js';
+import { AuditService } from '../src/audit/audit.service.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { PasswordHashService } from '../src/auth/password-hash.service.js';
 import type { AccessTokenPayload } from '../src/auth/types/access-token-payload.js';
@@ -26,6 +32,8 @@ describe('PostgreSQL administración de membresías', () => {
   let empresasRepository: Repository<Empresa>;
   let usuariosRepository: Repository<Usuario>;
   let membresiasRepository: Repository<EmpresaUsuario>;
+  let auditEvents: Repository<AuditEvent>;
+  let auditService: AuditService;
   let empresaA: Empresa;
   let empresaB: Empresa;
   let ownerA1: Usuario;
@@ -40,6 +48,7 @@ describe('PostgreSQL administración de membresías', () => {
   let inactiveMembershipA: EmpresaUsuario;
   let ownerMembershipB: EmpresaUsuario;
   let ownerTokenA1: string;
+  let ownerSessionA1: string;
   let employeeTokenA: string;
   let employeeTokenB: string;
 
@@ -59,6 +68,8 @@ describe('PostgreSQL administración de membresías', () => {
     empresasRepository = dataSource.getRepository(Empresa);
     usuariosRepository = dataSource.getRepository(Usuario);
     membresiasRepository = dataSource.getRepository(EmpresaUsuario);
+    auditEvents = dataSource.getRepository(AuditEvent);
+    auditService = moduleRef.get(AuditService);
 
     const empresasService = moduleRef.get(EmpresasService);
     const passwordHashService = moduleRef.get(PasswordHashService);
@@ -163,13 +174,12 @@ describe('PostgreSQL administración de membresías', () => {
       email: employee.email,
       password,
     });
+    const ownerPayload = await jwtService.verifyAsync<AccessTokenPayload>(
+      ownerLogin.accessToken,
+    );
+    ownerSessionA1 = ownerPayload.sessionId;
     ownerTokenA1 = (
-      await authService.selectEmpresa(
-        await jwtService.verifyAsync<AccessTokenPayload>(
-          ownerLogin.accessToken,
-        ),
-        { empresaId: empresaA.id },
-      )
+      await authService.selectEmpresa(ownerPayload, { empresaId: empresaA.id })
     ).accessToken;
     const employeePayload = await jwtService.verifyAsync<AccessTokenPayload>(
       employeeLogin.accessToken,
@@ -274,6 +284,22 @@ describe('PostgreSQL administración de membresías', () => {
       nombre: before.nombre,
       activo: before.activo,
     });
+
+    await expect(
+      auditEvents.findOneByOrFail({
+        action: AUDIT_ACTIONS.MEMBERSHIP_ROLE_CHANGED,
+        resourceType: AUDIT_RESOURCE_TYPES.MEMBERSHIP,
+        resourceId: employeeMembershipA.id,
+      }),
+    ).resolves.toMatchObject({
+      empresaId: empresaA.id,
+      actorUsuarioId: ownerA1.id,
+      sessionId: ownerSessionA1,
+      metadata: {
+        previousRole: EmpresaUsuarioRol.EMPLOYEE,
+        newRole: EmpresaUsuarioRol.OWNER,
+      },
+    });
   });
 
   it('deactivates immediately only in the selected empresa and can reactivate', async () => {
@@ -315,6 +341,29 @@ describe('PostgreSQL administración de membresías', () => {
       .get('/api/sucursales')
       .set('Authorization', `Bearer ${employeeTokenA}`)
       .expect(200);
+
+    await expect(
+      auditEvents.findOneByOrFail({
+        action: AUDIT_ACTIONS.MEMBERSHIP_DEACTIVATED,
+        resourceId: employeeMembershipA.id,
+      }),
+    ).resolves.toMatchObject({
+      empresaId: empresaA.id,
+      actorUsuarioId: ownerA1.id,
+      sessionId: ownerSessionA1,
+      metadata: { previousActive: true, newActive: false },
+    });
+    await expect(
+      auditEvents.findOneByOrFail({
+        action: AUDIT_ACTIONS.MEMBERSHIP_ACTIVATED,
+        resourceId: employeeMembershipA.id,
+      }),
+    ).resolves.toMatchObject({
+      empresaId: empresaA.id,
+      actorUsuarioId: ownerA1.id,
+      sessionId: ownerSessionA1,
+      metadata: { previousActive: false, newActive: true },
+    });
   });
 
   it('rejects EMPLOYEE mutations and memberships from another empresa', async () => {
@@ -328,6 +377,33 @@ describe('PostgreSQL administración de membresías', () => {
       .set('Authorization', `Bearer ${ownerTokenA1}`)
       .send({ activo: false })
       .expect(404);
+  });
+
+  it('rolls back a sensitive membership mutation when auditing fails', async () => {
+    const eventsBefore = await auditEvents.countBy({
+      action: AUDIT_ACTIONS.MEMBERSHIP_ROLE_CHANGED,
+      resourceId: employeeMembershipA.id,
+    });
+    const auditFailure = vi
+      .spyOn(auditService, 'record')
+      .mockRejectedValueOnce(new Error('controlled audit failure'));
+
+    await request(app.getHttpServer())
+      .patch(`/api/equipo/miembros/${employeeMembershipA.id}/rol`)
+      .set('Authorization', `Bearer ${ownerTokenA1}`)
+      .send({ rol: EmpresaUsuarioRol.OWNER })
+      .expect(500);
+
+    await expect(
+      membresiasRepository.findOneByOrFail({ id: employeeMembershipA.id }),
+    ).resolves.toMatchObject({ rol: EmpresaUsuarioRol.EMPLOYEE });
+    await expect(
+      auditEvents.countBy({
+        action: AUDIT_ACTIONS.MEMBERSHIP_ROLE_CHANGED,
+        resourceId: employeeMembershipA.id,
+      }),
+    ).resolves.toBe(eventsBefore);
+    auditFailure.mockRestore();
   });
 
   it('does not reactivate memberships for an inactive user or empresa', async () => {
@@ -397,6 +473,15 @@ describe('PostgreSQL administración de membresías', () => {
   });
 
   it('serializes concurrent deactivations so one OWNER always remains', async () => {
+    const eventsBefore =
+      (await auditEvents.countBy({
+        action: AUDIT_ACTIONS.MEMBERSHIP_DEACTIVATED,
+        resourceId: ownerMembershipA1.id,
+      })) +
+      (await auditEvents.countBy({
+        action: AUDIT_ACTIONS.MEMBERSHIP_DEACTIVATED,
+        resourceId: ownerMembershipA2.id,
+      }));
     const results = await Promise.allSettled([
       equipoService.updateEstado(empresaA.id, ownerMembershipA1.id, false),
       equipoService.updateEstado(empresaA.id, ownerMembershipA2.id, false),
@@ -419,5 +504,15 @@ describe('PostgreSQL administración de membresías', () => {
         },
       }),
     ).resolves.toBe(1);
+    const eventsAfter =
+      (await auditEvents.countBy({
+        action: AUDIT_ACTIONS.MEMBERSHIP_DEACTIVATED,
+        resourceId: ownerMembershipA1.id,
+      })) +
+      (await auditEvents.countBy({
+        action: AUDIT_ACTIONS.MEMBERSHIP_DEACTIVATED,
+        resourceId: ownerMembershipA2.id,
+      }));
+    expect(eventsAfter - eventsBefore).toBe(1);
   });
 });

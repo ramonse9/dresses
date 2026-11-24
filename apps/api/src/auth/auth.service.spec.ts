@@ -197,6 +197,7 @@ describe('AuthService', () => {
       sessionId,
       activeUser.id,
       activeUser.id,
+      sessionId,
     );
   });
 

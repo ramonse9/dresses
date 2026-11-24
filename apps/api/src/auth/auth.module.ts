@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuditModule } from '../audit/audit.module.js';
 import { TenancyModule } from '../tenancy/tenancy.module.js';
 import { UsuariosModule } from '../usuarios/usuarios.module.js';
 import { MailModule } from '../mail/mail.module.js';
@@ -28,6 +29,7 @@ import { TenantScopeCleanupInterceptor } from './tenant-scope-cleanup.intercepto
 @Module({
   imports: [
     ConfigModule,
+    AuditModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

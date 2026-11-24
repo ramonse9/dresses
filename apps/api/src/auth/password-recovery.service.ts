@@ -7,6 +7,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager, IsNull, Not } from 'typeorm';
 import { Usuario } from '../usuarios/entities/usuario.entity.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../audit/audit.constants.js';
+import { AuditService } from '../audit/audit.service.js';
 import type {
   PasswordRecoveryPublicResponseDto,
   RequestPasswordRecoveryDto,
@@ -45,6 +50,7 @@ export class PasswordRecoveryService {
     private readonly tokenService: PasswordResetTokenService,
     private readonly mailService: PasswordRecoveryMailService,
     private readonly passwordHashService: PasswordHashService,
+    private readonly auditService: AuditService,
   ) {
     this.configuration = getPasswordRecoveryConfiguration(configService);
   }
@@ -134,12 +140,25 @@ export class PasswordRecoveryService {
         },
         { revokedAt: now },
       );
-      await manager
+      const revokedSessions = await manager
         .getRepository(AuthSession)
         .update(
           { usuarioId: usuario.id, revokedAt: IsNull() },
           { revokedAt: now, revokedByUsuarioId: usuario.id },
         );
+      await this.auditService.record(
+        {
+          empresaId: null,
+          actorUsuarioId: usuario.id,
+          sessionId: null,
+          action: AUDIT_ACTIONS.PASSWORD_RESET_COMPLETED,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          resourceId: usuario.id,
+          metadata: { revokedSessionCount: revokedSessions.affected ?? 0 },
+          safeMetadataFields: ['revokedSessionCount'],
+        },
+        manager,
+      );
     });
 
     return { message: PASSWORD_RESET_SUCCESS_MESSAGE };

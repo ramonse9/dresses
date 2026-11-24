@@ -7,6 +7,11 @@ import {
 } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { PasswordHashService } from '../auth/password-hash.service.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../audit/audit.constants.js';
+import { AuditService } from '../audit/audit.service.js';
 import { Empresa } from '../empresas/entities/empresa.entity.js';
 import {
   EmpresaUsuario,
@@ -29,6 +34,7 @@ export class InvitacionesAceptacionService {
     private readonly dataSource: DataSource,
     private readonly tokenService: InvitacionTokenService,
     private readonly passwordHashService: PasswordHashService,
+    private readonly auditService: AuditService,
   ) {}
 
   async verify(
@@ -111,6 +117,19 @@ export class InvitacionesAceptacionService {
       invitation.acceptedAt = new Date();
       invitation.acceptedByUsuarioId = acceptedBy.id;
       await manager.getRepository(EmpresaInvitacion).save(invitation);
+      await this.auditService.record(
+        {
+          empresaId: invitation.empresaId,
+          actorUsuarioId: acceptedBy.id,
+          sessionId: null,
+          action: AUDIT_ACTIONS.INVITATION_ACCEPTED,
+          resourceType: AUDIT_RESOURCE_TYPES.INVITATION,
+          resourceId: invitation.id,
+          metadata: { role: invitation.rol },
+          safeMetadataFields: ['role'],
+        },
+        manager,
+      );
     });
 
     return {
