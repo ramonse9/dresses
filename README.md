@@ -509,6 +509,32 @@ Las reservaciones escriben su evento en la misma transacción tenant que modific
 
 Las transiciones explícitas registran siempre `previousState` y `newState`. La cancelación guarda solamente `hasCancellationReason`, sin copiar el texto del motivo. No se almacenan snapshots completos, notas ni cuerpos HTTP. Los locks de la reservación y los vestidos se adquieren antes de auditar: una solicitud que pierde una carrera o termina en `403`, `404` o `409` no genera un evento falso. Si persiste el cambio pero falla `AuditService.record()`, toda la transacción se revierte.
 
+### Consulta administrativa de auditoría
+
+Los eventos de la empresa seleccionada pueden consultarse mediante:
+
+```text
+GET /api/auditoria
+GET /api/auditoria/:id
+```
+
+Ambas rutas utilizan `JwtAuthGuard`, `TenantAuthGuard` y `RolesGuard`, y están disponibles exclusivamente para una membresía `OWNER` vigente. `EMPLOYEE` recibe `403`. El servicio consulta directamente `public.audit_events`; no cambia el `search_path` ni recibe `empresaId`, `empresaSlug` o `schemaName` desde HTTP. El alcance obligatorio se obtiene del `TenantScope` verificado y un UUID perteneciente a otra empresa responde `404`.
+
+El listado acepta `page`, `limit`, `action`, `resourceType`, `resourceId`, `actorUsuarioId`, `fechaDesde` y `fechaHasta`. La página predeterminada es `1`, el límite predeterminado es `20` y el máximo es `100`. Las fechas deben ser ISO 8601 con zona horaria explícita y forman el rango semiabierto `createdAt >= fechaDesde AND createdAt < fechaHasta`. Los parámetros desconocidos son rechazados.
+
+```bash
+curl --get http://localhost:3000/api/auditoria \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --data-urlencode 'action=reservation.updated' \
+  --data-urlencode 'resourceType=reservacion' \
+  --data-urlencode 'fechaDesde=2026-11-01T00:00:00-07:00' \
+  --data-urlencode 'fechaHasta=2026-12-01T00:00:00-07:00' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'limit=20'
+```
+
+La respuesta utiliza el formato paginado estándar y ordena por `createdAt DESC, id DESC`. Cada evento incluye `id`, acción, tipo e identificador de recurso, actor básico, metadata nuevamente redactada, IP, user-agent y fecha. El actor se obtiene mediante un único `LEFT JOIN` con `public.usuarios`, evitando N+1. No se exponen `empresaId`, `sessionId`, hashes, contraseñas, tokens, cookies, headers o nombres de schemas. La API no ofrece operaciones `POST`, `PATCH` o `DELETE` para auditoría.
+
 ## Correo transaccional
 
 `MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Las invitaciones y la recuperación de contraseña utilizan esta infraestructura.

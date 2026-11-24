@@ -18,6 +18,7 @@ export default defineConfig({
       'test/auth-session-metadata-migration.integration.ts',
       'test/auth-session-administration.integration.ts',
       'test/audit-events.integration.ts',
+      'test/auditoria.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,

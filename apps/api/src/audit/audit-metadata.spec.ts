@@ -25,7 +25,14 @@ describe('buildAuditMetadata', () => {
           status: 'active',
           refresh_token: 'refresh-secret',
           Authorization: 'Bearer secret',
-          nested: [{ cookie: 'secret-cookie', safe: true }],
+          nested: [
+            {
+              cookie: 'secret-cookie',
+              headers: { 'x-internal': 'never-return' },
+              checksumHash: 'never-return',
+              safe: true,
+            },
+          ],
         },
       },
       ['email', 'password', 'tokenHash', 'schemaName', 'change'],
@@ -36,7 +43,7 @@ describe('buildAuditMetadata', () => {
       change: { status: 'active', nested: [{ safe: true }] },
     });
     expect(JSON.stringify(metadata)).not.toMatch(
-      /plain-secret|hashed-secret|refresh-secret|secret-cookie|authorization|schemaName|tenant_/i,
+      /plain-secret|hashed-secret|refresh-secret|secret-cookie|never-return|authorization|schemaName|tenant_/i,
     );
   });
 

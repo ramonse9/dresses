@@ -8,6 +8,9 @@ const sensitiveKeyFragments = [
   'refreshtoken',
   'cookie',
   'authorization',
+  'hash',
+  'header',
+  'secret',
   'schemaname',
 ] as const;
 

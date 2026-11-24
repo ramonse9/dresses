@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuditModule } from './audit/audit.module.js';
+import { AuditoriaModule } from './auditoria/auditoria.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ClientesModule } from './clientes/clientes.module.js';
 import { validateApplicationEnvironment } from './config/application-environment.js';
@@ -25,6 +26,7 @@ import { VestidosModule } from './vestidos/vestidos.module.js';
     }),
     DatabaseModule,
     AuditModule,
+    AuditoriaModule,
     EquipoModule,
     EmpresasModule,
     SucursalesModule,
