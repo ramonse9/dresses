@@ -9,6 +9,15 @@ describe('ReservacionesController', () => {
     empresaSlug: 'atelier-norte',
     schemaName: 'tenant_019a6f3382b74a22971b6a8d7c5e4f30',
   } as TenantScope;
+  const user = {
+    sub: '119a6f33-82b7-4a22-971b-6a8d7c5e4f31',
+    email: 'owner@example.com',
+    sessionId: '219a6f33-82b7-4a22-971b-6a8d7c5e4f32',
+  };
+  const actor = {
+    actorUsuarioId: user.sub,
+    sessionId: user.sessionId,
+  };
 
   it('forwards only normalized input and the authenticated tenant', async () => {
     const response = {
@@ -21,7 +30,7 @@ describe('ReservacionesController', () => {
     } as unknown as ReservacionesService);
 
     await expect(
-      controller.create(tenant, {
+      controller.create(tenant, user, {
         clienteId: 'A18C2A56-D33F-4D88-A8E7-42931121E295',
         sucursalId: 'B18C2A56-D33F-4D88-A8E7-42931121E295',
         vestidoIds: ['C18C2A56-D33F-4D88-A8E7-42931121E295'],
@@ -30,15 +39,19 @@ describe('ReservacionesController', () => {
         notas: '  Entrega vespertina  ',
       }),
     ).resolves.toBe(response);
-    expect(create).toHaveBeenCalledWith(tenant, {
-      clienteId: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
-      sucursalId: 'b18c2a56-d33f-4d88-a8e7-42931121e295',
-      vestidoIds: ['c18c2a56-d33f-4d88-a8e7-42931121e295'],
-      fechaInicio: new Date('2026-12-10T23:00:00.000Z'),
-      fechaFin: new Date('2026-12-12T23:00:00.000Z'),
-      notas: 'Entrega vespertina',
-      confirmar: true,
-    });
+    expect(create).toHaveBeenCalledWith(
+      tenant,
+      {
+        clienteId: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+        sucursalId: 'b18c2a56-d33f-4d88-a8e7-42931121e295',
+        vestidoIds: ['c18c2a56-d33f-4d88-a8e7-42931121e295'],
+        fechaInicio: new Date('2026-12-10T23:00:00.000Z'),
+        fechaFin: new Date('2026-12-12T23:00:00.000Z'),
+        notas: 'Entrega vespertina',
+        confirmar: true,
+      },
+      actor,
+    );
   });
 
   it('forwards parsed listing filters', async () => {
@@ -88,15 +101,20 @@ describe('ReservacionesController', () => {
     } as unknown as ReservacionesService);
 
     await expect(
-      controller.update(tenant, 'reservation-id', {
+      controller.update(tenant, user, 'reservation-id', {
         vestidoIds: ['C18C2A56-D33F-4D88-A8E7-42931121E295'],
         notas: '  Cambio  ',
       }),
     ).resolves.toBe(response);
-    expect(update).toHaveBeenCalledWith(tenant, 'reservation-id', {
-      vestidoIds: ['c18c2a56-d33f-4d88-a8e7-42931121e295'],
-      notas: 'Cambio',
-    });
+    expect(update).toHaveBeenCalledWith(
+      tenant,
+      'reservation-id',
+      {
+        vestidoIds: ['c18c2a56-d33f-4d88-a8e7-42931121e295'],
+        notas: 'Cambio',
+      },
+      actor,
+    );
   });
 
   it.each([
@@ -112,10 +130,10 @@ describe('ReservacionesController', () => {
         [serviceMethod]: operation,
       } as unknown as ReservacionesService);
 
-      await expect(controller[method](tenant, 'reservation-id')).resolves.toBe(
-        response,
-      );
-      expect(operation).toHaveBeenCalledWith(tenant, 'reservation-id');
+      await expect(
+        controller[method](tenant, user, 'reservation-id'),
+      ).resolves.toBe(response);
+      expect(operation).toHaveBeenCalledWith(tenant, 'reservation-id', actor);
     },
   );
 
@@ -127,12 +145,15 @@ describe('ReservacionesController', () => {
     } as unknown as ReservacionesService);
 
     await expect(
-      controller.cancel(tenant, 'reservation-id', {
+      controller.cancel(tenant, user, 'reservation-id', {
         motivo: '  Cambio de planes  ',
       }),
     ).resolves.toBe(response);
-    expect(cancel).toHaveBeenCalledWith(tenant, 'reservation-id', {
-      motivo: 'Cambio de planes',
-    });
+    expect(cancel).toHaveBeenCalledWith(
+      tenant,
+      'reservation-id',
+      { motivo: 'Cambio de planes' },
+      actor,
+    );
   });
 });

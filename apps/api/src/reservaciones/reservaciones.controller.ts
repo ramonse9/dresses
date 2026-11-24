@@ -9,9 +9,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentTenant } from '../auth/current-tenant.decorator.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Roles } from '../auth/roles.decorator.js';
 import { TenantAuthenticated } from '../auth/tenant-authenticated.decorator.js';
 import type { TenantScope } from '../tenancy/tenant-scope.js';
+import type { AccessTokenPayload } from '../auth/types/access-token-payload.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { parseCancelReservacionBody } from './dto/cancel-reservacion.dto.js';
 import { parseCreateReservacionBody } from './dto/create-reservacion.dto.js';
@@ -32,11 +34,13 @@ export class ReservacionesController {
   @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   create(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Body() body: unknown,
   ): Promise<ReservacionResponseDto> {
     return this.reservacionesService.create(
       tenant,
       parseCreateReservacionBody(body),
+      this.auditActor(user),
     );
   }
 
@@ -65,6 +69,7 @@ export class ReservacionesController {
   @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   update(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() body: unknown,
   ): Promise<ReservacionResponseDto> {
@@ -72,6 +77,7 @@ export class ReservacionesController {
       tenant,
       id,
       parseUpdateReservacionBody(body),
+      this.auditActor(user),
     );
   }
 
@@ -79,33 +85,41 @@ export class ReservacionesController {
   @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   confirm(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<ReservacionResponseDto> {
-    return this.reservacionesService.confirm(tenant, id);
+    return this.reservacionesService.confirm(tenant, id, this.auditActor(user));
   }
 
   @Post(':id/entregar')
   @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   deliver(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<ReservacionResponseDto> {
-    return this.reservacionesService.deliver(tenant, id);
+    return this.reservacionesService.deliver(tenant, id, this.auditActor(user));
   }
 
   @Post(':id/devolver')
   @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
   returnReservation(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<ReservacionResponseDto> {
-    return this.reservacionesService.returnReservation(tenant, id);
+    return this.reservacionesService.returnReservation(
+      tenant,
+      id,
+      this.auditActor(user),
+    );
   }
 
   @Post(':id/cancelar')
   @Roles(EmpresaUsuarioRol.OWNER)
   cancel(
     @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() body: unknown,
   ): Promise<ReservacionResponseDto> {
@@ -113,6 +127,11 @@ export class ReservacionesController {
       tenant,
       id,
       parseCancelReservacionBody(body),
+      this.auditActor(user),
     );
+  }
+
+  private auditActor(user: AccessTokenPayload) {
+    return { actorUsuarioId: user.sub, sessionId: user.sessionId };
   }
 }

@@ -17,6 +17,7 @@ export default defineConfig({
       'test/vestidos-disponibilidad.integration.ts',
       'test/vestidos-migration.integration.ts',
       'test/tenant-resource-audit.integration.ts',
+      'test/reservation-audit.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,

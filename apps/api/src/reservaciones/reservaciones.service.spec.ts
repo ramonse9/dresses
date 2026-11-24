@@ -1,5 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
+import { AUDIT_ACTIONS } from '../audit/audit.constants.js';
+import type { AuditService } from '../audit/audit.service.js';
 import { Cliente } from '../clientes/entities/cliente.tenant-entity.js';
 import { TenantContextService } from '../database/tenant-context.service.js';
 import { Sucursal } from '../sucursales/entities/sucursal.tenant-entity.js';
@@ -132,12 +134,15 @@ function createContext(conflict = false) {
     async (_scope: TenantScope, operation: (value: EntityManager) => unknown) =>
       operation(manager),
   );
+  const auditRecord = vi.fn().mockResolvedValue({ id: 'audit-event-id' });
 
   return {
-    service: new ReservacionesService({
-      run,
-    } as unknown as TenantContextService),
+    service: new ReservacionesService(
+      { run } as unknown as TenantContextService,
+      { record: auditRecord } as unknown as AuditService,
+    ),
     run,
+    auditRecord,
     managerQuery,
     conflictBuilder,
     reservationSave,
@@ -190,6 +195,20 @@ describe('ReservacionesService', () => {
     expect(JSON.stringify(result)).not.toContain('schemaName');
     expect(JSON.stringify(result)).not.toContain('tenant_');
     expect(context.conflictBuilder.getOne).toHaveBeenCalledTimes(2);
+    expect(context.auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        empresaId: tenant.empresaId,
+        action: AUDIT_ACTIONS.RESERVATION_CREATED,
+        resourceId: 'reservation-id',
+        metadata: expect.objectContaining({
+          previousState: null,
+          newState: ReservacionEstado.CONFIRMADA,
+          importeRenta: '0.30',
+          depositoRequerido: '0.10',
+        }),
+      }),
+      expect.any(Object),
+    );
   });
 
   it('allows drafts without locks or conflict checks', async () => {
@@ -203,6 +222,15 @@ describe('ReservacionesService', () => {
     });
     expect(context.managerQuery).not.toHaveBeenCalled();
     expect(context.conflictBuilder.getOne).not.toHaveBeenCalled();
+    expect(context.auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AUDIT_ACTIONS.RESERVATION_CREATED,
+        metadata: expect.objectContaining({
+          newState: ReservacionEstado.BORRADOR,
+        }),
+      }),
+      expect.any(Object),
+    );
   });
 
   it('rejects blocking overlaps before persisting anything', async () => {
@@ -213,5 +241,6 @@ describe('ReservacionesService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
     expect(context.reservationSave).not.toHaveBeenCalled();
     expect(context.detailSave).not.toHaveBeenCalled();
+    expect(context.auditRecord).not.toHaveBeenCalled();
   });
 });

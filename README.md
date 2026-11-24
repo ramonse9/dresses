@@ -482,7 +482,7 @@ await auditService.record(
 );
 ```
 
-La integración inicial cubre exclusivamente equipo y seguridad. Se registran los siguientes eventos exitosos:
+La integración cubre equipo, seguridad y las mutaciones tenant indicadas a continuación. Se registran solamente operaciones completadas:
 
 | Área         | Acciones                                                                                                                          |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
@@ -493,18 +493,21 @@ La integración inicial cubre exclusivamente equipo y seguridad. Se registran lo
 | Sucursales   | `BRANCH_CREATED`, `BRANCH_UPDATED`, `BRANCH_ACTIVATED`, `BRANCH_DEACTIVATED`                                                      |
 | Clientes     | `CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_ACTIVATED`, `CUSTOMER_DEACTIVATED`                                              |
 | Vestidos     | `DRESS_CREATED`, `DRESS_UPDATED`, `DRESS_TRANSFERRED`, `DRESS_ACTIVATED`, `DRESS_DEACTIVATED`, `DRESS_OPERATIONAL_STATUS_CHANGED` |
+| Reservaciones | `RESERVATION_CREATED`, `RESERVATION_UPDATED`, `RESERVATION_CONFIRMED`, `RESERVATION_DELIVERED`, `RESERVATION_RETURNED`, `RESERVATION_CANCELLED` |
 
 Las mutaciones de base de datos y su evento utilizan el mismo `EntityManager`. Si `AuditService.record()` falla, la transacción sensible se revierte. Los cambios de membresía conservan únicamente el valor anterior y el nuevo; las invitaciones solo conservan el rol; el restablecimiento y la revocación múltiple pueden guardar la cantidad de sesiones revocadas. Nunca se copian tokens, hashes, contraseñas, cookies, headers ni nombres de schemas.
 
 En rutas autenticadas, `actorUsuarioId` y `sessionId` proceden del JWT ya verificado, mientras `empresaId` se toma del `TenantScope` o de la relación global bloqueada por el servicio. La aceptación de invitaciones y el restablecimiento de contraseña son operaciones públicas sin sesión autenticada: su actor se determina internamente a partir del usuario afectado y `sessionId` permanece en `null`. Los eventos de contraseña y sesiones son globales, por lo que `empresaId` es `null`.
 
-El módulo tenant de reservaciones permanece fuera de esta integración.
-
 Las mutaciones de sucursales, clientes y vestidos también escriben en `public.audit_events` utilizando el mismo `EntityManager` y la misma transacción abierta por `TenantContextService`. `empresaId` proviene del `TenantScope` verificado; actor y sesión proceden del access token ya validado por los guards. Una consulta no genera eventos y una operación sin cambios efectivos tampoco crea entradas.
 
 Los cambios de estado registran siempre `previousActive` y `newActive`. Los traslados de vestidos conservan exclusivamente los identificadores de sucursal anterior y nueva; el estado operativo conserva sus valores anterior y nuevo. Un traslado aislado genera `DRESS_TRANSFERRED`, no un `DRESS_UPDATED` adicional. Cuando el mismo `PATCH` contiene otros cambios de catálogo, esos campos sí generan un evento `DRESS_UPDATED` independiente y explícito.
 
-Para actualizaciones generales se registra `changedFields`. Los valores anterior y nuevo solamente se conservan para campos seguros, como nombres y atributos de catálogo. Emails, teléfonos, direcciones, notas de clientes y descripciones completas no se copian a metadata. Ningún evento contiene bodies HTTP, información sensible o nombres de schemas. Las reservaciones continúan fuera del alcance de auditoría en esta fase.
+Para actualizaciones generales se registra `changedFields`. Los valores anterior y nuevo solamente se conservan para campos seguros, como nombres y atributos de catálogo. Emails, teléfonos, direcciones, notas de clientes y descripciones completas no se copian a metadata. Ningún evento contiene bodies HTTP, información sensible o nombres de schemas.
+
+Las reservaciones escriben su evento en la misma transacción tenant que modifica la cabecera y sus detalles. `RESERVATION_CREATED` identifica tanto borradores como creaciones confirmadas mediante `previousState=null` y `newState`; una creación ya confirmada no genera además `RESERVATION_CONFIRMED`. `RESERVATION_UPDATED` conserva identificadores de cliente y sucursal, rango anterior/nuevo, vestidos agregados o retirados y los totales históricos resultantes. Los importes se mantienen como strings decimales.
+
+Las transiciones explícitas registran siempre `previousState` y `newState`. La cancelación guarda solamente `hasCancellationReason`, sin copiar el texto del motivo. No se almacenan snapshots completos, notas ni cuerpos HTTP. Los locks de la reservación y los vestidos se adquieren antes de auditar: una solicitud que pierde una carrera o termina en `403`, `404` o `409` no genera un evento falso. Si persiste el cambio pero falla `AuditService.record()`, toda la transacción se revierte.
 
 ## Correo transaccional
 
@@ -1097,7 +1100,7 @@ curl --request POST http://localhost:3000/api/reservaciones/RESERVACION_UUID/dev
   --header "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
-Todas las transiciones usan `TenantContextService`, `SET LOCAL search_path` y un lock de escritura sobre la fila antes de evaluar el estado. Los UUID de otro tenant responden `404` y ninguna respuesta incluye nombres de schemas. Todavía no se gestionan pagos, reembolsos, daños, mantenimiento automático, imágenes ni auditoría completa.
+Todas las transiciones usan `TenantContextService`, `SET LOCAL search_path` y un lock de escritura sobre la fila antes de evaluar el estado. Los UUID de otro tenant responden `404` y ninguna respuesta incluye nombres de schemas. Todavía no se gestionan pagos, reembolsos, daños, mantenimiento automático ni imágenes.
 
 ### Seguridad, integridad y concurrencia de reservaciones
 

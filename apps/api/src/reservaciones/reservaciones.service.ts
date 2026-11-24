@@ -5,6 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+  type AuditAction,
+} from '../audit/audit.constants.js';
+import {
+  AuditService,
+  type AuthenticatedAuditActor,
+} from '../audit/audit.service.js';
 import { Cliente } from '../clientes/entities/cliente.tenant-entity.js';
 import { TenantContextService } from '../database/tenant-context.service.js';
 import { Sucursal } from '../sucursales/entities/sucursal.tenant-entity.js';
@@ -41,11 +50,15 @@ type ReservationRange = {
 
 @Injectable()
 export class ReservacionesService {
-  constructor(private readonly tenantContext: TenantContextService) {}
+  constructor(
+    private readonly tenantContext: TenantContextService,
+    private readonly auditService: AuditService,
+  ) {}
 
   create(
     tenant: TenantScope,
     input: CreateReservacionDto,
+    actor?: AuthenticatedAuditActor,
   ): Promise<ReservacionResponseDto> {
     return this.tenantContext.run(tenant, async (manager) => {
       const cliente = await this.requireActiveCliente(manager, input.clienteId);
@@ -120,6 +133,46 @@ export class ReservacionesService {
             deposito: vestido.deposito ?? '0.00',
           }),
         ),
+      );
+
+      await this.auditService.record(
+        {
+          empresaId: tenant.empresaId,
+          actorUsuarioId: actor?.actorUsuarioId ?? null,
+          sessionId: actor?.sessionId ?? null,
+          action: AUDIT_ACTIONS.RESERVATION_CREATED,
+          resourceType: AUDIT_RESOURCE_TYPES.RESERVATION,
+          resourceId: reservacion.id,
+          metadata: {
+            previousState: null,
+            newState: reservacion.estado,
+            clienteId: reservacion.clienteId,
+            sucursalId: reservacion.sucursalId,
+            range: {
+              previous: null,
+              new: {
+                fechaInicio: reservacion.fechaInicio,
+                fechaFin: reservacion.fechaFin,
+              },
+            },
+            addedDressIds: input.vestidoIds,
+            removedDressIds: [],
+            importeRenta: reservacion.importeRenta,
+            depositoRequerido: reservacion.depositoRequerido,
+          },
+          safeMetadataFields: [
+            'previousState',
+            'newState',
+            'clienteId',
+            'sucursalId',
+            'range',
+            'addedDressIds',
+            'removedDressIds',
+            'importeRenta',
+            'depositoRequerido',
+          ],
+        },
+        manager,
       );
 
       return {
@@ -262,6 +315,7 @@ export class ReservacionesService {
     tenant: TenantScope,
     id: string,
     input: UpdateReservacionDto,
+    actor?: AuthenticatedAuditActor,
   ): Promise<ReservacionResponseDto> {
     return this.tenantContext.run(tenant, async (manager) => {
       const repository = manager.getRepository(Reservacion);
@@ -291,10 +345,17 @@ export class ReservacionesService {
         .orderBy('detalle.createdAt', 'ASC')
         .addOrderBy('detalle.id', 'ASC')
         .getMany();
+      const previousClienteId = reservacion.clienteId;
+      const previousSucursalId = reservacion.sucursalId;
+      const previousFechaInicio = reservacion.fechaInicio;
+      const previousFechaFin = reservacion.fechaFin;
+      const previousVestidoIds = existingDetails.map(
+        (detail) => detail.vestidoId,
+      );
+      const previousState = reservacion.estado;
       const finalClienteId = input.clienteId ?? reservacion.clienteId;
       const finalSucursalId = input.sucursalId ?? reservacion.sucursalId;
-      const finalVestidoIds =
-        input.vestidoIds ?? existingDetails.map((detail) => detail.vestidoId);
+      const finalVestidoIds = input.vestidoIds ?? previousVestidoIds;
       const finalFechaInicio = input.fechaInicio ?? reservacion.fechaInicio;
       const finalFechaFin = input.fechaFin ?? reservacion.fechaFin;
 
@@ -305,11 +366,11 @@ export class ReservacionesService {
       }
 
       const structuralChange =
-        input.clienteId !== undefined ||
-        input.sucursalId !== undefined ||
-        input.vestidoIds !== undefined ||
-        input.fechaInicio !== undefined ||
-        input.fechaFin !== undefined;
+        finalClienteId !== previousClienteId ||
+        finalSucursalId !== previousSucursalId ||
+        !this.sameStringArrays(finalVestidoIds, previousVestidoIds) ||
+        finalFechaInicio.getTime() !== previousFechaInicio.getTime() ||
+        finalFechaFin.getTime() !== previousFechaFin.getTime();
 
       if (structuralChange) {
         await this.requireActiveCliente(manager, finalClienteId);
@@ -375,7 +436,7 @@ export class ReservacionesService {
           finalSnapshots.map((snapshot) => snapshot.deposito),
         );
 
-        if (input.vestidoIds !== undefined) {
+        if (!this.sameStringArrays(finalVestidoIds, previousVestidoIds)) {
           await detailRepository.delete({ reservacionId: reservacion.id });
           await detailRepository.save(
             finalSnapshots.map((snapshot) =>
@@ -388,11 +449,73 @@ export class ReservacionesService {
         }
       }
 
-      if (input.notas !== undefined) {
+      const notesChanged =
+        input.notas !== undefined && input.notas !== reservacion.notas;
+      if (input.notas !== undefined && notesChanged) {
         reservacion.notas = input.notas;
       }
 
+      if (!structuralChange && !notesChanged) {
+        return this.requireReservationDetail(manager, reservacion.id);
+      }
+
       await repository.save(reservacion);
+      const finalDressIds = new Set(finalVestidoIds);
+      const previousDressIds = new Set(previousVestidoIds);
+      await this.auditService.record(
+        {
+          empresaId: tenant.empresaId,
+          actorUsuarioId: actor?.actorUsuarioId ?? null,
+          sessionId: actor?.sessionId ?? null,
+          action: AUDIT_ACTIONS.RESERVATION_UPDATED,
+          resourceType: AUDIT_RESOURCE_TYPES.RESERVATION,
+          resourceId: reservacion.id,
+          metadata: {
+            previousState,
+            newState: reservacion.estado,
+            clienteId: {
+              previous: previousClienteId,
+              new: reservacion.clienteId,
+            },
+            sucursalId: {
+              previous: previousSucursalId,
+              new: reservacion.sucursalId,
+            },
+            range: {
+              previous: {
+                fechaInicio: previousFechaInicio,
+                fechaFin: previousFechaFin,
+              },
+              new: {
+                fechaInicio: reservacion.fechaInicio,
+                fechaFin: reservacion.fechaFin,
+              },
+            },
+            addedDressIds: finalVestidoIds.filter(
+              (vestidoId) => !previousDressIds.has(vestidoId),
+            ),
+            removedDressIds: previousVestidoIds.filter(
+              (vestidoId) => !finalDressIds.has(vestidoId),
+            ),
+            notesChanged,
+            importeRenta: reservacion.importeRenta,
+            depositoRequerido: reservacion.depositoRequerido,
+          },
+          safeMetadataFields: [
+            'previousState',
+            'newState',
+            'clienteId',
+            'sucursalId',
+            'range',
+            'addedDressIds',
+            'removedDressIds',
+            'notesChanged',
+            'importeRenta',
+            'depositoRequerido',
+          ],
+        },
+        manager,
+      );
       const updated = await this.loadReservationDetail(manager, reservacion.id);
 
       if (!updated) {
@@ -403,9 +526,14 @@ export class ReservacionesService {
     });
   }
 
-  confirm(tenant: TenantScope, id: string): Promise<ReservacionResponseDto> {
+  confirm(
+    tenant: TenantScope,
+    id: string,
+    actor?: AuthenticatedAuditActor,
+  ): Promise<ReservacionResponseDto> {
     return this.tenantContext.run(tenant, async (manager) => {
       const reservacion = await this.requireLockedReservation(manager, id);
+      const previousState = reservacion.estado;
       this.requireState(reservacion, ReservacionEstado.BORRADOR);
 
       const vestidoIds = await this.loadReservationDressIds(manager, id);
@@ -432,14 +560,28 @@ export class ReservacionesService {
       reservacion.estado = ReservacionEstado.CONFIRMADA;
       reservacion.confirmadaAt = new Date();
       await manager.getRepository(Reservacion).save(reservacion);
+      await this.recordStateTransition(
+        manager,
+        tenant,
+        reservacion.id,
+        AUDIT_ACTIONS.RESERVATION_CONFIRMED,
+        previousState,
+        reservacion.estado,
+        actor,
+      );
 
       return this.requireReservationDetail(manager, reservacion.id);
     });
   }
 
-  deliver(tenant: TenantScope, id: string): Promise<ReservacionResponseDto> {
+  deliver(
+    tenant: TenantScope,
+    id: string,
+    actor?: AuthenticatedAuditActor,
+  ): Promise<ReservacionResponseDto> {
     return this.tenantContext.run(tenant, async (manager) => {
       const reservacion = await this.requireLockedReservation(manager, id);
+      const previousState = reservacion.estado;
       this.requireState(reservacion, ReservacionEstado.CONFIRMADA);
 
       const vestidoIds = await this.loadReservationDressIds(manager, id);
@@ -452,6 +594,15 @@ export class ReservacionesService {
       reservacion.estado = ReservacionEstado.ENTREGADA;
       reservacion.entregadaAt = new Date();
       await manager.getRepository(Reservacion).save(reservacion);
+      await this.recordStateTransition(
+        manager,
+        tenant,
+        reservacion.id,
+        AUDIT_ACTIONS.RESERVATION_DELIVERED,
+        previousState,
+        reservacion.estado,
+        actor,
+      );
 
       return this.requireReservationDetail(manager, reservacion.id);
     });
@@ -460,14 +611,25 @@ export class ReservacionesService {
   returnReservation(
     tenant: TenantScope,
     id: string,
+    actor?: AuthenticatedAuditActor,
   ): Promise<ReservacionResponseDto> {
     return this.tenantContext.run(tenant, async (manager) => {
       const reservacion = await this.requireLockedReservation(manager, id);
+      const previousState = reservacion.estado;
       this.requireState(reservacion, ReservacionEstado.ENTREGADA);
 
       reservacion.estado = ReservacionEstado.DEVUELTA;
       reservacion.devueltaAt = new Date();
       await manager.getRepository(Reservacion).save(reservacion);
+      await this.recordStateTransition(
+        manager,
+        tenant,
+        reservacion.id,
+        AUDIT_ACTIONS.RESERVATION_RETURNED,
+        previousState,
+        reservacion.estado,
+        actor,
+      );
 
       return this.requireReservationDetail(manager, reservacion.id);
     });
@@ -477,9 +639,11 @@ export class ReservacionesService {
     tenant: TenantScope,
     id: string,
     input: CancelReservacionDto,
+    actor?: AuthenticatedAuditActor,
   ): Promise<ReservacionResponseDto> {
     return this.tenantContext.run(tenant, async (manager) => {
       const reservacion = await this.requireLockedReservation(manager, id);
+      const previousState = reservacion.estado;
 
       if (
         reservacion.estado !== ReservacionEstado.BORRADOR &&
@@ -492,9 +656,46 @@ export class ReservacionesService {
       reservacion.canceladaAt = new Date();
       reservacion.motivoCancelacion = input.motivo;
       await manager.getRepository(Reservacion).save(reservacion);
+      await this.recordStateTransition(
+        manager,
+        tenant,
+        reservacion.id,
+        AUDIT_ACTIONS.RESERVATION_CANCELLED,
+        previousState,
+        reservacion.estado,
+        actor,
+        { hasCancellationReason: input.motivo !== null },
+      );
 
       return this.requireReservationDetail(manager, reservacion.id);
     });
+  }
+
+  private recordStateTransition(
+    manager: EntityManager,
+    tenant: TenantScope,
+    reservacionId: string,
+    action: AuditAction,
+    previousState: ReservacionEstado,
+    newState: ReservacionEstado,
+    actor?: AuthenticatedAuditActor,
+    extraMetadata: Readonly<Record<string, unknown>> = {},
+  ): Promise<unknown> {
+    const metadata = { previousState, newState, ...extraMetadata };
+
+    return this.auditService.record(
+      {
+        empresaId: tenant.empresaId,
+        actorUsuarioId: actor?.actorUsuarioId ?? null,
+        sessionId: actor?.sessionId ?? null,
+        action,
+        resourceType: AUDIT_RESOURCE_TYPES.RESERVATION,
+        resourceId: reservacionId,
+        metadata,
+        safeMetadataFields: Object.keys(metadata),
+      },
+      manager,
+    );
   }
 
   private async requireLockedReservation(
@@ -708,6 +909,15 @@ export class ReservacionesService {
     }
 
     return BigInt(match[1]) * 100n + BigInt((match[2] ?? '').padEnd(2, '0'));
+  }
+
+  private sameStringArrays(left: string[], right: string[]): boolean {
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    const rightValues = new Set(right);
+    return left.every((value) => rightValues.has(value));
   }
 
   private async loadReservationDetail(
