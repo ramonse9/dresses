@@ -449,6 +449,41 @@ La pestaña `Invitaciones`, disponible en `/app/equipo/invitaciones`, también s
 
 El formulario normaliza el email antes de validarlo y permite invitar como `OWNER` o `EMPLOYEE`. Reenviar y revocar requieren confirmación explícita: la interfaz aclara que reenviar invalida el enlace anterior y que revocar impide utilizarlo. Tras cada operación se vuelve a consultar el listado conservando filtros y página. Los errores `403`, `409`, `429` y `503` tienen mensajes diferenciados sin mostrar detalles internos. `TeamInvitationsStore` está registrado en `TenantResetRegistry`, por lo que las solicitudes y datos se eliminan al cambiar de empresa.
 
+## Infraestructura de auditoría
+
+Los eventos de auditoría son información global y viven exclusivamente en `public.audit_events`. La migration `CreateAuditEvents1795820400000` crea la tabla y sus índices por empresa, actor, recurso y acción. No se crea ninguna tabla equivalente dentro de los schemas tenant y `synchronize` continúa deshabilitado.
+
+Cada evento contiene un UUID, los identificadores opcionales de empresa, actor y sesión, una acción centralizada, tipo e identificador opcional de recurso, metadata `jsonb`, IP, user-agent y fecha de creación. Los identificadores se conservan como referencias históricas sin relaciones que puedan eliminar eventos en cascada. PostgreSQL exige acciones y tipos de recurso no vacíos, metadata de tipo objeto y user-agents de hasta 512 caracteres.
+
+Los eventos son append-only. Un trigger de PostgreSQL rechaza cualquier `UPDATE` o `DELETE` sobre `public.audit_events`, y `AuditService` expone únicamente `record()`; no existen operaciones de actualización o eliminación en la aplicación.
+
+`record()` puede ejecutarse de dos formas:
+
+- sin `EntityManager`, abre una transacción para persistir el evento global;
+- con el `EntityManager` de una operación existente, reutiliza exactamente esa transacción y no abre otra.
+
+La entidad declara explícitamente `schema: 'public'`. Por ello, una operación ejecutada por `TenantContextService` con `SET LOCAL search_path` tenant puede escribir `public.audit_events` mediante el mismo manager y el evento se confirma o revierte junto con el cambio auditado.
+
+La metadata se construye mediante una lista explícita `safeMetadataFields`. Los campos no incluidos se descartan y la redacción defensiva elimina en cualquier nivel claves relacionadas con contraseñas, hashes, tokens, refresh tokens, cookies, autorización y `schemaName`. No se deben pasar cuerpos HTTP, headers completos ni nombres internos de schemas.
+
+```ts
+await auditService.record(
+  {
+    empresaId: tenant.empresaId,
+    actorUsuarioId: user.sub,
+    sessionId: user.sessionId,
+    action: AUDIT_ACTIONS.TENANT_RESOURCE_UPDATED,
+    resourceType: AUDIT_RESOURCE_TYPES.DRESS,
+    resourceId: vestidoId,
+    metadata: { changedFields: ["estadoOperativo"] },
+    safeMetadataFields: ["changedFields"],
+  },
+  manager,
+);
+```
+
+En esta fase solamente se creó la infraestructura. Los módulos de autenticación, equipo y negocio todavía no emiten eventos.
+
 ## Correo transaccional
 
 `MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Las invitaciones y la recuperación de contraseña utilizan esta infraestructura.

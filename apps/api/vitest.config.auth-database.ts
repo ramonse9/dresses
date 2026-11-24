@@ -17,6 +17,7 @@ export default defineConfig({
       'test/password-recovery.integration.ts',
       'test/auth-session-metadata-migration.integration.ts',
       'test/auth-session-administration.integration.ts',
+      'test/audit-events.integration.ts',
     ],
     fileParallelism: false,
     testTimeout: 30_000,
