@@ -3,6 +3,7 @@ import {
   MovimientoFinancieroMetodoPago,
   MovimientoFinancieroTipo,
 } from './entities/movimiento-financiero.tenant-entity.js';
+import { CobroConcepto } from './dto/create-cobro.dto.js';
 import { ReservacionEstado } from './entities/reservacion.tenant-entity.js';
 import { ReservacionesController } from './reservaciones.controller.js';
 import { ReservacionesService } from './reservaciones.service.js';
@@ -141,6 +142,39 @@ describe('ReservacionesController', () => {
         fechaDesde: new Date('2027-01-01T07:00:00.000Z'),
         fechaHasta: new Date('2027-02-01T07:00:00.000Z'),
       },
+    );
+  });
+
+  it('registers a normalized charge with the authenticated actor', async () => {
+    const response = { movimiento: { id: 'movement-id' } };
+    const recordCharge = vi.fn().mockResolvedValue(response);
+    const controller = new ReservacionesController({
+      recordCharge,
+    } as unknown as ReservacionesService);
+    const idempotencyKey = 'a18c2a56-d33f-4d88-a8e7-42931121e295';
+
+    await expect(
+      controller.recordCharge(tenant, user, 'reservation-id', {
+        concepto: CobroConcepto.RENTA,
+        monto: '500.5',
+        metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+        referencia: '  CAJA-1  ',
+        notas: '',
+        idempotencyKey,
+      }),
+    ).resolves.toBe(response);
+    expect(recordCharge).toHaveBeenCalledWith(
+      tenant,
+      'reservation-id',
+      {
+        concepto: CobroConcepto.RENTA,
+        monto: '500.50',
+        metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+        referencia: 'CAJA-1',
+        notas: null,
+        idempotencyKey,
+      },
+      actor,
     );
   });
 

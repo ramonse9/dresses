@@ -409,6 +409,37 @@ describe('AppController (e2e)', () => {
                 totalPages: 1,
               },
             }),
+            recordCharge: vi.fn().mockResolvedValue({
+              movimiento: {
+                id: '611c2a56-d33f-4d88-a8e7-42931121e295',
+                tipo: 'PAGO_RENTA',
+                monto: '500.00',
+                metodoPago: 'EFECTIVO',
+                referencia: null,
+                notas: null,
+                movimientoOrigen: null,
+                actor: {
+                  id: authenticatedUserId,
+                  nombre: 'Owner',
+                  email: 'owner@example.com',
+                  activo: true,
+                },
+                createdAt: new Date('2026-11-20T12:00:00.000Z'),
+              },
+              finanzas: {
+                importeRenta: '1250.50',
+                rentaCobrada: '500.00',
+                rentaReembolsada: '0.00',
+                rentaPagadaNeta: '500.00',
+                saldoRenta: '750.50',
+                depositoRequerido: '0.00',
+                depositoRecibido: '0.00',
+                depositoDevuelto: '0.00',
+                depositoRetenido: '0.00',
+                depositoPendienteCobro: '0.00',
+                depositoPorDevolver: '0.00',
+              },
+            }),
             update: vi.fn().mockResolvedValue({
               ...reservacionResponse,
               notas: 'Actualizada',
@@ -1526,6 +1557,72 @@ describe('AppController (e2e)', () => {
     await request(app.getHttpServer())
       .get(`/api/reservaciones/${reservacionId}/finanzas`)
       .expect(401);
+  });
+
+  it.each(['selected.jwt.token', 'employee.jwt.token'])(
+    '/api/reservaciones/:id/cobros allows tenant role with %s',
+    async (token) => {
+      const idempotencyKey = 'a18c2a56-d33f-4d88-a8e7-42931121e295';
+      await request(app.getHttpServer())
+        .post(`/api/reservaciones/${reservacionId}/cobros`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          concepto: 'RENTA',
+          monto: '500.00',
+          metodoPago: 'EFECTIVO',
+          referencia: null,
+          notas: null,
+          idempotencyKey,
+        })
+        .expect(201)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            movimiento: {
+              tipo: 'PAGO_RENTA',
+              monto: '500.00',
+              actor: { id: authenticatedUserId },
+            },
+            finanzas: { rentaCobrada: '500.00', saldoRenta: '750.50' },
+          });
+          expect(JSON.stringify(response.body)).not.toContain('schemaName');
+        });
+
+      const service = app.get(ReservacionesService) as ReservacionesService & {
+        recordCharge: ReturnType<typeof vi.fn>;
+      };
+      expect(service.recordCharge).toHaveBeenLastCalledWith(
+        expect.objectContaining({ empresaId: selectedEmpresaId }),
+        reservacionId,
+        expect.objectContaining({
+          monto: '500.00',
+          idempotencyKey,
+        }),
+        {
+          actorUsuarioId: authenticatedUserId,
+          sessionId: authenticatedUser.sessionId,
+        },
+      );
+    },
+  );
+
+  it('/api/reservaciones/:id/cobros rejects protected fields and numeric amounts', async () => {
+    const base = {
+      concepto: 'RENTA',
+      monto: '500.00' as string | number,
+      metodoPago: 'EFECTIVO',
+      idempotencyKey: 'a18c2a56-d33f-4d88-a8e7-42931121e295',
+    };
+
+    await request(app.getHttpServer())
+      .post(`/api/reservaciones/${reservacionId}/cobros`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ ...base, tipo: 'PAGO_RENTA' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/reservaciones/${reservacionId}/cobros`)
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .send({ ...base, monto: 500 })
+      .expect(400);
   });
 
   it.each(['selected.jwt.token', 'employee.jwt.token'])(

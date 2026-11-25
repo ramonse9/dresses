@@ -156,7 +156,7 @@ describe('ReservacionesService financial queries', () => {
       depositoRecibido: '1000.00',
       depositoDevuelto: '300.00',
       depositoRetenido: '700.00',
-      depositoPendienteCobro: '0.00',
+      depositoPendienteCobro: '300.00',
       depositoPorDevolver: '700.00',
     });
   });

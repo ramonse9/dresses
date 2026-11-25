@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_RESOURCE_TYPES,
+} from '../src/audit/audit.constants.js';
+import { AuditService } from '../src/audit/audit.service.js';
+import { AuditEvent } from '../src/audit/entities/audit-event.entity.js';
 import { Cliente } from '../src/clientes/entities/cliente.tenant-entity.js';
 import { ClientesService } from '../src/clientes/clientes.service.js';
 import { Empresa } from '../src/empresas/entities/empresa.entity.js';
@@ -12,6 +18,8 @@ import {
   MovimientoFinancieroMetodoPago,
   MovimientoFinancieroTipo,
 } from '../src/reservaciones/entities/movimiento-financiero.tenant-entity.js';
+import { CobroConcepto } from '../src/reservaciones/dto/create-cobro.dto.js';
+import { ReservacionEstado } from '../src/reservaciones/entities/reservacion.tenant-entity.js';
 import { ReservacionesService } from '../src/reservaciones/reservaciones.service.js';
 import { Sucursal } from '../src/sucursales/entities/sucursal.tenant-entity.js';
 import { SucursalesService } from '../src/sucursales/sucursales.service.js';
@@ -32,6 +40,7 @@ describe('PostgreSQL reservation financial queries', () => {
   let sucursalesService: SucursalesService;
   let vestidosService: VestidosService;
   let reservacionesService: ReservacionesService;
+  let auditService: AuditService;
   let tenantResolver: TenantResolverService;
   let tenantA: TenantScope;
   let tenantB: TenantScope;
@@ -53,6 +62,7 @@ describe('PostgreSQL reservation financial queries', () => {
     sucursalesService = moduleRef.get(SucursalesService);
     vestidosService = moduleRef.get(VestidosService);
     reservacionesService = moduleRef.get(ReservacionesService);
+    auditService = moduleRef.get(AuditService);
     tenantResolver = moduleRef.get(TenantResolverService);
 
     const empresaA = await empresasService.create({
@@ -164,6 +174,17 @@ describe('PostgreSQL reservation financial queries', () => {
     )) as Array<{ id: string }>;
 
     return rows[0]?.id ?? '';
+  }
+
+  async function setReservationState(
+    tenant: TenantScope,
+    id: string,
+    estado: ReservacionEstado,
+  ): Promise<void> {
+    await dataSource.query(
+      `UPDATE ${quoteTenantSchemaName(tenant.schemaName)}."reservaciones" SET "estado" = $1 WHERE "id" = $2`,
+      [estado, id],
+    );
   }
 
   it('returns zero balances and 404 for a reservation from another tenant', async () => {
@@ -279,7 +300,7 @@ describe('PostgreSQL reservation financial queries', () => {
       depositoRecibido: '1000.00',
       depositoDevuelto: '200.00',
       depositoRetenido: '800.00',
-      depositoPendienteCobro: '0.00',
+      depositoPendienteCobro: '200.00',
       depositoPorDevolver: '800.00',
     });
     expect(JSON.stringify(result)).not.toContain('schemaName');
@@ -366,5 +387,342 @@ describe('PostgreSQL reservation financial queries', () => {
     ]);
     expect(filtered.pagination.total).toBe(1);
     expect(JSON.stringify(filtered)).not.toContain('schemaName');
+  });
+
+  it('records partial and exact rent and deposit payments with actor and audit', async () => {
+    const { reservacion } = await createReservation(tenantA);
+    const sessionId = randomUUID();
+    const rentKey = randomUUID();
+    const firstRent = await reservacionesService.recordCharge(
+      tenantA,
+      reservacion.id,
+      {
+        concepto: CobroConcepto.RENTA,
+        monto: '500.00',
+        metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+        referencia: 'CAJA-01',
+        notas: 'Primer abono',
+        idempotencyKey: rentKey,
+      },
+      { actorUsuarioId: actor.id, sessionId },
+    );
+    expect(firstRent).toMatchObject({
+      movimiento: {
+        tipo: MovimientoFinancieroTipo.PAGO_RENTA,
+        monto: '500.00',
+        actor: { id: actor.id, nombre: actor.nombre },
+      },
+      finanzas: {
+        rentaCobrada: '500.00',
+        rentaPagadaNeta: '500.00',
+        saldoRenta: '2000.00',
+      },
+    });
+
+    const exactRent = await reservacionesService.recordCharge(
+      tenantA,
+      reservacion.id,
+      {
+        concepto: CobroConcepto.RENTA,
+        monto: '2000.00',
+        metodoPago: MovimientoFinancieroMetodoPago.TRANSFERENCIA,
+        referencia: null,
+        notas: null,
+        idempotencyKey: randomUUID(),
+      },
+      { actorUsuarioId: actor.id, sessionId },
+    );
+    expect(exactRent.finanzas.saldoRenta).toBe('0.00');
+
+    const deposit = await reservacionesService.recordCharge(
+      tenantA,
+      reservacion.id,
+      {
+        concepto: CobroConcepto.DEPOSITO,
+        monto: '1000.00',
+        metodoPago: MovimientoFinancieroMetodoPago.TARJETA,
+        referencia: null,
+        notas: null,
+        idempotencyKey: randomUUID(),
+      },
+      { actorUsuarioId: actor.id, sessionId },
+    );
+    expect(deposit).toMatchObject({
+      movimiento: {
+        tipo: MovimientoFinancieroTipo.PAGO_DEPOSITO,
+        monto: '1000.00',
+      },
+      finanzas: {
+        depositoRecibido: '1000.00',
+        depositoRetenido: '1000.00',
+        depositoPendienteCobro: '0.00',
+      },
+    });
+
+    const persisted = (await dataSource.query(
+      `SELECT "sucursal_id" AS "sucursalId", "registrado_por_usuario_id" AS "actorId" FROM ${quoteTenantSchemaName(tenantA.schemaName)}."movimientos_financieros" WHERE "id" = $1`,
+      [firstRent.movimiento.id],
+    )) as Array<{ sucursalId: string; actorId: string }>;
+    expect(persisted).toEqual([
+      { sucursalId: reservacion.sucursal.id, actorId: actor.id },
+    ]);
+
+    const audit = await dataSource.getRepository(AuditEvent).findOne({
+      where: {
+        action: AUDIT_ACTIONS.FINANCIAL_PAYMENT_RECORDED,
+        resourceId: firstRent.movimiento.id,
+      },
+    });
+    expect(audit).toMatchObject({
+      empresaId: tenantA.empresaId,
+      actorUsuarioId: actor.id,
+      sessionId,
+      resourceType: AUDIT_RESOURCE_TYPES.FINANCIAL_MOVEMENT,
+      metadata: {
+        reservacionId: reservacion.id,
+        concepto: CobroConcepto.RENTA,
+        monto: '500.00',
+        metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+      },
+    });
+    expect(JSON.stringify(audit?.metadata)).not.toContain('CAJA-01');
+    expect(JSON.stringify(audit?.metadata)).not.toContain('Primer abono');
+    expect(JSON.stringify(firstRent)).not.toContain('schemaName');
+  });
+
+  it.each([
+    ReservacionEstado.BORRADOR,
+    ReservacionEstado.CONFIRMADA,
+    ReservacionEstado.ENTREGADA,
+  ])('allows a payment while the reservation is %s', async (estado) => {
+    const { reservacion } = await createReservation(tenantA, '100.00', '0.00');
+    await setReservationState(tenantA, reservacion.id, estado);
+
+    await expect(
+      reservacionesService.recordCharge(
+        tenantA,
+        reservacion.id,
+        {
+          concepto: CobroConcepto.RENTA,
+          monto: '100.00',
+          metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+          referencia: null,
+          notas: null,
+          idempotencyKey: randomUUID(),
+        },
+        { actorUsuarioId: actor.id, sessionId: randomUUID() },
+      ),
+    ).resolves.toMatchObject({ finanzas: { saldoRenta: '0.00' } });
+  });
+
+  it.each([ReservacionEstado.DEVUELTA, ReservacionEstado.CANCELADA])(
+    'rejects payments while the reservation is %s',
+    async (estado) => {
+      const { reservacion } = await createReservation(tenantA);
+      await setReservationState(tenantA, reservacion.id, estado);
+
+      await expect(
+        reservacionesService.recordCharge(
+          tenantA,
+          reservacion.id,
+          {
+            concepto: CobroConcepto.RENTA,
+            monto: '1.00',
+            metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+            referencia: null,
+            notas: null,
+            idempotencyKey: randomUUID(),
+          },
+          { actorUsuarioId: actor.id, sessionId: randomUUID() },
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+    },
+  );
+
+  it('rejects rent and deposit overpayments', async () => {
+    const { reservacion } = await createReservation(tenantA);
+    const actorContext = {
+      actorUsuarioId: actor.id,
+      sessionId: randomUUID(),
+    };
+
+    await expect(
+      reservacionesService.recordCharge(
+        tenantA,
+        reservacion.id,
+        {
+          concepto: CobroConcepto.RENTA,
+          monto: '2500.01',
+          metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+          referencia: null,
+          notas: null,
+          idempotencyKey: randomUUID(),
+        },
+        actorContext,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(
+      reservacionesService.recordCharge(
+        tenantA,
+        reservacion.id,
+        {
+          concepto: CobroConcepto.DEPOSITO,
+          monto: '1000.01',
+          metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+          referencia: null,
+          notas: null,
+          idempotencyKey: randomUUID(),
+        },
+        actorContext,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('returns an existing movement for the same idempotent payload and rejects a different payload', async () => {
+    const { reservacion } = await createReservation(tenantA);
+    const idempotencyKey = randomUUID();
+    const input = {
+      concepto: CobroConcepto.RENTA,
+      monto: '500.00',
+      metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+      referencia: null,
+      notas: null,
+      idempotencyKey,
+    };
+    const actorContext = {
+      actorUsuarioId: actor.id,
+      sessionId: randomUUID(),
+    };
+    const first = await reservacionesService.recordCharge(
+      tenantA,
+      reservacion.id,
+      input,
+      actorContext,
+    );
+    const repeated = await reservacionesService.recordCharge(
+      tenantA,
+      reservacion.id,
+      input,
+      actorContext,
+    );
+    expect(repeated.movimiento.id).toBe(first.movimiento.id);
+
+    const count = (await dataSource.query(
+      `SELECT COUNT(*)::integer AS "count" FROM ${quoteTenantSchemaName(tenantA.schemaName)}."movimientos_financieros" WHERE "idempotency_key" = $1`,
+      [idempotencyKey],
+    )) as Array<{ count: number }>;
+    expect(count).toEqual([{ count: 1 }]);
+    await expect(
+      reservacionesService.recordCharge(
+        tenantA,
+        reservacion.id,
+        { ...input, monto: '501.00' },
+        actorContext,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('serializes concurrent payments so they cannot exceed the balance or duplicate a key', async () => {
+    const { reservacion } = await createReservation(tenantA, '1000.00', '0.00');
+    const actorContext = {
+      actorUsuarioId: actor.id,
+      sessionId: randomUUID(),
+    };
+    const differentKeys = await Promise.allSettled(
+      [randomUUID(), randomUUID()].map((idempotencyKey) =>
+        reservacionesService.recordCharge(
+          tenantA,
+          reservacion.id,
+          {
+            concepto: CobroConcepto.RENTA,
+            monto: '700.00',
+            metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+            referencia: null,
+            notas: null,
+            idempotencyKey,
+          },
+          actorContext,
+        ),
+      ),
+    );
+    expect(
+      differentKeys.filter(({ status }) => status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      differentKeys.filter(({ status }) => status === 'rejected'),
+    ).toHaveLength(1);
+
+    const sameKey = randomUUID();
+    const samePayload = {
+      concepto: CobroConcepto.RENTA,
+      monto: '300.00',
+      metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+      referencia: null,
+      notas: null,
+      idempotencyKey: sameKey,
+    };
+    const duplicates = await Promise.all([
+      reservacionesService.recordCharge(
+        tenantA,
+        reservacion.id,
+        samePayload,
+        actorContext,
+      ),
+      reservacionesService.recordCharge(
+        tenantA,
+        reservacion.id,
+        samePayload,
+        actorContext,
+      ),
+    ]);
+    expect(duplicates[0].movimiento.id).toBe(duplicates[1].movimiento.id);
+  });
+
+  it('rolls back the movement when audit fails and returns 404 across tenants', async () => {
+    const reservationA = await createReservation(tenantA);
+    const reservationB = await createReservation(tenantB);
+    const rollbackKey = randomUUID();
+    const record = vi
+      .spyOn(auditService, 'record')
+      .mockRejectedValueOnce(new Error('controlled audit failure'));
+
+    await expect(
+      reservacionesService.recordCharge(
+        tenantA,
+        reservationA.reservacion.id,
+        {
+          concepto: CobroConcepto.RENTA,
+          monto: '100.00',
+          metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+          referencia: null,
+          notas: null,
+          idempotencyKey: rollbackKey,
+        },
+        { actorUsuarioId: actor.id, sessionId: randomUUID() },
+      ),
+    ).rejects.toThrow('controlled audit failure');
+    record.mockRestore();
+
+    const rolledBack = (await dataSource.query(
+      `SELECT COUNT(*)::integer AS "count" FROM ${quoteTenantSchemaName(tenantA.schemaName)}."movimientos_financieros" WHERE "idempotency_key" = $1`,
+      [rollbackKey],
+    )) as Array<{ count: number }>;
+    expect(rolledBack).toEqual([{ count: 0 }]);
+
+    await expect(
+      reservacionesService.recordCharge(
+        tenantA,
+        reservationB.reservacion.id,
+        {
+          concepto: CobroConcepto.RENTA,
+          monto: '100.00',
+          metodoPago: MovimientoFinancieroMetodoPago.EFECTIVO,
+          referencia: null,
+          notas: null,
+          idempotencyKey: randomUUID(),
+        },
+        { actorUsuarioId: actor.id, sessionId: randomUUID() },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

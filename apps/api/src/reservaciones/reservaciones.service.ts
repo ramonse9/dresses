@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EntityManager, In } from 'typeorm';
+import { EntityManager, In, QueryFailedError } from 'typeorm';
 import {
   AUDIT_ACTIONS,
   AUDIT_RESOURCE_TYPES,
@@ -25,12 +25,14 @@ import {
 } from '../vestidos/entities/vestido.tenant-entity.js';
 import { decimalToMinorUnits, minorUnitsToDecimal } from '../finanzas/money.js';
 import type { CancelReservacionDto } from './dto/cancel-reservacion.dto.js';
+import { CobroConcepto, type CreateCobroDto } from './dto/create-cobro.dto.js';
 import type { CreateReservacionDto } from './dto/create-reservacion.dto.js';
 import type { ListMovimientosFinancierosQueryDto } from './dto/list-movimientos-financieros-query.dto.js';
 import type { ListReservacionesQueryDto } from './dto/list-reservaciones-query.dto.js';
 import type {
   MovimientoFinancieroResponseDto,
   PaginatedMovimientosFinancierosResponseDto,
+  RegistroCobroResponseDto,
   ReservacionFinanzasResponseDto,
 } from './dto/reservacion-finanzas-response.dto.js';
 import type {
@@ -349,45 +351,8 @@ export class ReservacionesService {
         throw new NotFoundException('Reservación no encontrada');
       }
 
-      const movimientos = await manager
-        .getRepository(MovimientoFinanciero)
-        .find({
-          select: {
-            id: true,
-            tipo: true,
-            monto: true,
-            movimientoOrigenId: true,
-          },
-          where: { reservacionId: id },
-        });
-      const totales = this.calculateFinancialTotals(movimientos);
-      const importeRenta = decimalToMinorUnits(reservacion.importeRenta);
-      const depositoRequerido = decimalToMinorUnits(
-        reservacion.depositoRequerido,
-      );
-      const rentaPagadaNeta = totales.rentaCobrada - totales.rentaReembolsada;
-      const saldoRenta = importeRenta - rentaPagadaNeta;
-      const depositoRetenido =
-        totales.depositoRecibido - totales.depositoDevuelto;
-      const depositoPendienteCobro = this.nonNegative(
-        depositoRequerido - totales.depositoRecibido,
-      );
-
-      return {
-        importeRenta: minorUnitsToDecimal(importeRenta),
-        rentaCobrada: minorUnitsToDecimal(totales.rentaCobrada),
-        rentaReembolsada: minorUnitsToDecimal(totales.rentaReembolsada),
-        rentaPagadaNeta: minorUnitsToDecimal(rentaPagadaNeta),
-        saldoRenta: minorUnitsToDecimal(saldoRenta),
-        depositoRequerido: minorUnitsToDecimal(depositoRequerido),
-        depositoRecibido: minorUnitsToDecimal(totales.depositoRecibido),
-        depositoDevuelto: minorUnitsToDecimal(totales.depositoDevuelto),
-        depositoRetenido: minorUnitsToDecimal(depositoRetenido),
-        depositoPendienteCobro: minorUnitsToDecimal(depositoPendienteCobro),
-        depositoPorDevolver: minorUnitsToDecimal(
-          this.nonNegative(depositoRetenido),
-        ),
-      };
+      const movimientos = await this.loadFinancialMovements(manager, id);
+      return this.buildFinancialSummary(reservacion, movimientos);
     });
   }
 
@@ -465,6 +430,157 @@ export class ReservacionesService {
           total,
           totalPages: Math.ceil(total / input.limit),
         },
+      };
+    });
+  }
+
+  recordCharge(
+    tenant: TenantScope,
+    id: string,
+    input: CreateCobroDto,
+    actor: AuthenticatedAuditActor,
+  ): Promise<RegistroCobroResponseDto> {
+    return this.tenantContext.run(tenant, async (manager) => {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`cobro:idempotency:${tenant.empresaId}:${input.idempotencyKey}`],
+      );
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`cobro:reservacion:${tenant.empresaId}:${id}`],
+      );
+
+      const reservacion = await manager
+        .getRepository(Reservacion)
+        .createQueryBuilder('reservacion')
+        .select([
+          'reservacion.id',
+          'reservacion.sucursalId',
+          'reservacion.estado',
+          'reservacion.importeRenta',
+          'reservacion.depositoRequerido',
+        ])
+        .where('reservacion.id = :id', { id })
+        .setLock('pessimistic_write')
+        .getOne();
+
+      if (!reservacion) {
+        throw new NotFoundException('Reservación no encontrada');
+      }
+
+      const movementRepository = manager.getRepository(MovimientoFinanciero);
+      const tipo =
+        input.concepto === CobroConcepto.RENTA
+          ? MovimientoFinancieroTipo.PAGO_RENTA
+          : MovimientoFinancieroTipo.PAGO_DEPOSITO;
+      const existing = await movementRepository.findOne({
+        where: { idempotencyKey: input.idempotencyKey },
+      });
+
+      if (existing) {
+        if (!this.matchesCharge(existing, id, tipo, input)) {
+          throw new ConflictException(
+            'La llave de idempotencia ya fue utilizada con otros datos',
+          );
+        }
+
+        const movimientos = await this.loadFinancialMovements(manager, id);
+        const actors = await this.loadMovementActors(manager, [existing]);
+        return {
+          movimiento: this.toFinancialMovementResponse(existing, actors),
+          finanzas: this.buildFinancialSummary(reservacion, movimientos),
+        };
+      }
+
+      if (
+        reservacion.estado === ReservacionEstado.DEVUELTA ||
+        reservacion.estado === ReservacionEstado.CANCELADA
+      ) {
+        throw new ConflictException(
+          'No se pueden registrar cobros en el estado actual',
+        );
+      }
+
+      const movimientos = await this.loadFinancialMovements(manager, id);
+      const totales = this.calculateFinancialTotals(movimientos);
+      const monto = decimalToMinorUnits(input.monto);
+
+      if (input.concepto === CobroConcepto.RENTA) {
+        const pagoNeto = totales.rentaCobrada - totales.rentaReembolsada;
+        const disponible =
+          decimalToMinorUnits(reservacion.importeRenta) - pagoNeto;
+
+        if (monto > disponible) {
+          throw new ConflictException(
+            'El cobro excede el saldo pendiente de renta',
+          );
+        }
+      } else {
+        const depositoNeto =
+          totales.depositoRecibido - totales.depositoDevuelto;
+        const disponible =
+          decimalToMinorUnits(reservacion.depositoRequerido) - depositoNeto;
+
+        if (monto > disponible) {
+          throw new ConflictException('El cobro excede el depósito pendiente');
+        }
+      }
+
+      const movimiento = movementRepository.create({
+        reservacionId: reservacion.id,
+        sucursalId: reservacion.sucursalId,
+        tipo,
+        monto: input.monto,
+        metodoPago: input.metodoPago,
+        referencia: input.referencia,
+        notas: input.notas,
+        movimientoOrigenId: null,
+        idempotencyKey: input.idempotencyKey,
+        registradoPorUsuarioId: actor.actorUsuarioId,
+      });
+
+      try {
+        await movementRepository.save(movimiento);
+      } catch (error) {
+        if (this.isIdempotencyConflict(error)) {
+          throw new ConflictException(
+            'La llave de idempotencia ya fue utilizada',
+          );
+        }
+        throw error;
+      }
+
+      await this.auditService.record(
+        {
+          empresaId: tenant.empresaId,
+          actorUsuarioId: actor.actorUsuarioId,
+          sessionId: actor.sessionId,
+          action: AUDIT_ACTIONS.FINANCIAL_PAYMENT_RECORDED,
+          resourceType: AUDIT_RESOURCE_TYPES.FINANCIAL_MOVEMENT,
+          resourceId: movimiento.id,
+          metadata: {
+            reservacionId: reservacion.id,
+            concepto: input.concepto,
+            monto: movimiento.monto,
+            metodoPago: movimiento.metodoPago,
+          },
+          safeMetadataFields: [
+            'reservacionId',
+            'concepto',
+            'monto',
+            'metodoPago',
+          ],
+        },
+        manager,
+      );
+
+      const actors = await this.loadMovementActors(manager, [movimiento]);
+      return {
+        movimiento: this.toFinancialMovementResponse(movimiento, actors),
+        finanzas: this.buildFinancialSummary(reservacion, [
+          ...movimientos,
+          movimiento,
+        ]),
       };
     });
   }
@@ -1042,6 +1158,88 @@ export class ReservacionesService {
         'Uno o más vestidos no están disponibles en las fechas seleccionadas',
       );
     }
+  }
+
+  private loadFinancialMovements(
+    manager: EntityManager,
+    reservacionId: string,
+  ): Promise<MovimientoFinanciero[]> {
+    return manager.getRepository(MovimientoFinanciero).find({
+      select: {
+        id: true,
+        tipo: true,
+        monto: true,
+        movimientoOrigenId: true,
+      },
+      where: { reservacionId },
+    });
+  }
+
+  private buildFinancialSummary(
+    reservacion: Pick<Reservacion, 'importeRenta' | 'depositoRequerido'>,
+    movimientos: MovimientoFinanciero[],
+  ): ReservacionFinanzasResponseDto {
+    const totales = this.calculateFinancialTotals(movimientos);
+    const importeRenta = decimalToMinorUnits(reservacion.importeRenta);
+    const depositoRequerido = decimalToMinorUnits(
+      reservacion.depositoRequerido,
+    );
+    const rentaPagadaNeta = totales.rentaCobrada - totales.rentaReembolsada;
+    const saldoRenta = importeRenta - rentaPagadaNeta;
+    const depositoRetenido =
+      totales.depositoRecibido - totales.depositoDevuelto;
+    const depositoPendienteCobro = this.nonNegative(
+      depositoRequerido - depositoRetenido,
+    );
+
+    return {
+      importeRenta: minorUnitsToDecimal(importeRenta),
+      rentaCobrada: minorUnitsToDecimal(totales.rentaCobrada),
+      rentaReembolsada: minorUnitsToDecimal(totales.rentaReembolsada),
+      rentaPagadaNeta: minorUnitsToDecimal(rentaPagadaNeta),
+      saldoRenta: minorUnitsToDecimal(saldoRenta),
+      depositoRequerido: minorUnitsToDecimal(depositoRequerido),
+      depositoRecibido: minorUnitsToDecimal(totales.depositoRecibido),
+      depositoDevuelto: minorUnitsToDecimal(totales.depositoDevuelto),
+      depositoRetenido: minorUnitsToDecimal(depositoRetenido),
+      depositoPendienteCobro: minorUnitsToDecimal(depositoPendienteCobro),
+      depositoPorDevolver: minorUnitsToDecimal(
+        this.nonNegative(depositoRetenido),
+      ),
+    };
+  }
+
+  private matchesCharge(
+    movimiento: MovimientoFinanciero,
+    reservacionId: string,
+    tipo: MovimientoFinancieroTipo,
+    input: CreateCobroDto,
+  ): boolean {
+    return (
+      movimiento.reservacionId === reservacionId &&
+      movimiento.tipo === tipo &&
+      movimiento.monto === input.monto &&
+      movimiento.metodoPago === input.metodoPago &&
+      movimiento.referencia === input.referencia &&
+      movimiento.notas === input.notas &&
+      movimiento.movimientoOrigenId === null
+    );
+  }
+
+  private isIdempotencyConflict(error: unknown): boolean {
+    if (!(error instanceof QueryFailedError)) {
+      return false;
+    }
+
+    const driverError = error.driverError as {
+      code?: string;
+      constraint?: string;
+    };
+
+    return (
+      driverError.code === '23505' &&
+      driverError.constraint === 'UQ_movimientos_financieros_idempotency_key'
+    );
   }
 
   private calculateFinancialTotals(movimientos: MovimientoFinanciero[]): {

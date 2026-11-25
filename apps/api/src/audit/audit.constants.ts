@@ -31,6 +31,7 @@ export const AUDIT_ACTIONS = {
   RESERVATION_DELIVERED: 'reservation.delivered',
   RESERVATION_RETURNED: 'reservation.returned',
   RESERVATION_CANCELLED: 'reservation.cancelled',
+  FINANCIAL_PAYMENT_RECORDED: 'financial.payment.recorded',
   TENANT_RESOURCE_CREATED: 'tenant.resource.created',
   TENANT_RESOURCE_UPDATED: 'tenant.resource.updated',
   TENANT_RESOURCE_DEACTIVATED: 'tenant.resource.deactivated',
@@ -48,6 +49,7 @@ export const AUDIT_RESOURCE_TYPES = {
   CUSTOMER: 'cliente',
   DRESS: 'vestido',
   RESERVATION: 'reservacion',
+  FINANCIAL_MOVEMENT: 'movimiento_financiero',
 } as const;
 
 export type AuditResourceType =

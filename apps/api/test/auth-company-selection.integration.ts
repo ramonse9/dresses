@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
@@ -512,6 +513,33 @@ describe('PostgreSQL authenticated empresa selection', () => {
         pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
       });
     await request(app.getHttpServer())
+      .post(`/api/reservaciones/${String(reservacionBResponse.body.id)}/cobros`)
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .send({
+        concepto: 'RENTA',
+        monto: '100.00',
+        metodoPago: 'EFECTIVO',
+        referencia: null,
+        notas: null,
+        idempotencyKey: randomUUID(),
+      })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          movimiento: {
+            tipo: 'PAGO_RENTA',
+            monto: '100.00',
+            actor: { id: usuarioA.id },
+          },
+          finanzas: {
+            rentaCobrada: '100.00',
+            saldoRenta: '1400.00',
+          },
+        });
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
+        expect(JSON.stringify(response.body)).not.toContain('schemaName');
+      });
+    await request(app.getHttpServer())
       .get(`/api/reservaciones/${String(reservacionAResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .expect(404)
@@ -530,6 +558,16 @@ describe('PostgreSQL authenticated empresa selection', () => {
         `/api/reservaciones/${String(reservacionAResponse.body.id)}/movimientos`,
       )
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(`/api/reservaciones/${String(reservacionAResponse.body.id)}/cobros`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({
+        concepto: 'RENTA',
+        monto: '100.00',
+        metodoPago: 'EFECTIVO',
+        idempotencyKey: randomUUID(),
+      })
       .expect(404);
     await request(app.getHttpServer())
       .patch(`/api/reservaciones/${String(reservacionBResponse.body.id)}`)
@@ -912,6 +950,16 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
       .expect(403);
     await request(app.getHttpServer())
+      .post(`/api/reservaciones/${String(reservacionAResponse.body.id)}/cobros`)
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .send({
+        concepto: 'RENTA',
+        monto: '1.00',
+        metodoPago: 'EFECTIVO',
+        idempotencyKey: randomUUID(),
+      })
+      .expect(403);
+    await request(app.getHttpServer())
       .post(
         `/api/reservaciones/${String(reservacionAResponse.body.id)}/confirmar`,
       )
@@ -950,6 +998,16 @@ describe('PostgreSQL authenticated empresa selection', () => {
         `/api/reservaciones/${String(reservacionBResponse.body.id)}/movimientos`,
       )
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .post(`/api/reservaciones/${String(reservacionBResponse.body.id)}/cobros`)
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .send({
+        concepto: 'RENTA',
+        monto: '1.00',
+        metodoPago: 'EFECTIVO',
+        idempotencyKey: randomUUID(),
+      })
       .expect(403);
     await request(app.getHttpServer())
       .post(

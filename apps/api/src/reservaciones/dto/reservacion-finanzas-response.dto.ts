@@ -47,3 +47,8 @@ export type PaginatedMovimientosFinancierosResponseDto = {
     totalPages: number;
   };
 };
+
+export type RegistroCobroResponseDto = {
+  movimiento: MovimientoFinancieroResponseDto;
+  finanzas: ReservacionFinanzasResponseDto;
+};

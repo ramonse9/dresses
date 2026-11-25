@@ -16,11 +16,13 @@ import type { TenantScope } from '../tenancy/tenant-scope.js';
 import type { AccessTokenPayload } from '../auth/types/access-token-payload.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { parseCancelReservacionBody } from './dto/cancel-reservacion.dto.js';
+import { parseCreateCobroBody } from './dto/create-cobro.dto.js';
 import { parseCreateReservacionBody } from './dto/create-reservacion.dto.js';
 import { parseListMovimientosFinancierosQuery } from './dto/list-movimientos-financieros-query.dto.js';
 import { parseListReservacionesQuery } from './dto/list-reservaciones-query.dto.js';
 import type {
   PaginatedMovimientosFinancierosResponseDto,
+  RegistroCobroResponseDto,
   ReservacionFinanzasResponseDto,
 } from './dto/reservacion-finanzas-response.dto.js';
 import type {
@@ -90,6 +92,22 @@ export class ReservacionesController {
       tenant,
       id,
       parseListMovimientosFinancierosQuery(query),
+    );
+  }
+
+  @Post(':id/cobros')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  recordCharge(
+    @CurrentTenant() tenant: TenantScope,
+    @CurrentUser() user: AccessTokenPayload,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: unknown,
+  ): Promise<RegistroCobroResponseDto> {
+    return this.reservacionesService.recordCharge(
+      tenant,
+      id,
+      parseCreateCobroBody(body),
+      this.auditActor(user),
     );
   }
 

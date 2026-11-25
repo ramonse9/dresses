@@ -1019,11 +1019,11 @@ La migration tenant `CreateMovimientosFinancieros1795906800000` se aplica autom�
 npm run tenant:migration:run
 ```
 
-Este paso define exclusivamente el modelo. Todavía no existen endpoints, pasarelas, facturas, reembolsos operativos, reversos operativos ni cierres de caja.
+El modelo ya es utilizado por las consultas financieras y por el registro de cobros descrito a continuación. Pasarelas, facturas, reembolsos operativos, reversos operativos y cierres de caja permanecen fuera del alcance actual.
 
 ### Consulta de finanzas y movimientos
 
-Las membresías activas `OWNER` y `EMPLOYEE` pueden consultar, sin crear movimientos:
+Las membresías activas `OWNER` y `EMPLOYEE` pueden consultar:
 
 ```text
 GET /api/reservaciones/:id/finanzas
@@ -1050,7 +1050,7 @@ Ambas rutas obtienen la empresa exclusivamente del JWT verificado y ejecutan la 
 }
 ```
 
-Los cálculos utilizan unidades menores con `BigInt`; nunca convierten dinero a punto flotante. Un `REVERSO` aplica el efecto contrario de su movimiento de origen y las cadenas de reversos alternan ese efecto. `rentaPagadaNeta` es cobrado menos reembolsado; `saldoRenta` es importe de renta menos pago neto; `depositoRetenido` es recibido menos devuelto. Los importes pendientes se limitan a cero para no presentar cantidades negativas como cobros o devoluciones pendientes.
+Los cálculos utilizan unidades menores con `BigInt`; nunca convierten dinero a punto flotante. Un `REVERSO` aplica el efecto contrario de su movimiento de origen y las cadenas de reversos alternan ese efecto. `rentaPagadaNeta` es cobrado menos reembolsado; `saldoRenta` es importe de renta menos pago neto; `depositoRetenido` es recibido menos devuelto y el depósito pendiente se calcula contra ese importe neto. Los importes pendientes se limitan a cero para no presentar cantidades negativas como cobros o devoluciones pendientes.
 
 `GET /movimientos` acepta `page`, `limit` —máximo 100—, `tipo`, `metodoPago`, `fechaDesde` y `fechaHasta`. El rango temporal es semiabierto: `createdAt >= fechaDesde AND createdAt < fechaHasta`; las fechas requieren ISO 8601 con zona horaria. El orden es `createdAt DESC, id DESC` y la respuesta utiliza el formato paginado estándar. Cada elemento incluye tipo, monto, método, referencia, notas, movimiento de origen, actor básico y fecha. Los actores se resuelven desde `public.usuarios` en una consulta agrupada; si el UUID histórico ya no está disponible se muestra `Actor histórico desconocido`.
 
@@ -1065,6 +1065,49 @@ curl --get http://localhost:3000/api/reservaciones/RESERVACION_UUID/movimientos 
   --data-urlencode 'tipo=PAGO_RENTA' \
   --data-urlencode 'fechaDesde=2027-01-01T00:00:00-07:00' \
   --data-urlencode 'fechaHasta=2027-02-01T00:00:00-07:00'
+```
+
+### Registro seguro de cobros
+
+Las membresías activas `OWNER` y `EMPLOYEE` pueden registrar cobros mediante:
+
+```text
+POST /api/reservaciones/:id/cobros
+```
+
+El endpoint acepta exclusivamente `concepto`, `monto`, `metodoPago`, `referencia`, `notas` e `idempotencyKey`:
+
+```json
+{
+  "concepto": "RENTA",
+  "monto": "500.00",
+  "metodoPago": "EFECTIVO",
+  "referencia": null,
+  "notas": null,
+  "idempotencyKey": "7a9d1044-5ee7-4d71-9877-b946d9f9fb4b"
+}
+```
+
+`concepto` puede ser `RENTA` o `DEPOSITO` y se traduce internamente a `PAGO_RENTA` o `PAGO_DEPOSITO`. El monto debe enviarse como string decimal positivo, sin notación científica y con máximo dos decimales; los valores JSON numéricos son rechazados. El backend obtiene la sucursal desde la reservación y el usuario registrador desde el JWT verificado. Nunca acepta tipo interno, sucursal, empresa, schema, actor, saldo o total desde el cliente.
+
+Se admiten cobros en `BORRADOR`, `CONFIRMADA` y `ENTREGADA`. `DEVUELTA` y `CANCELADA` responden `409`. El pago neto de renta no puede superar `importeRenta` y el depósito neto recibido no puede superar `depositoRequerido`.
+
+La operación bloquea la reservación dentro de una única transacción tenant, serializa la llave de idempotencia y vuelve a calcular los saldos antes de insertar. Repetir la misma llave con el mismo payload devuelve el movimiento existente; reutilizarla con datos distintos responde `409`. La restricción única de PostgreSQL permanece como última defensa. La creación y el evento de auditoría `financial.payment.recorded` comparten la misma transacción, de modo que cualquier falla revierte ambos.
+
+La respuesta contiene el movimiento persistido y el resumen financiero actualizado, con todos los importes como strings de dos decimales:
+
+```bash
+curl -X POST http://localhost:3000/api/reservaciones/RESERVACION_UUID/cobros \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "concepto":"RENTA",
+    "monto":"500.00",
+    "metodoPago":"EFECTIVO",
+    "referencia":null,
+    "notas":null,
+    "idempotencyKey":"7a9d1044-5ee7-4d71-9877-b946d9f9fb4b"
+  }'
 ```
 
 ### Creación segura de reservaciones
