@@ -13,6 +13,7 @@ import {
 } from 'typeorm';
 import { Cliente } from '../../clientes/entities/cliente.tenant-entity.js';
 import { Sucursal } from '../../sucursales/entities/sucursal.tenant-entity.js';
+import { MovimientoFinanciero } from './movimiento-financiero.tenant-entity.js';
 import { ReservacionVestido } from './reservacion-vestido.tenant-entity.js';
 
 export enum ReservacionEstado {
@@ -133,4 +134,7 @@ export class Reservacion {
     (reservacionVestido) => reservacionVestido.reservacion,
   )
   vestidos!: Relation<ReservacionVestido[]>;
+
+  @OneToMany(() => MovimientoFinanciero, (movimiento) => movimiento.reservacion)
+  movimientosFinancieros!: Relation<MovimientoFinanciero[]>;
 }

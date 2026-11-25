@@ -223,16 +223,20 @@ describe('PostgreSQL vestidos tenant migration', () => {
     const schemaIdentifier = quoteTenantSchemaName(empresa.schemaName);
 
     await dataSource.query(
+      `DROP TABLE ${schemaIdentifier}."movimientos_financieros"`,
+    );
+    await dataSource.query(
       `DROP TABLE ${schemaIdentifier}."reservacion_vestidos"`,
     );
     await dataSource.query(`DROP TABLE ${schemaIdentifier}."reservaciones"`);
     await dataSource.query(`DROP TABLE ${schemaIdentifier}."vestidos"`);
     await dataSource.query(
-      `DELETE FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" IN ($1, $2, $3)`,
+      `DELETE FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" IN ($1, $2, $3, $4)`,
       [
         'CreateVestidos1794697200000',
         'OptimizeVestidosCatalog1794783600000',
         'CreateReservaciones1795215600000',
+        'CreateMovimientosFinancieros1795906800000',
       ],
     );
 

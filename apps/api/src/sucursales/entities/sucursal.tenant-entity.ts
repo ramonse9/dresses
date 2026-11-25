@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Reservacion } from '../../reservaciones/entities/reservacion.tenant-entity.js';
+import { MovimientoFinanciero } from '../../reservaciones/entities/movimiento-financiero.tenant-entity.js';
 import { Vestido } from '../../vestidos/entities/vestido.tenant-entity.js';
 
 @Entity({ name: 'sucursales' })
@@ -38,4 +39,7 @@ export class Sucursal {
 
   @OneToMany(() => Reservacion, (reservacion) => reservacion.sucursal)
   reservaciones!: Relation<Reservacion[]>;
+
+  @OneToMany(() => MovimientoFinanciero, (movimiento) => movimiento.sucursal)
+  movimientosFinancieros!: Relation<MovimientoFinanciero[]>;
 }

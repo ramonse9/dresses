@@ -21,7 +21,7 @@ describe('TenantMigrationService', () => {
       'tenant_019a6f3382b77a22971b6a8d7c5e4f30',
     );
 
-    expect(query).toHaveBeenCalledTimes(42);
+    expect(query).toHaveBeenCalledTimes(52);
     expect(query.mock.calls[0]?.[0]).toContain(
       '"tenant_019a6f3382b77a22971b6a8d7c5e4f30"."tenant_migrations"',
     );
@@ -70,6 +70,23 @@ describe('TenantMigrationService', () => {
     expect(query.mock.calls[41]).toEqual([
       expect.stringContaining('INSERT INTO'),
       ['OptimizeReservaciones1795302000000'],
+    ]);
+    expect(query.mock.calls[42]?.[0]).toContain('"movimientos_financieros"');
+    expect(query.mock.calls[43]?.[0]).toContain(
+      '"reservacion_id", "created_at" DESC, "id" DESC',
+    );
+    expect(query.mock.calls[48]?.[0]).toContain(
+      '"UQ_movimientos_financieros_idempotency_key"',
+    );
+    expect(query.mock.calls[49]?.[0]).toContain(
+      'prevent_movimientos_financieros_mutation',
+    );
+    expect(query.mock.calls[50]?.[0]).toContain(
+      'TRG_movimientos_financieros_append_only',
+    );
+    expect(query.mock.calls[51]).toEqual([
+      expect.stringContaining('INSERT INTO'),
+      ['CreateMovimientosFinancieros1795906800000'],
     ]);
   });
 

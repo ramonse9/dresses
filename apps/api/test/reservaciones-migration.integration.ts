@@ -404,13 +404,15 @@ describe('PostgreSQL reservaciones tenant migration', () => {
     });
     const schema = quoteTenantSchemaName(empresa.schemaName);
 
+    await dataSource.query(`DROP TABLE ${schema}."movimientos_financieros"`);
     await dataSource.query(`DROP TABLE ${schema}."reservacion_vestidos"`);
     await dataSource.query(`DROP TABLE ${schema}."reservaciones"`);
     await dataSource.query(
-      `DELETE FROM ${schema}."tenant_migrations" WHERE "name" IN ($1, $2)`,
+      `DELETE FROM ${schema}."tenant_migrations" WHERE "name" IN ($1, $2, $3)`,
       [
         'CreateReservaciones1795215600000',
         'OptimizeReservaciones1795302000000',
+        'CreateMovimientosFinancieros1795906800000',
       ],
     );
 

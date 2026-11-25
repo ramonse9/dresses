@@ -1003,6 +1003,24 @@ npm run tenant:migration:run
 
 No existen tablas de reservaciones en `public`.
 
+### Modelo tenant de movimientos financieros
+
+Cada empresa dispone de su propia tabla `movimientos_financieros`, relacionada con una reservación y una sucursal del mismo schema. El registro conserva `tipo`, `monto`, `metodo_pago`, referencia y notas opcionales, movimiento de origen cuando aplica, una llave de idempotencia, el UUID histórico del usuario que lo registró y `created_at`. No existe una tabla financiera equivalente en `public` ni una llave foránea desde el tenant hacia `public.usuarios`.
+
+Los tipos iniciales son `PAGO_RENTA`, `PAGO_DEPOSITO`, `REEMBOLSO_RENTA`, `DEVOLUCION_DEPOSITO` y `REVERSO`; los métodos son `EFECTIVO`, `TARJETA`, `TRANSFERENCIA` y `OTRO`. Pagos de renta o depósito no tienen movimiento de origen. Reembolsos, devoluciones de depósito y reversos deben referenciar un movimiento anterior del mismo tenant.
+
+Todos los montos se almacenan como valores positivos `numeric(12,2)` y se representan como strings en TypeScript. El signo contable se deriva del tipo de movimiento: no se guardan importes negativos ni se realizan cálculos con punto flotante. La multi-moneda queda fuera de esta fase.
+
+Los movimientos son _append-only_: no incluyen `updated_at` y PostgreSQL rechaza `UPDATE` y `DELETE` mediante un trigger del schema tenant. `idempotency_key` es un UUID único dentro de cada empresa. Las llaves foráneas a reservación, sucursal y movimiento de origen utilizan `ON DELETE RESTRICT`; los índices cubren consultas por reservación, sucursal, tipo, origen, usuario registrador y fecha.
+
+La migration tenant `CreateMovimientosFinancieros1795906800000` se aplica automáticamente al crear empresas nuevas. Para actualizar todos los schemas existentes de forma idempotente:
+
+```bash
+npm run tenant:migration:run
+```
+
+Este paso define exclusivamente el modelo. Todavía no existen endpoints, pasarelas, facturas, reembolsos operativos, reversos operativos ni cierres de caja.
+
 ### Creación segura de reservaciones
 
 `POST /api/reservaciones` permite crear reservaciones a membresías activas `OWNER` y `EMPLOYEE`. La ruta utiliza `JwtAuthGuard`, `TenantAuthGuard` y `RolesGuard`; el tenant se obtiene exclusivamente del `TenantScope` autenticado.

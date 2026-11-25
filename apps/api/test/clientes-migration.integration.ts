@@ -176,13 +176,20 @@ describe('PostgreSQL clientes tenant migration', () => {
     const schemaIdentifier = quoteTenantSchemaName(empresa.schemaName);
 
     await dataSource.query(
+      `DROP TABLE ${schemaIdentifier}."movimientos_financieros"`,
+    );
+    await dataSource.query(
       `DROP TABLE ${schemaIdentifier}."reservacion_vestidos"`,
     );
     await dataSource.query(`DROP TABLE ${schemaIdentifier}."reservaciones"`);
     await dataSource.query(`DROP TABLE ${schemaIdentifier}."clientes"`);
     await dataSource.query(
-      `DELETE FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" IN ($1, $2)`,
-      ['CreateClientes1794956400000', 'CreateReservaciones1795215600000'],
+      `DELETE FROM ${schemaIdentifier}."tenant_migrations" WHERE "name" IN ($1, $2, $3)`,
+      [
+        'CreateClientes1794956400000',
+        'CreateReservaciones1795215600000',
+        'CreateMovimientosFinancieros1795906800000',
+      ],
     );
 
     await tenantMigrationService.ensureMigrations(empresa.schemaName);

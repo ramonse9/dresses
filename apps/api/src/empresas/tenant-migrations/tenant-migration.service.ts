@@ -8,6 +8,7 @@ import { OptimizeVestidosCatalog1794783600000 } from './1794783600000-optimize-v
 import { CreateClientes1794956400000 } from './1794956400000-create-clientes.js';
 import { CreateReservaciones1795215600000 } from './1795215600000-create-reservaciones.js';
 import { OptimizeReservaciones1795302000000 } from './1795302000000-optimize-reservaciones.js';
+import { CreateMovimientosFinancieros1795906800000 } from './1795906800000-create-movimientos-financieros.js';
 import { TenantMigration } from './tenant-migration.js';
 
 const tenantMigrations: readonly TenantMigration[] = [
@@ -18,6 +19,7 @@ const tenantMigrations: readonly TenantMigration[] = [
   new CreateClientes1794956400000(),
   new CreateReservaciones1795215600000(),
   new OptimizeReservaciones1795302000000(),
+  new CreateMovimientosFinancieros1795906800000(),
 ];
 
 @Injectable()

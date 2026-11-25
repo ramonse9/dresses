@@ -10,6 +10,7 @@ export default defineConfig({
       'test/clientes-migration.integration.ts',
       'test/clientes-crud.integration.ts',
       'test/reservaciones-migration.integration.ts',
+      'test/movimientos-financieros-migration.integration.ts',
       'test/reservaciones-create.integration.ts',
       'test/reservaciones-lifecycle.integration.ts',
       'test/reservaciones-query-update.integration.ts',

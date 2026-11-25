@@ -187,6 +187,9 @@ describe('Reservaciones tenant entities', () => {
       options: { nullable: false, onDelete: 'RESTRICT' },
     });
     expect(relation(Reservacion, 'vestidos')?.relationType).toBe('one-to-many');
+    expect(relation(Reservacion, 'movimientosFinancieros')?.relationType).toBe(
+      'one-to-many',
+    );
     expect(relation(ReservacionVestido, 'reservacion')).toMatchObject({
       relationType: 'many-to-one',
       options: { nullable: false, onDelete: 'CASCADE' },
