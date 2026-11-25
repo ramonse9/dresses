@@ -535,6 +535,16 @@ curl --get http://localhost:3000/api/auditoria \
 
 La respuesta utiliza el formato paginado estándar y ordena por `createdAt DESC, id DESC`. Cada evento incluye `id`, acción, tipo e identificador de recurso, actor básico, metadata nuevamente redactada, IP, user-agent y fecha. El actor se obtiene mediante un único `LEFT JOIN` con `public.usuarios`, evitando N+1. No se exponen `empresaId`, `sessionId`, hashes, contraseñas, tokens, cookies, headers o nombres de schemas. La API no ofrece operaciones `POST`, `PATCH` o `DELETE` para auditoría.
 
+### Visor de auditoría en Angular
+
+El visor lazy-loaded se encuentra en `/app/auditoria` y su navegación se muestra exclusivamente a `OWNER`. Un acceso forzado de `EMPLOYEE` conserva el `403` como falta de permisos; el detalle mantiene `404` para eventos inexistentes o pertenecientes a otra empresa. La autorización visual no sustituye los guards del API.
+
+El listado conserva en query parameters `action`, `resourceType`, `resourceId`, `actor`, `fechaDesde`, `fechaHasta`, `page` y `limit`. El parámetro visual `actor` se traduce internamente a `actorUsuarioId` al consultar el API. Las fechas locales se convierten a ISO 8601 con zona horaria, el límite máximo sigue siendo 100 y el orden proviene del backend. Las consultas nuevas cancelan suscripciones anteriores y el store ignora respuestas obsoletas.
+
+La interfaz muestra fecha, acción, recurso, actor y un resumen seguro. El detalle proyecta únicamente campos de metadata conocidos —por ejemplo transiciones, campos modificados, vestidos agregados o retirados, rangos e importes históricos— y nunca imprime JSON arbitrario. La respuesta recibida también se normaliza antes de llegar a la vista, descartando propiedades desconocidas, tokens, hashes y `schemaName`.
+
+`AuditStore` está registrado en `TenantResetRegistry`; listado, detalle, errores y solicitudes pendientes se limpian al cambiar de empresa o cerrar sesión. El feature es de solo lectura: no incluye exportación, creación, modificación ni eliminación de eventos.
+
 ## Correo transaccional
 
 `MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Las invitaciones y la recuperación de contraseña utilizan esta infraestructura.

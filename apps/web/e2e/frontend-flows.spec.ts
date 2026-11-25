@@ -295,6 +295,46 @@ test('hides Equipo from EMPLOYEE and preserves a forced 403', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Enviar invitación' })).toHaveCount(0);
 });
 
+test('OWNER filters and inspects safe audit details', async ({ page }) => {
+  await installMockApi(page, { role: 'OWNER' });
+  await page.goto('/app/dashboard');
+  await page.getByRole('link', { name: 'Auditoría' }).first().click();
+
+  await expect(page.getByRole('heading', { name: 'Auditoría' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Reservación actualizada' })).toBeVisible();
+  await expect(page.getByText('Mariana Torres')).toBeVisible();
+
+  await page.getByLabel('Acción').selectOption('reservation.updated');
+  await page.getByLabel('Tipo de recurso').selectOption('reservacion');
+  await page.getByLabel('Desde').fill('2026-11-01T08:00');
+  await page.getByLabel('Hasta').fill('2026-12-01T08:00');
+  await page.getByRole('button', { name: 'Aplicar filtros' }).click();
+  await expect(page).toHaveURL(/action=reservation.updated/);
+  await expect(page).toHaveURL(/resourceType=reservacion/);
+  await expect(page).toHaveURL(/fechaDesde=/);
+  await expect(page).toHaveURL(/fechaHasta=/);
+
+  await page.getByRole('link', { name: 'Reservación actualizada' }).click();
+  await expect(page.getByRole('heading', { name: 'Reservación actualizada' })).toBeVisible();
+  await expect(page.getByText('BORRADOR → CONFIRMADA')).toBeVisible();
+  await expect(page.getByText('fechaInicio, fechaFin')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('tenant_should_never_render');
+  await expect(page.locator('body')).not.toContainText('hash_should_never_render');
+  await expect(page.locator('body')).not.toContainText('token_should_never_render');
+});
+
+test('hides audit navigation from EMPLOYEE and presents a forced 403', async ({ page }) => {
+  await installMockApi(page, { role: 'EMPLOYEE' });
+  await page.goto('/app/dashboard');
+  await expect(page.getByRole('link', { name: 'Auditoría' })).toHaveCount(0);
+
+  await page.goto('/app/auditoria');
+  await expect(
+    page.getByText('No tienes autorización para consultar la auditoría de esta empresa.'),
+  ).toBeVisible();
+  await expect(page.getByText(/no existe o pertenece/)).toHaveCount(0);
+});
+
 async function runTransition(page: Page, action: string): Promise<void> {
   await page.getByRole('button', { name: action }).click();
   await page.getByRole('button', { name: 'Confirmar acción' }).click();

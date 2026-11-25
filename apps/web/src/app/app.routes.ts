@@ -133,6 +133,11 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/team/team.routes').then(({ TEAM_ROUTES }) => TEAM_ROUTES),
       },
+      {
+        path: 'auditoria',
+        loadChildren: () =>
+          import('./features/audit/audit.routes').then(({ AUDIT_ROUTES }) => AUDIT_ROUTES),
+      },
     ],
   },
   { path: '**', redirectTo: '' },

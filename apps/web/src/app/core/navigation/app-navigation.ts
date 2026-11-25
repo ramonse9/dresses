@@ -2,7 +2,14 @@ import { hasAnyRole } from '../auth/role-access';
 import type { EmpresaRole } from '../tenant/tenant.models';
 
 export type AppNavigationIcon =
-  'dashboard' | 'branches' | 'customers' | 'dresses' | 'availability' | 'reservations' | 'team';
+  | 'dashboard'
+  | 'branches'
+  | 'customers'
+  | 'dresses'
+  | 'availability'
+  | 'reservations'
+  | 'team'
+  | 'audit';
 
 export interface AppNavigationItem {
   readonly label: string;
@@ -31,6 +38,7 @@ export const APP_NAVIGATION: readonly AppNavigationItem[] = [
     roles: consultationRoles,
   },
   { label: 'Equipo', route: '/app/equipo', icon: 'team', roles: ['OWNER'] },
+  { label: 'Auditoría', route: '/app/auditoria', icon: 'audit', roles: ['OWNER'] },
 ];
 
 export function navigationForRole(

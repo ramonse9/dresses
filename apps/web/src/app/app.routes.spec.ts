@@ -16,6 +16,7 @@ import { ReservationsStore } from './features/reservations/reservations.store';
 import { TeamStore } from './features/team/team.store';
 import { InvitationAcceptanceApiService } from './features/auth/invitation-acceptance/invitation-acceptance-api.service';
 import { PasswordRecoveryApiService } from './features/auth/password-recovery/password-recovery-api.service';
+import { AuditStore } from './features/audit/audit.store';
 
 describe('application routes', () => {
   const authenticated = signal(false);
@@ -109,6 +110,22 @@ describe('application routes', () => {
     rol: 'OWNER' as const,
     activo: true,
     createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  const auditEvent = {
+    id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    action: 'reservation.updated' as const,
+    resourceType: 'reservacion' as const,
+    resourceId: reservation.id,
+    actor: {
+      id: member.usuario.id,
+      nombre: member.usuario.nombre,
+      email: member.usuario.email,
+      activo: true,
+    },
+    metadata: { previousState: 'BORRADOR', newState: 'CONFIRMADA' },
+    ipAddress: null,
+    userAgent: null,
+    createdAt: '2026-11-24T15:00:00.000Z',
   };
 
   beforeEach(() => {
@@ -249,6 +266,25 @@ describe('application routes', () => {
           },
         },
         {
+          provide: AuditStore,
+          useValue: {
+            listState: signal({
+              status: 'loaded',
+              data: [auditEvent],
+              pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+              filters: { page: 1, limit: 20 },
+              error: null,
+            }).asReadonly(),
+            detailState: signal({
+              status: 'loaded',
+              data: auditEvent,
+              error: null,
+            }).asReadonly(),
+            loadList: () => of(undefined),
+            loadDetail: () => of(undefined),
+          },
+        },
+        {
           provide: InvitationAcceptanceApiService,
           useValue: {
             verify: () => of({}),
@@ -313,6 +349,8 @@ describe('application routes', () => {
     [`/app/reservaciones/${reservation.id}`, 'Ana López'],
     ['/app/equipo', 'Equipo'],
     [`/app/equipo/${member.id}`, 'Owner Principal'],
+    ['/app/auditoria', 'Auditoría'],
+    [`/app/auditoria/${auditEvent.id}`, 'Reservación actualizada'],
   ])('renders %s', async (url, expectedText) => {
     authenticated.set(
       url === '/seleccionar-empresa' || url.startsWith('/cuenta') || url.startsWith('/app'),

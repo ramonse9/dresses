@@ -41,6 +41,7 @@ export const ids = {
   invitation: '12121212-1212-4212-8212-121212121212',
   currentSession: '88888888-8888-4888-8888-888888888888',
   remoteSession: '13131313-1313-4313-8313-131313131313',
+  auditEvent: '14141414-1414-4414-8414-141414141414',
 } as const;
 
 const branch = {
@@ -278,6 +279,20 @@ async function handleApiRoute(route: Route, state: MockApiState): Promise<void> 
     return fulfill(route, 200, teamInvitation(state));
   }
 
+  if (path === 'auditoria' && method === 'GET') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    const limit = Number(url.searchParams.get('limit') ?? '20');
+    const page = Number(url.searchParams.get('page') ?? '1');
+    return fulfill(route, 200, {
+      data: [auditEvent()],
+      pagination: { page, limit, total: 1, totalPages: 1 },
+    });
+  }
+  if (path === `auditoria/${ids.auditEvent}` && method === 'GET') {
+    if (state.role === 'EMPLOYEE') return fulfill(route, 403, error('Acceso denegado'));
+    return fulfill(route, 200, auditEvent());
+  }
+
   if (path === 'sucursales' && method === 'GET') return fulfill(route, 200, [branch]);
   if (path === 'clientes' && method === 'GET') {
     return fulfill(route, 200, {
@@ -421,6 +436,33 @@ function teamInvitation(state: MockApiState) {
     lastSentAt: now,
     sendCount: state.invitationSendCount,
     createdAt: now,
+  };
+}
+
+function auditEvent() {
+  return {
+    id: ids.auditEvent,
+    action: 'reservation.updated',
+    resourceType: 'reservacion',
+    resourceId: ids.reservation,
+    actor: {
+      id: ids.memberUser,
+      nombre: 'Mariana Torres',
+      email: 'mariana@example.test',
+      activo: true,
+    },
+    metadata: {
+      previousState: 'BORRADOR',
+      newState: 'CONFIRMADA',
+      changedFields: ['fechaInicio', 'fechaFin'],
+      schemaName: 'tenant_should_never_render',
+      tokenHash: 'hash_should_never_render',
+    },
+    ipAddress: '203.0.113.10',
+    userAgent: 'Chromium de prueba',
+    createdAt: now,
+    schemaName: 'tenant_should_never_render',
+    token: 'token_should_never_render',
   };
 }
 

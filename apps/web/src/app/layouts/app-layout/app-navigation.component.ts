@@ -94,6 +94,17 @@ import type { AppNavigationItem } from '../../core/navigation/app-navigation';
                       />
                     </svg>
                   }
+                  @case ('audit') {
+                    <svg class="size-5" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M7 3h10v4H7V3Zm-2 4h14v14H5V7Zm3 4h8m-8 4h8m-8 4h5"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  }
                 }
               </span>
               <span>{{ item.label }}</span>
