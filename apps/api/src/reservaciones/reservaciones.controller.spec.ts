@@ -1,4 +1,8 @@
 import type { TenantScope } from '../tenancy/tenant-scope.js';
+import {
+  MovimientoFinancieroMetodoPago,
+  MovimientoFinancieroTipo,
+} from './entities/movimiento-financiero.tenant-entity.js';
 import { ReservacionEstado } from './entities/reservacion.tenant-entity.js';
 import { ReservacionesController } from './reservaciones.controller.js';
 import { ReservacionesService } from './reservaciones.service.js';
@@ -91,6 +95,53 @@ describe('ReservacionesController', () => {
       response,
     );
     expect(findOne).toHaveBeenCalledWith(tenant, 'reservation-id');
+  });
+
+  it('forwards financial summary ids with only the authenticated tenant', async () => {
+    const response = { importeRenta: '100.00' };
+    const findFinances = vi.fn().mockResolvedValue(response);
+    const controller = new ReservacionesController({
+      findFinances,
+    } as unknown as ReservacionesService);
+
+    await expect(
+      controller.findFinances(tenant, 'reservation-id'),
+    ).resolves.toBe(response);
+    expect(findFinances).toHaveBeenCalledWith(tenant, 'reservation-id');
+  });
+
+  it('forwards normalized financial movement filters', async () => {
+    const response = {
+      data: [],
+      pagination: { page: 2, limit: 10, total: 0, totalPages: 0 },
+    };
+    const findFinancialMovements = vi.fn().mockResolvedValue(response);
+    const controller = new ReservacionesController({
+      findFinancialMovements,
+    } as unknown as ReservacionesService);
+
+    await expect(
+      controller.findFinancialMovements(tenant, 'reservation-id', {
+        page: '2',
+        limit: '10',
+        tipo: MovimientoFinancieroTipo.PAGO_RENTA,
+        metodoPago: MovimientoFinancieroMetodoPago.TARJETA,
+        fechaDesde: '2027-01-01T00:00:00-07:00',
+        fechaHasta: '2027-02-01T00:00:00-07:00',
+      }),
+    ).resolves.toBe(response);
+    expect(findFinancialMovements).toHaveBeenCalledWith(
+      tenant,
+      'reservation-id',
+      {
+        page: 2,
+        limit: 10,
+        tipo: MovimientoFinancieroTipo.PAGO_RENTA,
+        metodoPago: MovimientoFinancieroMetodoPago.TARJETA,
+        fechaDesde: new Date('2027-01-01T07:00:00.000Z'),
+        fechaHasta: new Date('2027-02-01T07:00:00.000Z'),
+      },
+    );
   });
 
   it('forwards normalized editable fields without state', async () => {

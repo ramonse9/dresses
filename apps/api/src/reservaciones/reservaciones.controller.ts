@@ -17,7 +17,12 @@ import type { AccessTokenPayload } from '../auth/types/access-token-payload.js';
 import { EmpresaUsuarioRol } from '../usuarios/entities/empresa-usuario.entity.js';
 import { parseCancelReservacionBody } from './dto/cancel-reservacion.dto.js';
 import { parseCreateReservacionBody } from './dto/create-reservacion.dto.js';
+import { parseListMovimientosFinancierosQuery } from './dto/list-movimientos-financieros-query.dto.js';
 import { parseListReservacionesQuery } from './dto/list-reservaciones-query.dto.js';
+import type {
+  PaginatedMovimientosFinancierosResponseDto,
+  ReservacionFinanzasResponseDto,
+} from './dto/reservacion-finanzas-response.dto.js';
 import type {
   PaginatedReservacionesResponseDto,
   ReservacionResponseDto,
@@ -63,6 +68,29 @@ export class ReservacionesController {
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<ReservacionResponseDto> {
     return this.reservacionesService.findOne(tenant, id);
+  }
+
+  @Get(':id/finanzas')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  findFinances(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ReservacionFinanzasResponseDto> {
+    return this.reservacionesService.findFinances(tenant, id);
+  }
+
+  @Get(':id/movimientos')
+  @Roles(EmpresaUsuarioRol.OWNER, EmpresaUsuarioRol.EMPLOYEE)
+  findFinancialMovements(
+    @CurrentTenant() tenant: TenantScope,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query() query: unknown,
+  ): Promise<PaginatedMovimientosFinancierosResponseDto> {
+    return this.reservacionesService.findFinancialMovements(
+      tenant,
+      id,
+      parseListMovimientosFinancierosQuery(query),
+    );
   }
 
   @Patch(':id')

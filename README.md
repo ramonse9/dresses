@@ -1021,6 +1021,52 @@ npm run tenant:migration:run
 
 Este paso define exclusivamente el modelo. Todavía no existen endpoints, pasarelas, facturas, reembolsos operativos, reversos operativos ni cierres de caja.
 
+### Consulta de finanzas y movimientos
+
+Las membresías activas `OWNER` y `EMPLOYEE` pueden consultar, sin crear movimientos:
+
+```text
+GET /api/reservaciones/:id/finanzas
+GET /api/reservaciones/:id/movimientos
+```
+
+Ambas rutas obtienen la empresa exclusivamente del JWT verificado y ejecutan la consulta mediante `TenantContextService`. Una reservación inexistente o perteneciente a otro tenant responde `404`; no se aceptan `empresaId`, `empresaSlug`, `schemaName` ni headers para seleccionar schemas.
+
+`GET /finanzas` devuelve todos los importes como strings con dos decimales:
+
+```json
+{
+  "importeRenta": "2500.00",
+  "rentaCobrada": "1500.00",
+  "rentaReembolsada": "200.00",
+  "rentaPagadaNeta": "1300.00",
+  "saldoRenta": "1200.00",
+  "depositoRequerido": "1000.00",
+  "depositoRecibido": "1000.00",
+  "depositoDevuelto": "0.00",
+  "depositoRetenido": "1000.00",
+  "depositoPendienteCobro": "0.00",
+  "depositoPorDevolver": "1000.00"
+}
+```
+
+Los cálculos utilizan unidades menores con `BigInt`; nunca convierten dinero a punto flotante. Un `REVERSO` aplica el efecto contrario de su movimiento de origen y las cadenas de reversos alternan ese efecto. `rentaPagadaNeta` es cobrado menos reembolsado; `saldoRenta` es importe de renta menos pago neto; `depositoRetenido` es recibido menos devuelto. Los importes pendientes se limitan a cero para no presentar cantidades negativas como cobros o devoluciones pendientes.
+
+`GET /movimientos` acepta `page`, `limit` —máximo 100—, `tipo`, `metodoPago`, `fechaDesde` y `fechaHasta`. El rango temporal es semiabierto: `createdAt >= fechaDesde AND createdAt < fechaHasta`; las fechas requieren ISO 8601 con zona horaria. El orden es `createdAt DESC, id DESC` y la respuesta utiliza el formato paginado estándar. Cada elemento incluye tipo, monto, método, referencia, notas, movimiento de origen, actor básico y fecha. Los actores se resuelven desde `public.usuarios` en una consulta agrupada; si el UUID histórico ya no está disponible se muestra `Actor histórico desconocido`.
+
+```bash
+curl http://localhost:3000/api/reservaciones/RESERVACION_UUID/finanzas \
+  --header "Authorization: Bearer $ACCESS_TOKEN"
+
+curl --get http://localhost:3000/api/reservaciones/RESERVACION_UUID/movimientos \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'limit=20' \
+  --data-urlencode 'tipo=PAGO_RENTA' \
+  --data-urlencode 'fechaDesde=2027-01-01T00:00:00-07:00' \
+  --data-urlencode 'fechaHasta=2027-02-01T00:00:00-07:00'
+```
+
 ### Creación segura de reservaciones
 
 `POST /api/reservaciones` permite crear reservaciones a membresías activas `OWNER` y `EMPLOYEE`. La ruta utiliza `JwtAuthGuard`, `TenantAuthGuard` y `RolesGuard`; el tenant se obtiene exclusivamente del `TenantScope` autenticado.

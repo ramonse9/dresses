@@ -370,6 +370,45 @@ describe('AppController (e2e)', () => {
               },
             }),
             findOne: vi.fn().mockResolvedValue(reservacionResponse),
+            findFinances: vi.fn().mockResolvedValue({
+              importeRenta: '1250.50',
+              rentaCobrada: '1000.00',
+              rentaReembolsada: '0.00',
+              rentaPagadaNeta: '1000.00',
+              saldoRenta: '250.50',
+              depositoRequerido: '0.00',
+              depositoRecibido: '0.00',
+              depositoDevuelto: '0.00',
+              depositoRetenido: '0.00',
+              depositoPendienteCobro: '0.00',
+              depositoPorDevolver: '0.00',
+            }),
+            findFinancialMovements: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  id: '611c2a56-d33f-4d88-a8e7-42931121e295',
+                  tipo: 'PAGO_RENTA',
+                  monto: '1000.00',
+                  metodoPago: 'TARJETA',
+                  referencia: 'TERMINAL-1',
+                  notas: null,
+                  movimientoOrigen: null,
+                  actor: {
+                    id: authenticatedUserId,
+                    nombre: 'Owner',
+                    email: 'owner@example.com',
+                    activo: true,
+                  },
+                  createdAt: new Date('2026-11-20T12:00:00.000Z'),
+                },
+              ],
+              pagination: {
+                page: 1,
+                limit: 20,
+                total: 1,
+                totalPages: 1,
+              },
+            }),
             update: vi.fn().mockResolvedValue({
               ...reservacionResponse,
               notas: 'Actualizada',
@@ -1424,6 +1463,69 @@ describe('AppController (e2e)', () => {
           canceladaAt: null,
         });
       });
+  });
+
+  it.each(['selected.jwt.token', 'employee.jwt.token'])(
+    '/api/reservaciones/:id/finanzas allows tenant role with %s',
+    (token) =>
+      request(app.getHttpServer())
+        .get(`/api/reservaciones/${reservacionId}/finanzas`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            importeRenta: '1250.50',
+            rentaPagadaNeta: '1000.00',
+            saldoRenta: '250.50',
+          });
+          expect(JSON.stringify(response.body)).not.toContain('schemaName');
+        }),
+  );
+
+  it.each(['selected.jwt.token', 'employee.jwt.token'])(
+    '/api/reservaciones/:id/movimientos allows tenant role with %s',
+    (token) =>
+      request(app.getHttpServer())
+        .get(`/api/reservaciones/${reservacionId}/movimientos`)
+        .query({
+          page: '1',
+          limit: '20',
+          tipo: 'PAGO_RENTA',
+          metodoPago: 'TARJETA',
+          fechaDesde: '2026-11-01T00:00:00-07:00',
+          fechaHasta: '2026-12-01T00:00:00-07:00',
+        })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            data: [
+              expect.objectContaining({
+                tipo: 'PAGO_RENTA',
+                monto: '1000.00',
+                actor: expect.objectContaining({ nombre: 'Owner' }),
+              }),
+            ],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          });
+          expect(JSON.stringify(response.body)).not.toContain('schemaName');
+        }),
+  );
+
+  it('rejects financial tenant selectors and unauthenticated requests', async () => {
+    await request(app.getHttpServer())
+      .get(`/api/reservaciones/${reservacionId}/movimientos`)
+      .query({ empresaId: selectedEmpresaId })
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(`/api/reservaciones/${reservacionId}/movimientos`)
+      .query({ schemaName: 'tenant_untrusted' })
+      .set('Authorization', 'Bearer selected.jwt.token')
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(`/api/reservaciones/${reservacionId}/finanzas`)
+      .expect(401);
   });
 
   it.each(['selected.jwt.token', 'employee.jwt.token'])(

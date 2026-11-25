@@ -489,6 +489,29 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
       .expect(200);
     await request(app.getHttpServer())
+      .get(
+        `/api/reservaciones/${String(reservacionBResponse.body.id)}/finanzas`,
+      )
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          importeRenta: '1500.00',
+          rentaCobrada: '0.00',
+        });
+        expect(JSON.stringify(response.body)).not.toContain('tenant_');
+      });
+    await request(app.getHttpServer())
+      .get(
+        `/api/reservaciones/${String(reservacionBResponse.body.id)}/movimientos`,
+      )
+      .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
+      .expect(200)
+      .expect({
+        data: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      });
+    await request(app.getHttpServer())
       .get(`/api/reservaciones/${String(reservacionAResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .expect(404)
@@ -496,6 +519,18 @@ describe('PostgreSQL authenticated empresa selection', () => {
         expect(JSON.stringify(response.body)).not.toContain('tenant_');
         expect(JSON.stringify(response.body)).not.toContain('schemaName');
       });
+    await request(app.getHttpServer())
+      .get(
+        `/api/reservaciones/${String(reservacionAResponse.body.id)}/finanzas`,
+      )
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(404);
+    await request(app.getHttpServer())
+      .get(
+        `/api/reservaciones/${String(reservacionAResponse.body.id)}/movimientos`,
+      )
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(404);
     await request(app.getHttpServer())
       .patch(`/api/reservaciones/${String(reservacionBResponse.body.id)}`)
       .set('Authorization', `Bearer ${selectedEmployeeB.accessToken}`)
@@ -865,6 +900,18 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .set('Authorization', `Bearer ${selectedA.accessToken}`)
       .expect(403);
     await request(app.getHttpServer())
+      .get(
+        `/api/reservaciones/${String(reservacionAResponse.body.id)}/finanzas`,
+      )
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get(
+        `/api/reservaciones/${String(reservacionAResponse.body.id)}/movimientos`,
+      )
+      .set('Authorization', `Bearer ${selectedA.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
       .post(
         `/api/reservaciones/${String(reservacionAResponse.body.id)}/confirmar`,
       )
@@ -890,6 +937,18 @@ describe('PostgreSQL authenticated empresa selection', () => {
       .expect(403);
     await request(app.getHttpServer())
       .get('/api/reservaciones')
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get(
+        `/api/reservaciones/${String(reservacionBResponse.body.id)}/finanzas`,
+      )
+      .set('Authorization', `Bearer ${selectedB.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get(
+        `/api/reservaciones/${String(reservacionBResponse.body.id)}/movimientos`,
+      )
       .set('Authorization', `Bearer ${selectedB.accessToken}`)
       .expect(403);
     await request(app.getHttpServer())
