@@ -545,6 +545,43 @@ La interfaz muestra fecha, acción, recurso, actor y un resumen seguro. El detal
 
 `AuditStore` está registrado en `TenantResetRegistry`; listado, detalle, errores y solicitudes pendientes se limpian al cambiar de empresa o cerrar sesión. El feature es de solo lectura: no incluye exportación, creación, modificación ni eliminación de eventos.
 
+## Endurecimiento final de equipo y seguridad
+
+La administración de equipo, invitaciones y auditoría conserva esta matriz efectiva. La visibilidad del frontend es solamente una ayuda de interfaz; los guards y la membresía vigente en PostgreSQL continúan siendo la autoridad:
+
+| Operación                                        | OWNER     | EMPLOYEE |
+| ------------------------------------------------ | --------- | -------- |
+| Listar y consultar miembros                      | Permitido | 403      |
+| Cambiar rol o estado de membresía                | Permitido | 403      |
+| Crear, reenviar o revocar invitaciones           | Permitido | 403      |
+| Consultar eventos de auditoría de la empresa     | Permitido | 403      |
+| Administrar exclusivamente sus sesiones globales | Permitido | Permitido |
+
+Los identificadores de otra empresa responden `404`; no se acepta `empresaId`, `empresaSlug`, `schemaName` ni un header tenant para cambiar el alcance. La empresa se obtiene del `TenantScope` verificado y el rol se vuelve a comprobar contra la membresía activa. Una empresa siempre conserva al menos un `OWNER` globalmente activo: los cambios de rol y estado bloquean la fila de empresa y vuelven a contar propietarios dentro de la misma transacción, incluso con solicitudes concurrentes.
+
+Las invitaciones y recuperaciones generan 32 bytes aleatorios, persisten únicamente SHA-256 y consumen el token una sola vez mediante bloqueo de fila. Reenvío rota el token; expiración, revocación y cooldown se comprueban en el backend. Las contraseñas utilizan Argon2id y un restablecimiento revoca todas las sesiones del usuario en la misma transacción. Los enlaces utilizan fragmentos y Angular retira inmediatamente `#token` de la URL, conservándolo solamente en memoria.
+
+Las sesiones son globales por usuario. `JwtAuthGuard` comprueba en cada petición que usuario y sesión continúen activos, de modo que una revocación invalida inmediatamente access tokens todavía vigentes. `refreshTokenHash` utiliza `select: false`; los listados exponen únicamente metadata limitada. Revocar la sesión actual elimina además la cookie HttpOnly, mientras `revocar-otras` conserva la sesión desde la que se ejecuta.
+
+Los eventos de auditoría permanecen inmutables mediante trigger PostgreSQL. Cada evento sensible participa en el mismo `EntityManager` y transacción que su mutación; un fallo de auditoría revierte ambos cambios. Las carreras registran solamente la operación que confirmó. La metadata usa listas explícitas y elimina contraseñas, tokens, hashes, cookies, `Authorization`, cuerpos, headers y nombres internos de schemas.
+
+Las pruebas de correo sustituyen SMTP mediante `InMemoryMailTransport`; ningún fixture usa cuentas o credenciales reales. La validación completa recomendada es:
+
+```bash
+npm run build
+npm run lint
+npm test
+npm run test:e2e --workspace=api
+npm run test:e2e --workspace=web
+DB_POOL_MAX=1 npm run test:auth-database
+DB_POOL_MAX=1 npm run test:tenancy
+npm run migration:run
+npm run tenant:migration:run
+git diff --check
+```
+
+Las suites PostgreSQL crean y eliminan bases temporales para comprobar migrations nuevas y existentes, locks, rollbacks, uso único, protección del último `OWNER`, aislamiento entre dos empresas y ausencia de fugas de `search_path`. Para ejecutar las suites contra una instalación local se requiere la configuración de `.env.example`; nunca debe reutilizarse una base con datos reales.
+
 ## Correo transaccional
 
 `MailModule` ofrece una infraestructura independiente de autenticación y usuarios. Los consumidores internos dependen de `TransactionalMailService` o del token `MAIL_TRANSPORT`; no conocen Nodemailer ni la configuración SMTP. Las invitaciones y la recuperación de contraseña utilizan esta infraestructura.
@@ -786,7 +823,7 @@ La prueba PostgreSQL de autenticación comprueba el hash de refresh tokens, la m
 npm run test:auth-database
 ```
 
-Como no existe registro público, el usuario debe haber sido aprovisionado previamente en `public.usuarios` por un proceso administrativo y su `password_hash` debe ser generado con Argon2id. No se incluyen todavía recuperación de contraseña, invitaciones de usuarios ni administración de sesiones desde la interfaz.
+No existe registro público abierto. Las cuentas se crean mediante una invitación válida o por un proceso administrativo controlado; todo `password_hash` se genera con Argon2id. La recuperación de contraseña y la administración de sesiones se encuentran disponibles mediante los flujos documentados anteriormente.
 
 ## Crear un tenant
 
